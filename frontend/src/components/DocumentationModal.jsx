@@ -1,126 +1,97 @@
-// frontend/src/components/DocumentationModal.jsx
+import { useEffect } from 'react';
+import { Braces, Crop, Download, FileText, Pen, Tag, XCircle } from './Icons';
 
-import React from 'react';
-// Import Braces, Eraser, adjust existing imports
-import { XCircle, ChevronRight, Ban, Palette, Link, PlusCircle, Download, Tag, Settings, Edit, Trash2, Eraser, Braces } from "./Icons";
-// Note: Removed 'Code' import, added 'Braces'
+const GuideSection = ({ number, title, description, icon, children }) => {
+  return (
+    <section className="guide-section">
+      <div className="guide-section-mark">{icon}</div>
+      <div className="guide-section-copy">
+        <div className="guide-section-heading"><span>{number}</span><h3>{title}</h3></div>
+        <p>{description}</p>
+        {children && <div className="guide-section-detail">{children}</div>}
+      </div>
+    </section>
+  );
+};
 
-// Updated and comprehensive instructions based on the latest FlashcardEditor features.
-const DOCUMENTATION_TEXT = `
-ANKI DECK BUILDER - FULL GUIDE
-
-1. Core Workflow
-    - Deck Name: Set the name of your Anki deck.
-    - Card Type: Switch between "Basic" (Q/A) and "Cloze" (Fill-in-the-blank).
-    - Add/Update: Click "Add Card" (Ctrl+S) to save the current card. If you click a card on the right, the button changes to "Update Card".
-    - Export: Click "Export Deck" (Ctrl+E) to download the finished .apkg file for Anki.
-    - Start New Deck: The red Trash icon clears all unsaved cards and local storage state.
-
-2. Formatting Toolbar (Front & Back/Extra Fields)
-    - Colors:
-        - Preset Swatches: Left-click a color swatch to apply it to selected text or set the typing color.
-        - Manage Colors: Right-click a color swatch to open the color picker and set a custom Hex code or change the preset slot.
-        - ${Eraser.name} (Clear Color): Acts as a color swatch to set the typing color back to the default/transparent.
-        - ${Ban.name} (Clear All): Clears all formatting (color, bold, italic) from the selected text.
-    - Text Style: ${ChevronRight.name} B, I, U buttons apply Bold, Italic, and Underline.
-    - Lists: ${ChevronRight.name} ☰ inserts an Unordered List.
-    - Images: You can directly **Copy and Paste images** into both the Front and Back/Extra fields.
-
-3. Cloze Cards (Type: Cloze)
-    - Cloze Deletion:
-        - Shortcut: Select the text you want to hide, then hold **CTRL** (or **CMD** on Mac). The text will be wrapped in a cloze deletion (e.g., {{c1::text}}).
-        - Manual: Click the { } button. If no text is selected, it inserts "{{c#::text}}" and selects the placeholder 'text' for easy replacement.
-    - ${Palette.name} (Cloze Color): Click this icon to change the default color used for all cloze deletions (visible in the editor).
-
-4. Hyperlinks (Back/Extra Field Only)
-    - ${Link.name} (Insert Hyperlink): Click this button in the Back/Extra field toolbar to open a small modal.
-    - Format: Insert a URL and a 'Link Name'. The link appears on the card as a clickable, contrast-safe blue link in the format **(Link Name)**.
-
-5. Tagging (${Tag.name} Tags)
-    - Add Tags: Type a tag (e.g., 'Medicine') and press **ENTER** or **comma**.
-    - Tag Hierarchy: Use '::' to create a hierarchy (e.g., 'Biology::Cells'). You-can also use the **TAB** key as a shortcut for '::'.
-
-6. Tag Management (${Settings.name} Browse & Select)
-    - Current Card Tags: Tags currently applied to the card are displayed at the top for quick removal.
-    - Global Management: For any tag in the hierarchy view (leaf nodes):
-        - ${Edit.name}: Rename the tag globally (updates on all cards).
-        - ${Trash2.name}: Delete the tag globally (removes it from all cards and the list).
-`;
-
-const InstructionItem = ({ title, content, icon }) => (
-    <div className="mb-4 p-3 bg-neutral-700/50 rounded-lg">
-        <h4 className="flex items-center gap-2 text-lg font-semibold text-sky-300 mb-1">
-            {icon} {title}
-        </h4>
-        <div className="text-neutral-200 whitespace-pre-wrap pl-1 leading-relaxed">
-            {content}
-        </div>
-    </div>
+const Shortcut = ({ keys, children }) => (
+  <div className="guide-shortcut"><span>{children}</span><span className="guide-key-group">{keys.map((key, index) => <kbd key={`${key}-${index}`}>{key}</kbd>)}</span></div>
 );
 
 export default function DocumentationModal({ isVisible, onClose }) {
-    if (!isVisible) return null;
+  useEffect(() => {
+    if (!isVisible) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = event => {
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); return; }
+      if (event.ctrlKey || event.metaKey || event.key === '/') { event.preventDefault(); event.stopImmediatePropagation(); }
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [isVisible, onClose]);
 
-    // Split the documentation text into sections for structured rendering
-    const sections = DOCUMENTATION_TEXT.split('\n\n').filter(s => s.trim());
-    const [core, formatting, cloze, hyperlink, tagging, tagManagement] = sections;
+  if (!isVisible) return null;
 
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[100] p-4">
-            <div className="bg-neutral-800 rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col border border-neutral-700">
-                <div className="p-6 border-b border-neutral-700 flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-white">ANKI DECK BUILDER - HELP & GUIDE</h2>
-                    <button
-                        onClick={onClose}
-                        className="p-1 rounded-full text-neutral-400 hover:text-white transition"
-                    >
-                        <XCircle size={28} />
-                    </button>
-                </div>
+  return (
+    <div className="guide-backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onClose()}>
+      <section className="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+        <header className="guide-header">
+          <div>
+            <p className="section-eyebrow">ANKI STUDIO · QUICK REFERENCE</p>
+            <h2 id="guide-title">Make a card. Keep your place.</h2>
+            <p className="guide-intro">Write, capture from a source, and export your deck without leaving the workspace.</p>
+          </div>
+          <button className="guide-close" onClick={onClose} aria-label="Close guide"><XCircle size={20} /></button>
+        </header>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                    <InstructionItem
-                        title="Core Workflow"
-                        content={core.replace('1. Core Workflow\n', '').trim()}
-                        icon={<PlusCircle size={20} />}
-                    />
-                    <InstructionItem
-                        title="Formatting Toolbar"
-                        content={formatting.replace('2. Formatting Toolbar (Front & Back/Extra Fields)\n', '').trim()}
-                        icon={<Palette size={20} />}
-                    />
-                    {/* FINAL ICON UPDATE: Braces for Cloze Section */}
-                    <InstructionItem
-                        title="Cloze Cards"
-                        content={cloze.replace('3. Cloze Cards (Type: Cloze)\n', '').trim()}
-                        icon={<Braces size={20} />} 
-                    />
-                    <InstructionItem
-                        title="Hyperlinks"
-                        content={hyperlink.replace('4. Hyperlinks (Back/Extra Field Only)\n', '').trim()}
-                        icon={<Link size={20} />}
-                    />
-                    <InstructionItem
-                        title="Tagging"
-                        content={tagging.replace('5. Tagging (Tags)\n', '').trim()}
-                        icon={<Tag size={20} />}
-                    />
-                    <InstructionItem
-                        title="Tag Management"
-                        content={tagManagement.replace('6. Tag Management (Browse & Select)\n', '').trim()}
-                        icon={<Settings size={20} />}
-                    />
-                </div>
+        <div className="guide-body">
+          <div className="guide-steps">
+            <GuideSection number="01" title="Build a card" description="Choose a card type, write the prompt and answer, then add it to your deck." icon={<FileText size={17} />}>
+              <div><strong>Basic</strong><span>Question on the front, answer on the back.</span></div>
+              <div><strong>Cloze</strong><span>Select key text while holding Ctrl or ⌘ to hide it.</span></div>
+              <div><strong>Image Occlusion</strong><span>Cover parts of an image to test visual recall.</span></div>
+            </GuideSection>
 
-                <div className="p-4 border-t border-neutral-700">
-                    <button
-                        onClick={onClose}
-                        className="w-full px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition font-semibold"
-                    >
-                        Close Guide
-                    </button>
-                </div>
+            <GuideSection number="02" title="Format in place" description="Click where you want to type. Select text to style it with the single formatting bar." icon={<Pen size={17} />}>
+              <p>Paste images directly into a card. Use the Extra field for a hint, explanation, or source. Add tags to keep related cards easy to find.</p>
+            </GuideSection>
+
+            <GuideSection number="03" title="Study from a PDF" description="Open a PDF beside the editor and capture a region at any zoom level." icon={<Crop size={17} />}>
+              <p>Choose <strong>Snip region</strong>, drag over the page, annotate if needed, then save. Drag the capture onto a card field; captures with hide regions switch the draft to Image Occlusion.</p>
+            </GuideSection>
+
+            <GuideSection number="04" title="Occlude and review" description="Hide one or more regions, label them if useful, and choose how Anki reveals them." icon={<Braces size={17} />}>
+              <p><strong>Hide All, Guess One</strong> creates a review card for each region with the others hidden. <strong>Hide One, Guess One</strong> tests one region at a time. Exported occlusion cards use Anki-compatible fields.</p>
+            </GuideSection>
+          </div>
+
+          <aside className="guide-aside">
+            <div className="guide-shortcuts">
+              <p className="section-eyebrow">KEYBOARD</p>
+              <Shortcut keys={['Ctrl', 'Enter']}>Add card</Shortcut>
+              <Shortcut keys={['Ctrl', 'S']}>Add card</Shortcut>
+              <Shortcut keys={['Ctrl', 'E']}>Export deck</Shortcut>
+              <Shortcut keys={['/']}>Search cards</Shortcut>
             </div>
+            <div className="guide-shortcuts guide-snip-shortcuts">
+              <p className="section-eyebrow">WHILE ANNOTATING</p>
+              <Shortcut keys={['1–9']}>Switch tools from Select</Shortcut>
+              <Shortcut keys={['Ctrl', 'Z']}>Undo</Shortcut>
+              <Shortcut keys={['Ctrl', 'Y']}>Redo</Shortcut>
+              <Shortcut keys={['Enter']}>Save capture</Shortcut>
+              <Shortcut keys={['Esc']}>Return to Select</Shortcut>
+            </div>
+            <div className="guide-note"><Tag size={15} /><p>Your cards and drafts are saved in this browser. Export an <code>.apkg</code> file to study them in Anki.</p></div>
+            <div className="guide-export"><Download size={16} /><span>Ready to study</span><p>Use <strong>Export .apkg</strong>, then open the downloaded file in Anki.</p></div>
+          </aside>
         </div>
-    );
+
+        <footer className="guide-footer"><span>Tip: the PDF stays beside your card while you write.</span><button onClick={onClose}>Back to cards <span aria-hidden="true">↗</span></button></footer>
+      </section>
+    </div>
+  );
 }
