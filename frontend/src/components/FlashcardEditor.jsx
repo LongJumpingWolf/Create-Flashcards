@@ -20,7 +20,7 @@ const baseInputStyle = "px-3 py-2 rounded-lg border border-neutral-700 bg-neutra
 const inputStyle = `${baseInputStyle} w-full`;
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || (import.meta.env.DEV
   ? `http://${window.location.hostname || '127.0.0.1'}:8000`
-  : "https://anki-flashcard-maker-backend.onrender.com");
+  : "https://create-flashcards-api.vercel.app");
 const MAIN_LS_KEY = "ankiDeckBuilderState";
 const FRONT_LS_KEY = "ankiDeckBuilderState_front";
 const CLOZE_COLOR_LS_KEY = "ankiDeckBuilderState_clozeColor";

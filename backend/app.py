@@ -293,7 +293,7 @@ app.add_middleware(
 )
 
 # --- Endpoint ---
-@app.get("/health")
+@app.get("/")\nasync def root():\n    """Simple landing response so opening the API domain does not show a 404."""\n    return {"service": "Create Flashcards API", "status": "ok", "health": "/health", "docs": "/docs"}\n\n\n@app.get("/health")
 async def health_check():
     return {"status": "ok"}
 
