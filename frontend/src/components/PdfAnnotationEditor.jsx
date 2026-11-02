@@ -49,11 +49,13 @@ function drawMark(context, mark, scaleX, scaleY) {
 
 export default function PdfAnnotationEditor({ snip, onClose, onSave }) {
   const imageRef = useRef(null);
+  const canvasScrollRef = useRef(null);
   const layerRef = useRef(null);
   const gestureRef = useRef(null);
   const draftFrameRef = useRef(0);
   const pendingDraftRef = useRef(null);
   const keyboardActionsRef = useRef(null);
+  const [canvasViewport, setCanvasViewport] = useState({ width: 0, height: 0 });
   const [tool, setTool] = useState('select');
   const [color, setColor] = useState('#315c45');
   const [brushSize, setBrushSize] = useState(4);
@@ -66,6 +68,32 @@ export default function PdfAnnotationEditor({ snip, onClose, onSave }) {
   const [mode, setMode] = useState('hide-all');
   const [history, setHistory] = useState([{ annotations: [], masks: [] }]);
   const [historyIndex, setHistoryIndex] = useState(0);
+
+  // Fit the complete source capture into the actual available canvas area.
+  // ResizeObserver keeps the fit correct when Safari's viewport/orientation changes.
+  useEffect(() => {
+    const element = canvasScrollRef.current;
+    if (!element) return;
+    const measure = () => setCanvasViewport({
+      width: Math.max(0, element.clientWidth),
+      height: Math.max(0, element.clientHeight),
+    });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    window.addEventListener('orientationchange', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('orientationchange', measure);
+    };
+  }, []);
+
+  const fitScale = canvasViewport.width > 0 && canvasViewport.height > 0
+    ? Math.min(1.5, (canvasViewport.width - 20) / snip.width, (canvasViewport.height - 20) / snip.height)
+    : 0;
+  const fittedCanvasStyle = fitScale > 0
+    ? { width: Math.max(1, Math.round(snip.width * fitScale)), height: Math.max(1, Math.round(snip.height * fitScale)), aspectRatio: `${snip.width} / ${snip.height}` }
+    : { width: 'min(100%, 900px)', aspectRatio: `${snip.width} / ${snip.height}` };
 
   const remember = (nextAnnotations, nextMasks) => {
     const next = [...history.slice(0, historyIndex + 1), { annotations: nextAnnotations, masks: nextMasks }];
@@ -274,8 +302,8 @@ export default function PdfAnnotationEditor({ snip, onClose, onSave }) {
           <label className="brush-size" title="Stroke size"><span>Size</span><input type="range" min="1" max="8" value={brushSize} onChange={event => setBrushSize(Number(event.target.value))} /></label>
         </div>
         <div className="annotation-body">
-          <div className="annotation-canvas-scroll">
-            <div className="annotation-canvas-wrap" style={{ aspectRatio: `${snip.width} / ${snip.height}` }}>
+          <div ref={canvasScrollRef} className="annotation-canvas-scroll">
+            <div className="annotation-canvas-wrap" style={fittedCanvasStyle}>
               <img ref={imageRef} src={snip.image} alt="Selected PDF region" draggable="false" />
               <div ref={layerRef} className={`annotation-input-layer ${tool === 'select' ? 'is-select' : ''}`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} />
               <svg viewBox={`0 0 ${snip.width} ${snip.height}`} className="annotation-vector-layer" aria-label="Vector annotation layer" onPointerDown={event => { if (tool === 'select' && event.target === event.currentTarget) { setSelectedAnnotations([]); setSelectedMasks([]); } }}>
