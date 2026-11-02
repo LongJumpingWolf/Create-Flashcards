@@ -939,67 +939,80 @@ export default function FlashcardEditor() {
   }, [cards]);
   const getTagCardCount = (tag) => tagCardCounts.get(tag) || 0;
 
+  const getClipboardImage = (clipboardData) => {
+    const item = Array.from(clipboardData?.items || []).find(entry => entry.type?.startsWith('image/'));
+    const itemFile = item?.getAsFile?.();
+    if (itemFile) return itemFile;
+    return Array.from(clipboardData?.files || []).find(file => file.type?.startsWith('image/')) || null;
+  };
+
+  const pasteImageIntoOcclusion = (e) => {
+    if (backRef.current?.contains(e.target)) return;
+    const file = getClipboardImage(e.clipboardData);
+    if (!file) return;
+    e.preventDefault();
+    const reader = new FileReader();
+    reader.onload = () => {
+      setOcclusionImage(reader.result);
+      setOcclusionMasks([]);
+      setManualMaskPreview(null);
+      setFormMessage('Image pasted as the occlusion source. Draw hide regions over the image.');
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleContentPaste = (e, targetRef) => {
-      const clipboardData = e.clipboardData || window.clipboardData;
-      const items = clipboardData.items;
-      let imageFound = false;
+    const clipboardData = e.clipboardData || window.clipboardData;
+    const file = getClipboardImage(clipboardData);
+    if (!file) {
+      setTimeout(() => {
+        if (!targetRef.current) return;
+        if (targetRef === frontRef) syncFrontContent(targetRef.current.innerHTML);
+        else if (targetRef === backRef) syncBackContent(targetRef.current.innerHTML);
+      }, 10);
+      return;
+    }
 
-      for (let i = 0; i < items.length; i++) {
-          if (items[i].type.startsWith('image/')) {
-              e.preventDefault();
-              imageFound = true;
-              const file = items[i].getAsFile();
-              const reader = new FileReader();
-
-              reader.onload = (event) => {
-                  const base64Image = event.target.result;
-                  const tempImgId = `pasted-img-${Date.now()}`;
-                  const imgHtml = `<img id="${tempImgId}" src="${base64Image}" alt="pasted-image" style="display: inline-block; max-width: ${BASE_IMAGE_WIDTH}px; height: auto; vertical-align: middle;">`;
-                  const finalHtml = imgHtml + '&nbsp;';
-
-                  document.execCommand('insertHTML', false, finalHtml);
-                  
-                  const newImage = targetRef.current.querySelector(`#${tempImgId}`);
-                  if (newImage) {
-                      newImage.removeAttribute('id');
-                      
-                      setTimeout(() => {
-                        const selection = window.getSelection();
-                        const newRange = document.createRange();
-                        newRange.selectNode(newImage);
-                        selection.removeAllRanges();
-                        selection.addRange(newRange);
-                        
-                        setSelectionContext({
-                            type: 'image',
-                            element: newImage,
-                            size: 100,
-                            editorRef: targetRef,
-                        });
-                        savedRangeRef.current = newRange;
-                      }, 0);
-                  }
-                  
-                  if (targetRef === frontRef) {
-                      syncFrontContent(targetRef.current.innerHTML);
-                  } else if (targetRef === backRef) {
-                      syncBackContent(targetRef.current.innerHTML);
-                  }
-              };
-              reader.readAsDataURL(file);
-              break; 
-          }
+    e.preventDefault();
+    const selection = window.getSelection();
+    const savedRange = selection?.rangeCount && targetRef.current?.contains(selection.anchorNode)
+      ? selection.getRangeAt(0).cloneRange()
+      : null;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const editor = targetRef.current;
+      if (!editor) return;
+      editor.focus();
+      if (savedRange && editor.contains(savedRange.commonAncestorContainer)) {
+        const currentSelection = window.getSelection();
+        currentSelection.removeAllRanges();
+        currentSelection.addRange(savedRange);
+      } else {
+        const endRange = document.createRange();
+        endRange.selectNodeContents(editor);
+        endRange.collapse(false);
+        const currentSelection = window.getSelection();
+        currentSelection.removeAllRanges();
+        currentSelection.addRange(endRange);
       }
-
-      if (!imageFound) {
-          setTimeout(() => {
-              if (targetRef === frontRef) {
-                  syncFrontContent(targetRef.current.innerHTML);
-              } else if (targetRef === backRef) {
-                  syncBackContent(targetRef.current.innerHTML);
-              }
-          }, 10);
+      const tempImgId = `pasted-img-${crypto.randomUUID()}`;
+      const imgHtml = `<img id="${tempImgId}" src="${reader.result}" alt="Pasted image" style="display:inline-block;max-width:${BASE_IMAGE_WIDTH}px;height:auto;vertical-align:middle;">&nbsp;`;
+      document.execCommand('insertHTML', false, imgHtml);
+      const newImage = editor.querySelector(`#${tempImgId}`);
+      if (newImage) {
+        newImage.removeAttribute('id');
+        const newRange = document.createRange();
+        newRange.selectNode(newImage);
+        const currentSelection = window.getSelection();
+        currentSelection.removeAllRanges();
+        currentSelection.addRange(newRange);
+        setSelectionContext({ type: 'image', element: newImage, size: 100, editorRef: targetRef });
+        savedRangeRef.current = newRange;
       }
+      if (targetRef === frontRef) syncFrontContent(editor.innerHTML);
+      else if (targetRef === backRef) syncBackContent(editor.innerHTML);
+    };
+    reader.readAsDataURL(file);
   };
   
   const handleFileChange = (e, targetRef) => {
@@ -1011,7 +1024,8 @@ export default function FlashcardEditor() {
           const base64Image = event.target.result;
           if (targetRef === frontRef && cardType === 'Image Occlusion') {
             setOcclusionImage(base64Image);
-            setFront(`<img src="${base64Image}" alt="occlusion-source">`);
+            setOcclusionMasks([]);
+            setManualMaskPreview(null);
             setFormMessage('Image ready. Drag a masked PDF capture here or add hide regions from the PDF snip tool.');
             return;
           }
@@ -1544,10 +1558,10 @@ export default function FlashcardEditor() {
               </div>
             </div>}
 
-            {cardType === 'Image Occlusion' && <section className="io-source-card" onDragOver={e => e.preventDefault()} onDrop={e => handleSnippetDrop(e, 'front')}>
+            {cardType === 'Image Occlusion' && <section className="io-source-card" tabIndex={0} aria-label="Image occlusion source image. Focus here and paste an image, or choose one." onPaste={pasteImageIntoOcclusion} onDragOver={e => e.preventDefault()} onDrop={e => handleSnippetDrop(e, 'front')}>
               <div className="io-source-heading"><div><span className="section-eyebrow">IMAGE OCCLUSION</span><h3>Choose an image, then add masks in the PDF snip tool</h3></div><button className="quiet-button" type="button" onClick={() => openImagePicker(frontRef)}><Upload size={16} /> Choose image</button></div>
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, frontRef)} />
-              {!occlusionImage ? <div className="io-image-empty"><Crop size={22}/><span>Drop an occluded capture here, or choose an image</span></div> : <div className="io-image-preview"><div className="io-mask-draw-area" onPointerDown={e => { if (e.target.closest('.manual-mask-remove')) return; e.currentTarget.setPointerCapture(e.pointerId); manualMaskStartRef.current = manualMaskPoint(e); setManualMaskPreview({ x: manualMaskStartRef.current.x, y: manualMaskStartRef.current.y, width: 0, height: 0 }); }} onPointerMove={e => { if (!manualMaskStartRef.current) return; const p = manualMaskPoint(e), s = manualMaskStartRef.current; setManualMaskPreview({ x: Math.min(s.x,p.x), y: Math.min(s.y,p.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }} onPointerUp={finishManualMask} onPointerCancel={finishManualMask}><img src={occlusionImage} alt="Image occlusion source" draggable="false"/>{occlusionMasks.map((mask,index) => <button type="button" className="manual-mask-remove" key={mask.id} title={`Remove region ${index+1}`} onPointerDown={e => e.stopPropagation()} onClick={() => setOcclusionMasks(prev => prev.filter(m => m.id !== mask.id))} style={{left:`${mask.x*100}%`,top:`${mask.y*100}%`,width:`${mask.width*100}%`,height:`${mask.height*100}%`}}>{index+1} ×</button>)}{manualMaskPreview && <span className="manual-mask-draft" style={{left:`${manualMaskPreview.x*100}%`,top:`${manualMaskPreview.y*100}%`,width:`${manualMaskPreview.width*100}%`,height:`${manualMaskPreview.height*100}%`}}/>}</div><div><strong>{occlusionMasks.length} hidden region{occlusionMasks.length === 1 ? '' : 's'}</strong><span>Drag over image to add a mask; tap a mask to remove it.</span></div></div>}
+              {!occlusionImage ? <div className="io-image-empty"><Crop size={22}/><span>Paste an image here, drop an occluded capture, or choose a file</span></div> : <div className="io-image-preview"><div className="io-mask-draw-area" onPointerDown={e => { if (e.target.closest('.manual-mask-remove')) return; e.currentTarget.setPointerCapture(e.pointerId); manualMaskStartRef.current = manualMaskPoint(e); setManualMaskPreview({ x: manualMaskStartRef.current.x, y: manualMaskStartRef.current.y, width: 0, height: 0 }); }} onPointerMove={e => { if (!manualMaskStartRef.current) return; const p = manualMaskPoint(e), s = manualMaskStartRef.current; setManualMaskPreview({ x: Math.min(s.x,p.x), y: Math.min(s.y,p.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }} onPointerUp={finishManualMask} onPointerCancel={finishManualMask}><img src={occlusionImage} alt="Image occlusion source" draggable="false"/>{occlusionMasks.map((mask,index) => <button type="button" className="manual-mask-remove" key={mask.id} title={`Remove region ${index+1}`} onPointerDown={e => e.stopPropagation()} onClick={() => setOcclusionMasks(prev => prev.filter(m => m.id !== mask.id))} style={{left:`${mask.x*100}%`,top:`${mask.y*100}%`,width:`${mask.width*100}%`,height:`${mask.height*100}%`}}>{index+1} ×</button>)}{manualMaskPreview && <span className="manual-mask-draft" style={{left:`${manualMaskPreview.x*100}%`,top:`${manualMaskPreview.y*100}%`,width:`${manualMaskPreview.width*100}%`,height:`${manualMaskPreview.height*100}%`}}/>}</div><div><strong>{occlusionMasks.length} hidden region{occlusionMasks.length === 1 ? '' : 's'}</strong><span>Drag over image to add a mask; tap a mask to remove it.</span></div></div>}
               <p className="io-helper">Draw masks on a PDF capture, then drag it here. The source image and mask geometry stay attached to this card.</p>
               <label className="io-mode-select">Review mode <select value={occlusionMode} onChange={e => setOcclusionMode(e.target.value)}><option value="hide-all">Hide All, Guess One</option><option value="hide-one">Hide One, Guess One</option></select></label>
             </section>}
