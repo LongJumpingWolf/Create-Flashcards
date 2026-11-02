@@ -127,7 +127,13 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
     setLoading(true); setLoadProgress(0); setRendering(false); setError(''); setPdfDoc(null); setSnippets([]); setPageNumber(1); setZoom(1);
     let activeTask = null;
     try {
-      renderTaskRef.current?.cancel();
+      const previousRender = renderTaskRef.current;
+      previousRender?.cancel();
+      // Wait until PDF.js releases the canvas before the next document renders.
+      // Safari otherwise intermittently blanks the PDF workspace when Change PDF
+      // is used while a page render is still in flight.
+      try { await previousRender?.promise; } catch { /* cancellation is expected */ }
+      if (renderTaskRef.current === previousRender) renderTaskRef.current = null;
       // Detach the previous document synchronously before awaiting destruction.
       const previousTask = loadingTaskRef.current;
       const previousDocument = docRef.current;
