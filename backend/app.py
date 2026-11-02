@@ -5,6 +5,7 @@ import random
 import tempfile
 import re
 from base64 import b64decode
+from html import escape as html_escape
 from typing import List, Dict, Any, Literal
 
 from fastapi import FastAPI, HTTPException, Request
@@ -86,6 +87,59 @@ ANKI_CLOZE_MODEL = genanki.Model(
     # Append cloze-specific style for bolding the cloze
     css=DEFAULT_CARD_CSS + '.cloze { font-weight: bold; }', 
 )
+
+# Layered Image Occlusion model: the source image is a media file and masks
+# remain vector SVG overlays in the note fields (never flattened into screenshots).
+ANKI_IMAGE_OCCLUSION_MODEL = genanki.Model(
+    1607392321,
+    'Layered Image Occlusion',
+    fields=[{'name': 'Front'}, {'name': 'Back'}, {'name': 'Extra'}],
+    templates=[{
+        'name': 'Image Occlusion',
+        'qfmt': '<div class="io-card">{{Front}}</div>',
+        'afmt': '<div class="io-card">{{Back}}</div>{{#Extra}}<div class="io-extra">{{Extra}}</div>{{/Extra}}',
+    }],
+    css=DEFAULT_CARD_CSS + """
+.io-card { max-width: 100%; margin: 0 auto; text-align: center; }
+.io-stage { position: relative; display: inline-block; max-width: 100%; line-height: 0; vertical-align: middle; }
+.io-stage img { display: block; max-width: 100%; max-height: 78vh; width: auto; height: auto; }
+.io-stage svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.io-stage .io-mask { fill: #29332c; stroke: #fff; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.io-answer-label { display: block; margin: 12px 0 0; font-weight: bold; line-height: 1.35; }
+.io-extra { margin-top: 14px; text-align: left; }
+""",
+)
+
+
+def _io_overlay_html(image_name: str, image_width: int, image_height: int, masks: list[dict], hidden_groups: set[str]) -> str:
+    """Keep the original image and vector mask overlay as separate Anki elements."""
+    shapes = []
+    for mask in masks:
+        group = str(mask.get("group") or mask.get("id"))
+        if group not in hidden_groups:
+            continue
+        shape = mask.get("shape", "rect")
+        if shape == "ellipse":
+            cx = (mask["x"] + mask["width"] / 2) * image_width
+            cy = (mask["y"] + mask["height"] / 2) * image_height
+            rx = mask["width"] * image_width / 2
+            ry = mask["height"] * image_height / 2
+            shapes.append(f'<ellipse class="io-mask" cx="{cx:.2f}" cy="{cy:.2f}" rx="{rx:.2f}" ry="{ry:.2f}"/>')
+        elif shape == "polygon":
+            points = " ".join(
+                f'{float(point["x"]) * image_width:.2f},{float(point["y"]) * image_height:.2f}'
+                for point in mask.get("points", [])
+            )
+            shapes.append(f'<polygon class="io-mask" points="{points}"/>')
+        else:
+            x = mask["x"] * image_width
+            y = mask["y"] * image_height
+            width = mask["width"] * image_width
+            height = mask["height"] * image_height
+            shapes.append(f'<rect class="io-mask" x="{x:.2f}" y="{y:.2f}" width="{width:.2f}" height="{height:.2f}"/>')
+    svg = f'<svg viewBox="0 0 {image_width} {image_height}" preserveAspectRatio="none" aria-hidden="true">{"".join(shapes)}</svg>' if shapes else ''
+    return f'<div class="io-stage"><img src="{image_name}" alt="Image occlusion source">{svg}</div>'
+
 
 # --- FastAPI Models ---
 logger = logging.getLogger(__name__)
@@ -172,52 +226,65 @@ def create_anki_deck(deck_payload: DeckPayload) -> bytes:
             if not card_data.image_data or not card_data.image_data.startswith("data:image/") or not card_data.masks:
                 raise ValueError("Image Occlusion cards need a source image and at least one mask")
             try:
-                mime, encoded = card_data.image_data.split(";base64,", 1)
+                _, encoded = card_data.image_data.split(";base64,", 1)
                 image = Image.open(io.BytesIO(b64decode(encoded))).convert("RGB")
             except Exception as exc:
                 raise ValueError("Invalid image data for Image Occlusion") from exc
             if image.width * image.height > 40_000_000:
                 raise ValueError("Image Occlusion source image is too large")
-            groups = {}
-            for mask in card_data.masks:
+
+            normalized_masks = []
+            groups: dict[str, list[dict]] = {}
+            for index, source_mask in enumerate(card_data.masks):
+                mask = dict(source_mask)
                 shape = mask.get("shape", "rect")
                 if shape not in {"rect", "ellipse", "polygon"}:
                     raise ValueError("Unsupported occlusion shape")
-                group = mask.get("group") or mask.get("id") or str(len(groups))
-                groups.setdefault(group, []).append(mask)
-            if not groups:
-                raise ValueError("Image Occlusion cards need at least one mask")
-            normalized_masks = []
-            for mask in card_data.masks:
                 for key in ("x", "y", "width", "height"):
-                    if not isinstance(mask.get(key), (int, float)) or not 0 <= mask[key] <= 1:
+                    value = mask.get(key)
+                    if not isinstance(value, (int, float)) or not 0 <= value <= 1:
                         raise ValueError("Mask coordinates must be normalized between 0 and 1")
+                if shape == "polygon":
+                    points = mask.get("points", [])
+                    if len(points) < 3:
+                        raise ValueError("Polygon masks need at least three points")
+                    for point in points:
+                        if not (0 <= float(point.get("x", -1)) <= 1 and 0 <= float(point.get("y", -1)) <= 1):
+                            raise ValueError("Polygon points must be normalized between 0 and 1")
+                mask_id = str(mask.get("id") or f"mask-{index + 1}")
+                group = str(mask.get("group") or mask_id)
+                mask["id"] = mask_id
+                mask["group"] = group
                 normalized_masks.append(mask)
-            def render_occlusion(hidden_groups):
-                result = image.copy()
-                draw = ImageDraw.Draw(result)
-                for mask in normalized_masks:
-                    group = mask.get("group") or mask.get("id")
-                    if group not in hidden_groups: continue
-                    x0 = round(mask["x"] * image.width); y0 = round(mask["y"] * image.height)
-                    x1 = round((mask["x"] + mask["width"]) * image.width); y1 = round((mask["y"] + mask["height"]) * image.height)
-                    fill = (43, 51, 45)
-                    if mask.get("shape") == "ellipse": draw.ellipse((x0, y0, x1, y1), fill=fill)
-                    elif mask.get("shape") == "polygon":
-                        points = [(round(point["x"] * image.width), round(point["y"] * image.height)) for point in mask.get("points", [])]
-                        if len(points) >= 3: draw.polygon(points, fill=fill)
-                    else: draw.rectangle((x0, y0, x1, y1), fill=fill)
-                output = io.BytesIO(); result.save(output, format="PNG"); return output.getvalue()
-            for index, (group, group_masks) in enumerate(groups.items(), 1):
-                target_groups = set(groups) if card_data.occlusion_mode == "hide-all" else {group}
-                shown_answer_groups = set(groups) - {group} if card_data.occlusion_mode == "hide-all" else set()
-                q_name = f"occlusion_q_{os.urandom(6).hex()}.png"; a_name = f"occlusion_a_{os.urandom(6).hex()}.png"
-                all_media_files[q_name] = render_occlusion(target_groups)
-                all_media_files[a_name] = render_occlusion(shown_answer_groups)
-                label = ", ".join(m.get("label", "").strip() for m in group_masks if m.get("label", "").strip())
-                answer_html = f'<img src="{a_name}" style="max-width:100%;height:auto;"><br><strong>{label or f"Region {index}"}</strong>'
-                if card_data.answer.strip(): answer_html += f'<hr>{card_data.answer}'
-                note = genanki.Note(model=ANKI_BASIC_MODEL, fields=[f'<img src="{q_name}" style="max-width:100%;height:auto;">', answer_html], tags=card_data.tags)
+                groups.setdefault(group, []).append(mask)
+
+            image_name = f"io_source_{os.urandom(8).hex()}.png"
+            image_buffer = io.BytesIO()
+            image.save(image_buffer, format="PNG")
+            all_media_files[image_name] = image_buffer.getvalue()
+            all_group_ids = set(groups)
+
+            for index, (target_group, target_masks) in enumerate(groups.items(), 1):
+                if card_data.occlusion_mode == "hide-all":
+                    front_hidden = all_group_ids
+                    back_hidden = all_group_ids - {target_group}
+                else:
+                    front_hidden = {target_group}
+                    back_hidden = set()
+
+                front_html = _io_overlay_html(image_name, image.width, image.height, normalized_masks, front_hidden)
+                back_html = _io_overlay_html(image_name, image.width, image.height, normalized_masks, back_hidden)
+                label = ", ".join(
+                    str(mask.get("label", "")).strip()
+                    for mask in target_masks
+                    if str(mask.get("label", "")).strip()
+                ) or f"Region {index}"
+                back_html += f'<div class="io-answer-label">{html_escape(label)}</div>'
+                note = genanki.Note(
+                    model=ANKI_IMAGE_OCCLUSION_MODEL,
+                    fields=[front_html, back_html, card_data.answer],
+                    tags=card_data.tags,
+                )
                 deck.add_note(note)
             continue
         if card_data.type == "Basic":
@@ -293,7 +360,13 @@ app.add_middleware(
 )
 
 # --- Endpoint ---
-@app.get("/")\nasync def root():\n    """Simple landing response so opening the API domain does not show a 404."""\n    return {"service": "Create Flashcards API", "status": "ok", "health": "/health", "docs": "/docs"}\n\n\n@app.get("/health")
+@app.get("/")
+async def root():
+    """Simple landing response for the API service."""
+    return {"service": "Create Flashcards API", "status": "ok", "health": "/health", "docs": "/docs"}
+
+
+@app.get("/health")
 async def health_check():
     return {"status": "ok"}
 
