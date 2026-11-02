@@ -63,8 +63,12 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
 
   useEffect(() => () => {
     renderTaskRef.current?.cancel();
-    loadingTaskRef.current?.destroy().catch(() => {});
-    docRef.current?.destroy().catch(() => {});
+    // A PDFDocumentProxy belongs to its loading task. Destroying both separately
+    // can race on iOS Safari when the user immediately chooses another PDF.
+    const task = loadingTaskRef.current;
+    loadingTaskRef.current = null;
+    docRef.current = null;
+    if (task) task.destroy().catch(() => {});
     if (sourceUrlRef.current) URL.revokeObjectURL(sourceUrlRef.current);
   }, []);
 
@@ -124,9 +128,14 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
     let activeTask = null;
     try {
       renderTaskRef.current?.cancel();
-      await loadingTaskRef.current?.destroy().catch(() => {});
+      // Detach the previous document synchronously before awaiting destruction.
+      const previousTask = loadingTaskRef.current;
+      const previousDocument = docRef.current;
+      loadingTaskRef.current = null;
+      docRef.current = null;
+      await previousTask?.destroy().catch(() => {});
+      if (!previousTask) await previousDocument?.destroy().catch(() => {});
       if (loadTokenRef.current !== loadToken) return;
-      await docRef.current?.destroy().catch(() => {});
       renderedPageRef.current = null;
       displayedPageRef.current = null; highQualityPageRef.current = null;
       if (sourceUrlRef.current) URL.revokeObjectURL(sourceUrlRef.current);
@@ -156,9 +165,11 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   const cancelLoading = () => {
     loadTokenRef.current += 1;
     const sourceUrl = sourceUrlRef.current;
-    loadingTaskRef.current?.destroy().catch(() => {}).finally(() => { if (sourceUrl) URL.revokeObjectURL(sourceUrl); });
-    sourceUrlRef.current = null;
+    const task = loadingTaskRef.current;
     loadingTaskRef.current = null;
+    docRef.current = null;
+    task?.destroy().catch(() => {}).finally(() => { if (sourceUrl) URL.revokeObjectURL(sourceUrl); });
+    sourceUrlRef.current = null;
     setLoading(false);
     setError('PDF loading canceled.');
   };

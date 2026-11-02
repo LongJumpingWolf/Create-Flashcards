@@ -523,3 +523,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, [contenteditabl
   .action-buttons { grid-template-columns: minmax(0,1fr) minmax(0,1fr) 40px; gap: 5px; }
   .action-buttons .preview-button { width: 40px; }
 }
+
+
+/* Keep the PDF card-library drawer reachable after a document has been loaded. */
+@media (max-width: 1060px) {
+  .pdf-workspace .cards-panel.library-drawer { display: flex !important; }
+  .pdf-workspace .cards-panel.library-drawer.library-open { transform: translateX(0); }
+}
+@media (max-width: 700px) {
+  .pdf-workspace .cards-panel.library-drawer { display: flex !important; }
+  .pdf-workspace .cards-panel.library-drawer.library-open { transform: translateX(0); }
+  .pdf-workspace.pdf-pdf-view { overflow: visible; }
+  .pdf-workspace.pdf-pdf-view > div:not(.cards-panel) { min-height: 0; }
+}
