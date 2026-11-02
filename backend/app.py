@@ -280,6 +280,8 @@ origins = [
     "http://localhost:5173",  # Vite default
     "http://127.0.0.1:5173",
     "https://anki-flashcard-builder.vercel.app",  # Frontend deployed URL
+    "https://create-flashcards.vercel.app",  # Current production frontend
+    *[origin.strip() for origin in os.getenv("FRONTEND_ORIGINS", "").split(",") if origin.strip()],
 ]
 
 app.add_middleware(
