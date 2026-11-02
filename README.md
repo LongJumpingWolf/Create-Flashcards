@@ -36,3 +36,7 @@ cd frontend
 npm run lint
 npm run build
 ```
+
+## Vercel deployment
+
+This repository uses two Vercel projects: `create-flashcards` builds from `frontend/`, and `create-flashcards-api` builds from `backend/`. The frontend's `VITE_BACKEND_URL` environment variable points to the API project. Vercel Function requests and responses are limited to 4.5 MB, so unusually large image-heavy decks may exceed the API's current hosting limit.
