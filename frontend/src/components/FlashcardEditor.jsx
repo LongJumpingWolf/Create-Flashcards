@@ -57,13 +57,20 @@ const colorClozeContent = (html, color) => {
     });
 }
 
-function OcclusionPreview({ image, masks }) {
+function OcclusionPreview({ image, masks, imageWidth = 720, mode = 'hide-all', cardIndex = 0, answerSide = false }) {
   const [dimensions, setDimensions] = useState(null);
+  const groups = [...new Set(masks.map((mask, index) => String(mask.group || mask.id || `mask-${index + 1}`)))];
+  const activeGroup = groups[cardIndex] || groups[0];
+  const shownMasks = masks.filter((mask, index) => {
+    const isActive = String(mask.group || mask.id || `mask-${index + 1}`) === activeGroup;
+    return mode === 'hide-one' ? (!answerSide && isActive) : (!answerSide || !isActive);
+  });
   return (
     <div className="preview-occlusion-image">
       <img
         src={image}
         alt="Image occlusion card source"
+        style={{ width: `${imageWidth}px` }}
         onLoad={event => setDimensions({
           src: image,
           width: event.currentTarget.naturalWidth,
@@ -75,18 +82,20 @@ function OcclusionPreview({ image, masks }) {
           className="preview-occlusion-masks"
           viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
           preserveAspectRatio="none"
-          aria-label={`${masks.length} hidden regions`}
+          aria-label={`${groups.length} image occlusion cards`}
         >
-          {masks.map((mask, index) => {
+          {shownMasks.map((mask, index) => {
+            const isQuestionMask = String(mask.group || mask.id || `mask-${index + 1}`) === activeGroup;
             const x = mask.x * dimensions.width;
             const y = mask.y * dimensions.height;
             const width = mask.width * dimensions.width;
             const height = mask.height * dimensions.height;
             const common = {
               key: mask.id || index,
-              fill: 'rgba(36,45,38,.92)',
-              stroke: 'rgba(255,255,255,.9)',
-              strokeWidth: 1.5,
+              fill: isQuestionMask ? '#ff8e8e' : '#ffeba2',
+              stroke: isQuestionMask ? '#b94d4d' : '#b89a3a',
+              strokeWidth: 1.25,
+              style: { fill: isQuestionMask ? '#ff8e8e' : '#ffeba2', stroke: isQuestionMask ? '#b94d4d' : '#b89a3a' },
               vectorEffect: 'non-scaling-stroke',
             };
             if (mask.shape === 'polygon' && mask.points?.length >= 3) {
@@ -338,6 +347,8 @@ export default function FlashcardEditor() {
   const [tagInput, setTagInput] = useState("");
   const [currentTags, setCurrentTags] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [previewAnswerSide, setPreviewAnswerSide] = useState(false);
+  const [previewOcclusionIndex, setPreviewOcclusionIndex] = useState(0);
   const [cards, setCards] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [contentInitialized, setContentInitialized] = useState(false);
@@ -350,10 +361,13 @@ export default function FlashcardEditor() {
   const [pdfOpen, setPdfOpen] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [occlusionImage, setOcclusionImage] = useState(null);
+  const [occlusionImageWidth, setOcclusionImageWidth] = useState(720);
+  const [occlusionEditorOpen, setOcclusionEditorOpen] = useState(false);
   const [occlusionMasks, setOcclusionMasks] = useState([]);
   const [occlusionMode, setOcclusionMode] = useState('hide-all');
   const [manualMaskPreview, setManualMaskPreview] = useState(null);
   const manualMaskStartRef = useRef(null);
+  const imageResizeStartRef = useRef(null);
 
   const [clozeColor, setClozeColor] = useState(DEFAULT_CLOZE_COLOR);
   const [basicColorPresets, setBasicColorPresets] = useState(DEFAULT_BASIC_PRESETS);
@@ -491,7 +505,7 @@ export default function FlashcardEditor() {
           question: cardType === 'Image Occlusion' ? '' : finalFront,
           answer: finalBack,
           tags: currentTags,
-          ...(cardType === 'Image Occlusion' ? { imageData: finalOcclusionImage, masks: occlusionMasks, occlusionMode, restoreType: card.restoreType || previousCardTypeRef.current } : {}),
+          ...(cardType === 'Image Occlusion' ? { imageData: finalOcclusionImage, imageWidth: occlusionImageWidth, masks: occlusionMasks, occlusionMode, restoreType: card.restoreType || previousCardTypeRef.current } : {}),
       } : card));
 
       const nextType = cardType === 'Image Occlusion' ? previousCardTypeRef.current : cardType;
@@ -506,7 +520,7 @@ export default function FlashcardEditor() {
       setCurrentTags([]);
       if (frontRef.current) frontRef.current.innerHTML = '';
       if (backRef.current) backRef.current.innerHTML = '';
-  }, [front, back, occlusionImage, occlusionMasks, occlusionMode, cardType, currentTags, editingIndex]);
+  }, [front, back, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode, cardType, currentTags, editingIndex]);
 
   const deleteCard = (indexToDelete) => {
       if (window.confirm(`Are you sure you want to delete Card #${cards.length - indexToDelete}?`)) {
@@ -525,7 +539,7 @@ export default function FlashcardEditor() {
         setFormMessage('Add an image and at least one hide region before creating this occlusion card.');
         return;
       }
-      const ioCard = { type: cardType, question: '', answer: finalBack, tags: currentTags, created: new Date().toLocaleTimeString(), imageData: finalOcclusionImage, masks: occlusionMasks, occlusionMode, restoreType: previousCardTypeRef.current };
+      const ioCard = { type: cardType, question: '', answer: finalBack, tags: currentTags, created: new Date().toLocaleTimeString(), imageData: finalOcclusionImage, imageWidth: occlusionImageWidth, masks: occlusionMasks, occlusionMode, restoreType: previousCardTypeRef.current };
       if (editingIndex !== null) return updateCard();
       setCards(prev => [ioCard, ...prev]);
       window.clearTimeout(frontSaveTimerRef.current); window.clearTimeout(backSaveTimerRef.current);
@@ -579,7 +593,7 @@ export default function FlashcardEditor() {
     if (frontRef.current) frontRef.current.innerHTML = '';
     if (backRef.current) backRef.current.innerHTML = '';
 
-  }, [cardType, front, back, currentTags, cards, editingIndex, updateCard, occlusionImage, occlusionMasks, occlusionMode]);
+  }, [cardType, front, back, currentTags, cards, editingIndex, updateCard, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode]);
 
 
   const exportDeck = useCallback(async () => {
@@ -597,7 +611,7 @@ export default function FlashcardEditor() {
         question: c.question,
         answer: c.answer,
         tags: c.tags,
-        ...(c.type === 'Image Occlusion' ? { image_data: c.imageData, masks: c.masks, occlusion_mode: c.occlusionMode } : {}),
+        ...(c.type === 'Image Occlusion' ? { image_data: c.imageData, image_width: c.imageWidth, masks: c.masks, occlusion_mode: c.occlusionMode } : {}),
       }))
     };
 
@@ -681,6 +695,7 @@ export default function FlashcardEditor() {
     if (card.type === 'Image Occlusion') {
       previousCardTypeRef.current = card.restoreType || 'Basic';
       setOcclusionImage(card.imageData || null);
+      setOcclusionImageWidth(card.imageWidth || 720);
       setOcclusionMasks(card.masks || []);
       setOcclusionMode(card.occlusionMode || 'hide-all');
     } else {
@@ -1450,7 +1465,7 @@ export default function FlashcardEditor() {
   };
 
   const manualMaskPoint = (event) => {
-    const rect = event.currentTarget.getBoundingClientRect();
+    const rect = (event.currentTarget.querySelector('img') || event.currentTarget).getBoundingClientRect();
     return { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) };
   };
   const finishManualMask = (event) => {
@@ -1461,6 +1476,21 @@ export default function FlashcardEditor() {
     if (width < .01 || height < .01) return;
     setOcclusionMasks(prev => [...prev, { id: crypto.randomUUID(), shape: 'rect', x, y, width, height, points: [], label: '', group: null }]);
   };
+  const beginImageResize = (event, direction) => {
+    event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId);
+    imageResizeStartRef.current = { x: event.clientX, y: event.clientY, width: occlusionImageWidth, direction };
+  };
+  const moveImageResize = (event) => {
+    const start = imageResizeStartRef.current; if (!start) return;
+    const image = event.currentTarget.closest('.io-editor-resize-frame')?.querySelector('img');
+    const ratio = image?.naturalWidth && image?.naturalHeight ? image.naturalWidth / image.naturalHeight : 1;
+    const dx = event.clientX - start.x, dy = event.clientY - start.y;
+    const horizontal = start.direction.includes('e') ? dx : start.direction.includes('w') ? -dx : 0;
+    const vertical = start.direction.includes('s') ? dy * ratio : start.direction.includes('n') ? -dy * ratio : 0;
+    const delta = Math.abs(horizontal) > Math.abs(vertical) ? horizontal : vertical;
+    setOcclusionImageWidth(Math.round(Math.max(180, Math.min(1800, start.width + delta))));
+  };
+  const endImageResize = () => { imageResizeStartRef.current = null; };
 
   const handleColorChange = (color) => {
     if (colorPickerTarget === 'cloze') {
@@ -1605,12 +1635,14 @@ export default function FlashcardEditor() {
             </div>}
 
             {cardType === 'Image Occlusion' && <section className="io-source-card" tabIndex={0} aria-label="Image occlusion source image. Focus here and paste an image, or choose one." onPaste={pasteImageIntoOcclusion} onDragOver={e => e.preventDefault()} onDrop={e => handleSnippetDrop(e, 'front')}>
-              <div className="io-source-heading"><div><span className="section-eyebrow">IMAGE OCCLUSION</span><h3>Choose an image, then add masks in the PDF snip tool</h3></div><button className="quiet-button" type="button" onClick={() => openImagePicker(frontRef)}><Upload size={16} /> Choose image</button></div>
+              <div className="io-source-heading"><div><span className="section-eyebrow">IMAGE OCCLUSION</span><h3>Choose an image, then add masks</h3></div><div className="io-source-actions">{occlusionImage && <><div className="io-region-count"><strong>{occlusionMasks.length}</strong><span>regions</span></div><button className="quiet-button" type="button" onClick={() => setOcclusionEditorOpen(true)}>Open editor</button></>}<button className="quiet-button" type="button" onClick={() => openImagePicker(frontRef)}><Upload size={16} /> Choose image</button></div></div>
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, frontRef)} />
               {!occlusionImage ? <div className="io-image-empty"><Crop size={22}/><span>Paste an image here, drop an occluded capture, or choose a file</span></div> : <div className="io-image-preview"><div className="io-mask-draw-area" onPointerDown={e => { if (e.target.closest('.manual-mask-remove')) return; e.currentTarget.setPointerCapture(e.pointerId); manualMaskStartRef.current = manualMaskPoint(e); setManualMaskPreview({ x: manualMaskStartRef.current.x, y: manualMaskStartRef.current.y, width: 0, height: 0 }); }} onPointerMove={e => { if (!manualMaskStartRef.current) return; const p = manualMaskPoint(e), s = manualMaskStartRef.current; setManualMaskPreview({ x: Math.min(s.x,p.x), y: Math.min(s.y,p.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }} onPointerUp={finishManualMask} onPointerCancel={finishManualMask}><img src={occlusionImage} alt="Image occlusion source" draggable="false"/>{occlusionMasks.map((mask,index) => <button type="button" className="manual-mask-remove" key={mask.id} title={`Remove region ${index+1}`} onPointerDown={e => e.stopPropagation()} onClick={() => setOcclusionMasks(prev => prev.filter(m => m.id !== mask.id))} style={{left:`${mask.x*100}%`,top:`${mask.y*100}%`,width:`${mask.width*100}%`,height:`${mask.height*100}%`,borderRadius:mask.shape === 'ellipse' ? '50%' : 0,clipPath:mask.shape === 'polygon' && mask.points?.length >= 3 ? `polygon(${mask.points.map(point => `${((point.x-mask.x)/Math.max(mask.width,.0001))*100}% ${((point.y-mask.y)/Math.max(mask.height,.0001))*100}%`).join(',')})` : undefined}}>{index+1} ×</button>)}{manualMaskPreview && <span className="manual-mask-draft" style={{left:`${manualMaskPreview.x*100}%`,top:`${manualMaskPreview.y*100}%`,width:`${manualMaskPreview.width*100}%`,height:`${manualMaskPreview.height*100}%`}}/>}</div><div><strong>{occlusionMasks.length} hidden region{occlusionMasks.length === 1 ? '' : 's'}</strong><span>Drag over image to add a mask; tap a mask to remove it.</span></div></div>}
               <p className="io-helper">Draw masks on a PDF capture, then drag it here. The source image and mask geometry stay attached to this card.</p>
               <label className="io-mode-select">Review mode <select value={occlusionMode} onChange={e => setOcclusionMode(e.target.value)}><option value="hide-all">Hide All, Guess One</option><option value="hide-one">Hide One, Guess One</option></select></label>
             </section>}
+
+            {cardType === 'Image Occlusion' && occlusionImage && occlusionEditorOpen && <div className="io-editor-backdrop" role="dialog" aria-modal="true" aria-label="Image occlusion editor" onPointerDown={e => { if (e.target === e.currentTarget) setOcclusionEditorOpen(false); }}><section className="io-editor-dialog"><header className="io-editor-header"><div><span className="section-eyebrow">IMAGE OCCLUSION</span><h2>Arrange masks</h2></div><div className="io-editor-actions"><label>Image size <input aria-label="Image width" type="range" min="180" max="1800" step="10" value={occlusionImageWidth} onChange={e => setOcclusionImageWidth(Number(e.target.value))}/><span>{occlusionImageWidth}px</span></label><button type="button" className="quiet-button" onClick={() => setOcclusionEditorOpen(false)}>Done</button></div></header><div className="io-editor-stage"><div className="io-editor-resize-frame" style={{width:`min(${occlusionImageWidth}px, calc(100vw - 64px))`}}><div className="io-mask-draw-area io-editor-mask-area" onPointerDown={e => { if (e.target.closest('.manual-mask-remove,.io-resize-handle')) return; e.currentTarget.setPointerCapture(e.pointerId); manualMaskStartRef.current = manualMaskPoint(e); setManualMaskPreview({ x: manualMaskStartRef.current.x, y: manualMaskStartRef.current.y, width: 0, height: 0 }); }} onPointerMove={e => { if (!manualMaskStartRef.current) return; const p = manualMaskPoint(e), s = manualMaskStartRef.current; setManualMaskPreview({ x: Math.min(s.x,p.x), y: Math.min(s.y,p.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }} onPointerUp={finishManualMask} onPointerCancel={finishManualMask}><img src={occlusionImage} alt="Image occlusion source" draggable="false"/>{occlusionMasks.map((mask,index) => <button type="button" className="manual-mask-remove" key={mask.id} title={`Remove region ${index+1}`} onPointerDown={e => e.stopPropagation()} onClick={() => setOcclusionMasks(prev => prev.filter(m => m.id !== mask.id))} style={{left:`${mask.x*100}%`,top:`${mask.y*100}%`,width:`${mask.width*100}%`,height:`${mask.height*100}%`,borderRadius:mask.shape === 'ellipse' ? '50%' : 0}}>{index+1} ×</button>)}{manualMaskPreview && <span className="manual-mask-draft" style={{left:`${manualMaskPreview.x*100}%`,top:`${manualMaskPreview.y*100}%`,width:`${manualMaskPreview.width*100}%`,height:`${manualMaskPreview.height*100}%`}}/>}</div>{['n','ne','e','se','s','sw','w','nw'].map(direction => <button type="button" key={direction} aria-label={`Resize image ${direction}`} className={`io-resize-handle ${direction}`} onPointerDown={e => beginImageResize(e,direction)} onPointerMove={moveImageResize} onPointerUp={endImageResize} onPointerCancel={endImageResize}/>)}</div></div><footer className="io-editor-footer"><span>{occlusionMasks.length} hidden region{occlusionMasks.length === 1 ? '' : 's'} · Drag to add a mask, select a mask to remove it. Resize handles keep the image proportions.</span><button type="button" className="primary-button" onClick={() => setOcclusionEditorOpen(false)}>Done</button></footer></section></div>}
 
             {cardType !== 'Image Occlusion' && <section className="space-y-2 mb-4">
               <h3 className="text-sm font-medium block mb-1">
@@ -1738,7 +1770,7 @@ export default function FlashcardEditor() {
                         {isExporting ? <LoaderCircle size={17} className="spin" /> : <Download size={17} />} {isExporting ? 'Building…' : 'Export .apkg'}
                     </button>
                     <button
-                        onClick={() => setShowPreview(true)}
+                        onClick={() => { setPreviewOcclusionIndex(0); setPreviewAnswerSide(false); setShowPreview(true); }}
                         className="secondary-button preview-button"
                     >
                         <Eye size={16} /> Preview
@@ -1795,47 +1827,28 @@ export default function FlashcardEditor() {
 
             <div className="flex-1 overflow-y-auto p-6 text-center">
               <div className="preview-content space-y-6">
-                <div>
-                  <h3 className="font-medium mb-2 text-neutral-400">{cardType === "Cloze" ? "Text" : "Front"}</h3>
-                  <div
-                    className="p-4 border border-neutral-700 rounded-lg text-xl bg-neutral-900 text-neutral-200"
-                    >
-                    {cardType === 'Image Occlusion' ? (
-                      occlusionImage ? <OcclusionPreview image={occlusionImage} masks={occlusionMasks} /> : <span>(add an image to preview this card)</span>
-                    ) : <div dangerouslySetInnerHTML={{ __html: cleanColorSpans(front) || "(empty)" }} />}
+                {cardType === 'Image Occlusion' ? <>
+                  <div className="io-reviewer-controls">
+                    <button type="button" aria-label="Previous occlusion card" disabled={previewOcclusionIndex <= 0} onClick={() => { setPreviewOcclusionIndex(index => Math.max(0, index - 1)); setPreviewAnswerSide(false); }}>‹</button>
+                    <span>Card <strong>{Math.min(previewOcclusionIndex + 1, Math.max(1, new Set(occlusionMasks.map((mask, index) => mask.group || mask.id || `mask-${index + 1}`)).size))}</strong> of {new Set(occlusionMasks.map((mask, index) => mask.group || mask.id || `mask-${index + 1}`)).size}</span>
+                    <button type="button" aria-label="Next occlusion card" disabled={previewOcclusionIndex >= new Set(occlusionMasks.map((mask, index) => mask.group || mask.id || `mask-${index + 1}`)).size - 1} onClick={() => { setPreviewOcclusionIndex(index => Math.min(Math.max(0, new Set(occlusionMasks.map((mask, i) => mask.group || mask.id || `mask-${i + 1}`)).size - 1), index + 1)); setPreviewAnswerSide(false); }}>›</button>
+                    <div className="io-reviewer-flip"><button type="button" aria-pressed={!previewAnswerSide} onClick={() => setPreviewAnswerSide(false)}>Question</button><button type="button" aria-pressed={previewAnswerSide} onClick={() => setPreviewAnswerSide(true)}>Show answer</button></div>
                   </div>
-                </div>
-
-                {cardType === "Basic" && (
+                  <div className="io-reviewer-image">
+                    {occlusionImage ? <OcclusionPreview image={occlusionImage} imageWidth={occlusionImageWidth} masks={occlusionMasks} mode={occlusionMode} cardIndex={previewOcclusionIndex} answerSide={previewAnswerSide} /> : <span>Add an image to preview this card.</span>}
+                  </div>
+                  {previewAnswerSide && back && <div className="io-reviewer-extra"><span>Back extra</span><div dangerouslySetInnerHTML={{ __html: back }} /></div>}
+                </> : <>
                   <div>
-                    <h3 className="font-medium mb-2 text-neutral-400">Back</h3>
-                    <div
-                      className="p-4 border border-neutral-700 rounded-lg text-xl bg-neutral-900 text-neutral-200"
-                      dangerouslySetInnerHTML={{ __html: back || "(empty)" }}
-                    />
+                    <h3 className="font-medium mb-2 text-neutral-400">{cardType === "Cloze" ? "Text" : "Front"}</h3>
+                    <div className="p-4 border border-neutral-700 rounded-lg text-xl bg-neutral-900 text-neutral-200">
+                      <div dangerouslySetInnerHTML={{ __html: cleanColorSpans(front) || "(empty)" }} />
+                    </div>
                   </div>
-                )}
-
-                {cardType === "Cloze" && back && (
-                  <div>
-                    <h3 className="font-medium mb-2 text-neutral-400">Extra</h3>
-                    <div
-                      className="p-4 border border-neutral-700 rounded-lg text-xl bg-neutral-900 text-neutral-200"
-                      dangerouslySetInnerHTML={{ __html: back || "(empty)" }}
-                    />
-                  </div>
-                )}
-
-                {cardType === 'Image Occlusion' && back && (
-                  <div>
-                    <h3 className="font-medium mb-2 text-neutral-400">Extra</h3>
-                    <div className="p-4 border border-neutral-700 rounded-lg text-base bg-neutral-900 text-neutral-200" dangerouslySetInnerHTML={{ __html: back }} />
-                  </div>
-                )}
-
-                <div className="text-xs text-neutral-400 pt-4">
-                  Tags: {currentTags.map(formatTagForDisplay).join(", ") || "None"}
-                </div>
+                  {cardType === "Basic" && <div><h3 className="font-medium mb-2 text-neutral-400">Back</h3><div className="p-4 border border-neutral-700 rounded-lg text-xl bg-neutral-900 text-neutral-200" dangerouslySetInnerHTML={{ __html: back || "(empty)" }} /></div>}
+                  {cardType === "Cloze" && back && <div><h3 className="font-medium mb-2 text-neutral-400">Extra</h3><div className="p-4 border border-neutral-700 rounded-lg text-xl bg-neutral-900 text-neutral-200" dangerouslySetInnerHTML={{ __html: back }} /></div>}
+                </>}
+                <div className="text-xs text-neutral-400 pt-4">Tags: {currentTags.map(formatTagForDisplay).join(", ") || "None"}</div>
               </div>
             </div>
 

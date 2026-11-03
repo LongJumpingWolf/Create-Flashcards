@@ -4,6 +4,7 @@ import os
 import random
 import tempfile
 import re
+import uuid
 from base64 import b64decode
 from html import escape as html_escape
 from typing import List, Dict, Any, Literal
@@ -88,101 +89,48 @@ ANKI_CLOZE_MODEL = genanki.Model(
     css=DEFAULT_CARD_CSS + '.cloze { font-weight: bold; }', 
 )
 
-class AnkiImageOcclusionModel(genanki.Model):
-    """Anki's stock Image Occlusion cloze notetype, represented in an APKG."""
-
-    def to_json(self, timestamp: float, deck_id):
-        model = super().to_json(timestamp, deck_id)
-        # Anki 2.1.62+ uses this marker to identify native stock note types.
-        model['originalStockKind'] = 6  # OriginalStockKind.ImageOcclusion
-        return model
-
-
-ANKI_IMAGE_OCCLUSION_MODEL = AnkiImageOcclusionModel(
-    1607392321,
-    'Image Occlusion',
-    fields=[
-        {'name': 'Occlusions', 'tag': 0, 'preventDeletion': True},
-        {'name': 'Image', 'tag': 1, 'preventDeletion': True},
-        {'name': 'Header', 'tag': 2, 'preventDeletion': True},
-        {'name': 'Back Extra', 'tag': 3, 'preventDeletion': True},
-        {'name': 'Comments', 'tag': 4, 'preventDeletion': False},
-    ],
-    templates=[{
-        'name': 'Image Occlusion',
-        'qfmt': '''{{#Header}}<div>{{Header}}</div>{{/Header}}
-<div style="display:none">{{cloze:Occlusions}}</div>
-<div id="err"></div>
-<div id="image-occlusion-container">
-    {{Image}}
-    <canvas id="image-occlusion-canvas"></canvas>
+IOE_FIELDS = [
+    'ID (hidden)', 'Header', 'Image', 'Question Mask', 'Footer', 'Remarks',
+    'Sources', 'Extra 1', 'Extra 2', 'Answer Mask', 'Original Mask',
+]
+IOE_CARD_CSS = '''
+.card { font-family: Arial, sans-serif; font-size: 20px; text-align: center; color: #202521; background: #fff; }
+#io-header, #io-footer { margin: .5em auto; max-width: 90%; }
+#io-wrapper { position: relative; display: inline-block; max-width: 100%; margin: 0 auto; line-height: 0; }
+#io-original { position: relative; z-index: 1; }
+#io-original img { display: block; max-width: 100%; height: auto; }
+#io-overlay { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; }
+#io-overlay img { display: block; width: 100%; height: 100%; object-fit: fill; }
+#io-revl-btn { display: block; margin: .8em auto; padding: .35em .8em; }
+#io-extra-wrapper { width: min(80%, 42rem); margin: .8em auto; text-align: left; line-height: 1.5; }
+.io-extra-entry { margin-top: .6em; }
+.io-field-descr { font-weight: 700; margin-bottom: .15em; }
+'''
+IOE_QFMT = '''{{#Image}}
+<div id="io-header">{{Header}}</div>
+<div id="io-wrapper"><div id="io-overlay">{{Question Mask}}</div><div id="io-original">{{Image}}</div></div>
+{{#Footer}}<div id="io-footer">{{Footer}}</div>{{/Footer}}
+{{/Image}}'''
+IOE_AFMT = '''{{#Image}}
+<div id="io-header">{{Header}}</div>
+<div id="io-wrapper"><div id="io-overlay">{{Answer Mask}}</div><div id="io-original">{{Image}}</div></div>
+{{#Footer}}<div id="io-footer">{{Footer}}</div>{{/Footer}}
+<button id="io-revl-btn" onclick="var m=document.getElementById('io-overlay');m.style.display=m.style.display==='none'?'block':'none'">Toggle Masks</button>
+<div id="io-extra-wrapper">
+{{#Remarks}}<div class="io-extra-entry"><div class="io-field-descr">Remarks</div>{{Remarks}}</div>{{/Remarks}}
+{{#Sources}}<div class="io-extra-entry"><div class="io-field-descr">Sources</div>{{Sources}}</div>{{/Sources}}
+{{#Extra 1}}<div class="io-extra-entry">{{Extra 1}}</div>{{/Extra 1}}
+{{#Extra 2}}<div class="io-extra-entry">{{Extra 2}}</div>{{/Extra 2}}
 </div>
-<script>
-try { anki.imageOcclusion.setup(); }
-catch (exc) { document.getElementById("err").textContent = "Image Occlusion requires Anki 23.10 or newer: " + exc; }
-</script>''',
-        'afmt': '''{{#Header}}<div>{{Header}}</div>{{/Header}}
-<div style="display:none">{{cloze:Occlusions}}</div>
-<div id="err"></div>
-<div id="image-occlusion-container">
-    {{Image}}
-    <canvas id="image-occlusion-canvas"></canvas>
-</div>
-<script>
-try { anki.imageOcclusion.setup(); }
-catch (exc) { document.getElementById("err").textContent = "Image Occlusion requires Anki 23.10 or newer: " + exc; }
-</script>
-<div><button id="toggle">Toggle Masks</button></div>
-{{#Back Extra}}<div>{{Back Extra}}</div>{{/Back Extra}}''',
-    }],
-    css='''#image-occlusion-canvas {
-    --inactive-shape-color: #ffeba2;
-    --active-shape-color: #ff8e8e;
-    --inactive-shape-border: 1px #212121;
-    --active-shape-border: 1px #212121;
-    --highlight-shape-color: #ff8e8e00;
-    --highlight-shape-border: 1px #ff8e8e;
-}
-.card { font-family: arial; font-size: 20px; text-align: center; color: black; background-color: white; }''',
-    model_type=genanki.Model.CLOZE,
+{{/Image}}'''
+ANKI_IMAGE_OCCLUSION_ENHANCED_MODEL = genanki.Model(
+    1607392322,
+    'Image Occlusion Enhanced',
+    fields=[{'name': name} for name in IOE_FIELDS],
+    templates=[{'name': 'IO Card', 'qfmt': IOE_QFMT, 'afmt': IOE_AFMT}],
+    css=IOE_CARD_CSS,
     sort_field_index=1,
 )
-
-
-def _io_cloze_field(masks: list[dict], occlusion_mode: str) -> str:
-    """Serialize vector regions in Anki's native image-occlusion cloze syntax."""
-    grouped: dict[str, list[dict]] = {}
-    for index, mask in enumerate(masks):
-        grouped.setdefault(str(mask.get('group') or mask.get('id') or f'mask-{index + 1}'), []).append(mask)
-
-    def display(value: float) -> str:
-        # Match Anki's floatToDisplay convention: 4 decimal places, trim zeros.
-        return f'{value:.4f}'.rstrip('0').rstrip('.') or '0'
-
-    def escape_prop(value: str) -> str:
-        return value.replace('\\', '\\\\').replace(':', '\\:')
-
-    clozes = []
-    for ordinal, group_masks in enumerate(grouped.values(), 1):
-        for mask in group_masks:
-            shape = mask.get('shape', 'rect')
-            props = []
-            if shape == 'ellipse':
-                props.extend((('left', mask['x']), ('top', mask['y']),
-                              ('rx', mask['width'] / 2), ('ry', mask['height'] / 2)))
-            elif shape == 'polygon':
-                points = ' '.join(f'{display(float(point["x"]))},{display(float(point["y"]))}'
-                                  for point in mask.get('points', []))
-                props.extend((('left', mask['x']), ('top', mask['y']), ('points', points)))
-            else:
-                props.extend((('left', mask['x']), ('top', mask['y']),
-                              ('width', mask['width']), ('height', mask['height'])))
-            if occlusion_mode == 'hide-all':
-                props.append(('oi', '1'))
-            encoded = ':'.join(f'{key}={escape_prop(str(value) if isinstance(value, str) else display(value))}'
-                               for key, value in props)
-            clozes.append(f'{{{{c{ordinal}::image-occlusion:{shape}:{encoded}}}}}<br>')
-    return ''.join(clozes)
 
 
 # --- FastAPI Models ---
@@ -195,6 +143,7 @@ class CardPayload(BaseModel):
     answer: str = Field(default="", max_length=2_000_000)
     tags: List[str] = Field(default_factory=list, max_length=50)
     image_data: str | None = None
+    image_width: int = Field(default=720, ge=180, le=1800)
     masks: List[dict] = Field(default_factory=list, max_length=300)
     occlusion_mode: Literal["hide-all", "hide-one"] = "hide-all"
 
@@ -259,6 +208,48 @@ def extract_media_from_html(html_content: str) -> tuple[str, Dict[str, bytes]]:
     return html_content, media_files
 
 
+def _ioe_svg_shape(mask: dict, image_width: int, image_height: int, fill: str, shape_id: str) -> str:
+    """Serialize a normalized app mask as an IOE-editable SVG shape."""
+    x, y = float(mask['x']) * image_width, float(mask['y']) * image_height
+    width, height = float(mask['width']) * image_width, float(mask['height']) * image_height
+    common = f'id="{html_escape(shape_id, quote=True)}" fill="{fill}" stroke="#2D2D2D" stroke-width="2"'
+    if mask.get('shape') == 'ellipse':
+        return f'<ellipse {common} cx="{x + width / 2:.3f}" cy="{y + height / 2:.3f}" rx="{width / 2:.3f}" ry="{height / 2:.3f}" />'
+    if mask.get('shape') == 'polygon':
+        points = ' '.join(
+            f'{float(point["x"]) * image_width:.3f},{float(point["y"]) * image_height:.3f}'
+            for point in mask.get('points', [])
+        )
+        return f'<polygon {common} points="{points}" />'
+    return f'<rect {common} x="{x:.3f}" y="{y:.3f}" width="{width:.3f}" height="{height:.3f}" />'
+
+
+def _ioe_mask_svg(image_width: int, image_height: int, mask_groups: list[list[dict]],
+                  mode: str, target_index: int | None, side: str, session_id: str) -> str:
+    """Build one SVG mask in Image Occlusion Enhanced's layered note format."""
+    elements = []
+    for index, group in enumerate(mask_groups):
+        if side == 'A' and (mode == 'oa' or index == target_index):
+            continue
+        if side == 'Q' and mode == 'oa' and index != target_index:
+            continue
+        fill = '#FF7E7E' if index == target_index else '#FFEBA2'
+        shape_id = f'{session_id}-{mode}-{index + 1}'
+        if len(group) > 1:
+            children = ''.join(_ioe_svg_shape(mask, image_width, image_height, fill, f'{shape_id}-{child + 1}')
+                               for child, mask in enumerate(group))
+            elements.append(f'<g id="{shape_id}">{children}</g>')
+        else:
+            elements.append(_ioe_svg_shape(group[0], image_width, image_height, fill, shape_id))
+    svg_id = html_escape(f'{session_id}-{mode}-{side}', quote=True)
+    svg_elements = ''.join(elements)
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" '
+        f'width="{image_width}" height="{image_height}" viewBox="0 0 {image_width} {image_height}" id="{svg_id}">'
+        f'<g inkscape:groupmode="layer" inkscape:label="Masks" id="ioe-mask-layer">{svg_elements}</g></svg>'
+    )
+
+
 def create_anki_deck(deck_payload: DeckPayload) -> bytes:
     """Creates a .apkg file in memory from the deck payload."""
     deck_id = random.randint(1000000000, 9999999999)
@@ -306,22 +297,44 @@ def create_anki_deck(deck_payload: DeckPayload) -> bytes:
             image_buffer = io.BytesIO()
             image.save(image_buffer, format="PNG")
             all_media_files[image_name] = image_buffer.getvalue()
+            mask_groups = list(groups.values())
+            mode = 'ao' if card_data.occlusion_mode == 'hide-all' else 'oa'
+            session_id = uuid.uuid4().hex
+            original_mask_name = f'{session_id}-{mode}-O.svg'
+            all_media_files[original_mask_name] = _ioe_mask_svg(
+                image.width, image.height, mask_groups, mode, None, 'O', session_id
+            ).encode('utf-8')
 
-            # Anki's native IO type stores all shapes as image-occlusion clozes
-            # in one note. Anki then creates one sibling card per cloze ordinal.
-            occlusions = _io_cloze_field(normalized_masks, card_data.occlusion_mode)
-            note = genanki.Note(
-                model=ANKI_IMAGE_OCCLUSION_MODEL,
-                fields=[
-                    occlusions,
-                    f'<img src="{image_name}">',
+            for target_index in range(len(mask_groups)):
+                note_id = f'{session_id}-{mode}-{target_index + 1}'
+                question_mask_name = f'{note_id}-Q.svg'
+                answer_mask_name = f'{note_id}-A.svg'
+                all_media_files[question_mask_name] = _ioe_mask_svg(
+                    image.width, image.height, mask_groups, mode, target_index, 'Q', session_id
+                ).encode('utf-8')
+                all_media_files[answer_mask_name] = _ioe_mask_svg(
+                    image.width, image.height, mask_groups, mode, target_index, 'A', session_id
+                ).encode('utf-8')
+                image_tag = f'<img src="{image_name}" style="width:{card_data.image_width}px;max-width:100%;height:auto">'
+                mask_tag_style = 'style="display:block;width:100%;height:100%"'
+                fields = [
+                    note_id,
+                    '',
+                    image_tag,
+                    f'<img src="{question_mask_name}" {mask_tag_style}>',
+                    '',
+                    '',
                     '',
                     card_data.answer,
                     '',
-                ],
-                tags=card_data.tags,
-            )
-            deck.add_note(note)
+                    f'<img src="{answer_mask_name}" {mask_tag_style}>',
+                    f'<img src="{original_mask_name}">',
+                ]
+                deck.add_note(genanki.Note(
+                    model=ANKI_IMAGE_OCCLUSION_ENHANCED_MODEL,
+                    fields=fields,
+                    tags=card_data.tags,
+                ))
             continue
         if card_data.type == "Basic":
             # Extract and replace images from question and answer
