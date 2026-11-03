@@ -57,6 +57,52 @@ const colorClozeContent = (html, color) => {
     });
 }
 
+function OcclusionPreview({ image, masks }) {
+  const [dimensions, setDimensions] = useState(null);
+  return (
+    <div className="preview-occlusion-image">
+      <img
+        src={image}
+        alt="Image occlusion card source"
+        onLoad={event => setDimensions({
+          src: image,
+          width: event.currentTarget.naturalWidth,
+          height: event.currentTarget.naturalHeight,
+        })}
+      />
+      {dimensions?.src === image && dimensions.width > 0 && dimensions.height > 0 && (
+        <svg
+          className="preview-occlusion-masks"
+          viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
+          preserveAspectRatio="none"
+          aria-label={`${masks.length} hidden regions`}
+        >
+          {masks.map((mask, index) => {
+            const x = mask.x * dimensions.width;
+            const y = mask.y * dimensions.height;
+            const width = mask.width * dimensions.width;
+            const height = mask.height * dimensions.height;
+            const common = {
+              key: mask.id || index,
+              fill: 'rgba(36,45,38,.92)',
+              stroke: 'rgba(255,255,255,.9)',
+              strokeWidth: 1.5,
+              vectorEffect: 'non-scaling-stroke',
+            };
+            if (mask.shape === 'polygon' && mask.points?.length >= 3) {
+              return <polygon {...common} points={mask.points.map(point => `${point.x * dimensions.width},${point.y * dimensions.height}`).join(' ')} />;
+            }
+            if (mask.shape === 'ellipse') {
+              return <ellipse {...common} cx={x + width / 2} cy={y + height / 2} rx={width / 2} ry={height / 2} />;
+            }
+            return <rect {...common} x={x} y={y} width={width} height={height} />;
+          })}
+        </svg>
+      )}
+    </div>
+  );
+}
+
 const listStyles = `
   .editable-content {
     color: ${CLEAR_COLOR};
@@ -1755,16 +1801,7 @@ export default function FlashcardEditor() {
                     className="p-4 border border-neutral-700 rounded-lg text-xl bg-neutral-900 text-neutral-200"
                     >
                     {cardType === 'Image Occlusion' ? (
-                      occlusionImage ? <div className="preview-occlusion-image">
-                        <img src={occlusionImage} alt="Image occlusion card source" />
-                        <div className="preview-occlusion-masks" aria-label={`${occlusionMasks.length} hidden regions`}>
-                          {occlusionMasks.map((mask, index) => mask.shape === 'polygon' && mask.points?.length >= 3 ? (
-                            <svg key={mask.id || index} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                              <polygon points={mask.points.map(point => `${point.x * 100},${point.y * 100}`).join(' ')} />
-                            </svg>
-                          ) : <span key={mask.id || index} className={`preview-occlusion-mask ${mask.shape === 'ellipse' ? 'is-ellipse' : ''}`} style={{ left: `${mask.x * 100}%`, top: `${mask.y * 100}%`, width: `${mask.width * 100}%`, height: `${mask.height * 100}%` }} />)}
-                        </div>
-                      </div> : <span>(add an image to preview this card)</span>
+                      occlusionImage ? <OcclusionPreview image={occlusionImage} masks={occlusionMasks} /> : <span>(add an image to preview this card)</span>
                     ) : <div dangerouslySetInnerHTML={{ __html: cleanColorSpans(front) || "(empty)" }} />}
                   </div>
                 </div>
