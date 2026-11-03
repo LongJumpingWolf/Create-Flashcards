@@ -20,6 +20,7 @@ const RANGE_CHUNK_SIZE = 256 * 1024;
 export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, onMobileView }) {
   const fileInputRef = useRef(null);
   const hostRef = useRef(null);
+  const pageStageRef = useRef(null);
   const pageCanvasRef = useRef(null);
   const renderTaskRef = useRef(null);
   const docRef = useRef(null);
@@ -29,6 +30,9 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   const displayedPageRef = useRef(null);
   const highQualityPageRef = useRef(null);
   const loadTokenRef = useRef(0);
+  const zoomRef = useRef(1);
+  const zoomGestureRef = useRef(null);
+  const zoomCommitTimerRef = useRef(null);
   const [pdfName, setPdfName] = useState('');
   const [pdfDoc, setPdfDoc] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -44,6 +48,8 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   const [loadProgress, setLoadProgress] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [captureLoading, setCaptureLoading] = useState(false);
+
+  zoomRef.current = zoom;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -98,6 +104,8 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
         const context = canvas.getContext('2d', { alpha: false });
         renderTaskRef.current = page.render({ canvasContext: context, viewport, transform: dpr === 1 ? null : [dpr, 0, 0, dpr, 0, 0] });
         await renderTaskRef.current.promise;
+        pageStageRef.current?.style.removeProperty('transform');
+        pageStageRef.current?.style.removeProperty('transform-origin');
       } catch (err) {
         if (err?.name !== 'RenderingCancelledException' && !canceled) setError(`Could not render this page: ${err.message}`);
       } finally {
@@ -111,6 +119,101 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
     render();
     return () => { canceled = true; renderTaskRef.current?.cancel(); };
   }, [pdfDoc, pageNumber, pageWidth, zoom]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    const previewZoom = (gesture, nextZoom) => {
+      gesture.nextZoom = clamp(nextZoom, .55, 2.2);
+      const stage = pageStageRef.current;
+      if (!stage) return;
+      stage.style.transformOrigin = `${gesture.originX}px ${gesture.originY}px`;
+      stage.style.transform = `scale(${gesture.nextZoom / gesture.startZoom})`;
+    };
+
+    const commitZoom = () => {
+      const gesture = zoomGestureRef.current;
+      if (!gesture) return;
+      zoomGestureRef.current = null;
+      if (zoomCommitTimerRef.current) clearTimeout(zoomCommitTimerRef.current);
+      zoomCommitTimerRef.current = null;
+      if (Math.abs(gesture.nextZoom - gesture.startZoom) > .01) {
+        zoomRef.current = gesture.nextZoom;
+        setZoom(gesture.nextZoom);
+      } else {
+        pageStageRef.current?.style.removeProperty('transform');
+        pageStageRef.current?.style.removeProperty('transform-origin');
+      }
+    };
+
+    const onTouchStart = (event) => {
+      if (event.touches.length !== 2 || !pageStageRef.current) return;
+      const [first, second] = event.touches;
+      const stage = pageStageRef.current.getBoundingClientRect();
+      const midpointX = (first.clientX + second.clientX) / 2;
+      const midpointY = (first.clientY + second.clientY) / 2;
+      zoomGestureRef.current = {
+        startZoom: zoomRef.current,
+        nextZoom: zoomRef.current,
+        startDistance: Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY),
+        originX: midpointX - stage.left,
+        originY: midpointY - stage.top,
+      };
+      if (zoomCommitTimerRef.current) clearTimeout(zoomCommitTimerRef.current);
+      zoomCommitTimerRef.current = null;
+    };
+
+    const onTouchMove = (event) => {
+      const gesture = zoomGestureRef.current;
+      if (!gesture || event.touches.length !== 2) return;
+      event.preventDefault();
+      const [first, second] = event.touches;
+      const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+      previewZoom(gesture, gesture.startZoom * distance / Math.max(gesture.startDistance, 1));
+    };
+
+    const onTouchEnd = (event) => {
+      if (zoomGestureRef.current && event.touches.length < 2) commitZoom();
+    };
+
+    const onWheel = (event) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const stage = pageStageRef.current;
+      if (!stage) return;
+      const bounds = stage.getBoundingClientRect();
+      let gesture = zoomGestureRef.current;
+      if (!gesture) {
+        gesture = {
+          startZoom: zoomRef.current,
+          nextZoom: zoomRef.current,
+          originX: event.clientX - bounds.left,
+          originY: event.clientY - bounds.top,
+        };
+        zoomGestureRef.current = gesture;
+      }
+      previewZoom(gesture, gesture.nextZoom * Math.exp(-event.deltaY * .002));
+      if (zoomCommitTimerRef.current) clearTimeout(zoomCommitTimerRef.current);
+      zoomCommitTimerRef.current = setTimeout(commitZoom, 140);
+    };
+
+    host.addEventListener('touchstart', onTouchStart, { passive: true });
+    host.addEventListener('touchmove', onTouchMove, { passive: false });
+    host.addEventListener('touchend', onTouchEnd, { passive: true });
+    host.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    host.addEventListener('wheel', onWheel, { passive: false });
+
+    return () => {
+      host.removeEventListener('touchstart', onTouchStart);
+      host.removeEventListener('touchmove', onTouchMove);
+      host.removeEventListener('touchend', onTouchEnd);
+      host.removeEventListener('touchcancel', onTouchEnd);
+      host.removeEventListener('wheel', onWheel);
+      if (zoomCommitTimerRef.current) clearTimeout(zoomCommitTimerRef.current);
+      zoomGestureRef.current = null;
+    };
+  }, [pdfDoc]);
 
   useEffect(() => {
     const onKeyDown = (event) => { if (event.key === 'Escape' && snipping) { setSnipping(false); setSelection(null); } };
@@ -269,7 +372,7 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
       {loading && <div className="pdf-loading-progress" role="status"><span>Reading PDF ranges… {loadProgress}%</span><div><i style={{width:`${loadProgress}%`}} /></div><button onClick={cancelLoading}>Cancel</button></div>}
       {!pdfDoc ? <div className="pdf-empty-state"><div className="pdf-empty-icon"><FileText size={23} /></div><h3>{loading ? 'Opening your PDF…' : 'Bring your source into view'}</h3><p>Open a PDF and snip a diagram, definition, or worked example. Your document stays in this browser.</p><button onClick={() => fileInputRef.current?.click()} disabled={loading}>{loading ? 'Loading…' : 'Choose a PDF'} <ChevronRight size={15} /></button></div> : <>
         <div ref={hostRef} className={`pdf-page-viewport ${snipping ? 'is-snipping' : ''}`} onPointerDown={onSnipPointerDown} onPointerMove={onSnipPointerMove} onPointerUp={onSnipPointerUp} onPointerCancel={onSnipPointerUp}>
-          <div className="pdf-page-stage"><canvas ref={pageCanvasRef} aria-label={`PDF page ${pageNumber}`} />{(pageWidth < 80 || rendering || captureLoading) && <div className="pdf-page-rendering">{captureLoading ? 'Rendering high resolution capture…' : pageWidth < 80 ? 'Preparing page view…' : 'Rendering page…'}</div>}{selection && <div className="pdf-selection-box" style={{ left: selection.x, top: selection.y, width: selection.width, height: selection.height }} />}</div>
+          <div ref={pageStageRef} className="pdf-page-stage"><canvas ref={pageCanvasRef} aria-label={`PDF page ${pageNumber}`} />{(pageWidth < 80 || rendering || captureLoading) && <div className="pdf-page-rendering">{captureLoading ? 'Rendering high resolution capture…' : pageWidth < 80 ? 'Preparing page view…' : 'Rendering page…'}</div>}{selection && <div className="pdf-selection-box" style={{ left: selection.x, top: selection.y, width: selection.width, height: selection.height }} />}</div>
           {snipping && <div className="snip-instruction">Drag to capture · Esc to cancel</div>}
         </div>
         {snippets.length > 0 && <div className="snip-tray"><div className="snip-tray-heading"><span>CAPTURES <b>{snippets.length}</b></span><span>Drag a snip onto a card field</span></div><div className="snip-tray-list">{snippets.map(snippet => <article key={snippet.id} className="snip-tray-item" draggable onDragStart={event => onDragStart(event, snippet)}>

@@ -39,6 +39,7 @@ body {
   line-height: 1.5;
 }
 button, input, select, textarea { font: inherit; }
+html, body { touch-action: pan-x pan-y; }
 button { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, input:focus-visible, select:focus-visible, [contenteditable="true"]:focus-visible {
   outline: 2px solid rgba(130, 181, 255, .78);
@@ -359,7 +360,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, [contenteditabl
 .pdf-zoom-controls { color:#677166; font-size:11px; }
 .snip-toggle { background:#315c45; color:white; border-color:#315c45; }
 .snip-toggle.snip-active { background:#eef4ec; color:#315c45; }
-.pdf-page-viewport { position:relative; flex:1; min-height:140px; overflow:auto; display:flex; justify-content:center; align-items:flex-start; padding:16px; background:#f2f3ef; overscroll-behavior:contain; }
+.pdf-page-viewport { position:relative; flex:1; min-height:140px; overflow:auto; display:flex; justify-content:center; align-items:flex-start; padding:16px; background:#f2f3ef; overscroll-behavior:contain; touch-action:pan-x pan-y; }
 .pdf-page-viewport.is-snipping { cursor:crosshair; touch-action:none; }
 .pdf-page-stage { position:relative; flex:none; line-height:0; box-shadow:0 3px 16px rgba(30,37,31,.14); }
 .pdf-page-stage canvas { display:block; max-width:none; background:#fff; }
@@ -552,6 +553,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, [contenteditabl
   .deck-settings { grid-template-columns: minmax(0,1fr) 108px; }
   .action-buttons { grid-template-columns: minmax(0,1fr) minmax(0,1fr) 40px; gap: 5px; }
   .action-buttons .preview-button { width: 40px; }
+}
+
+/* Keep iOS from auto-zooming its viewport when a small text control receives focus. */
+@media (hover: none) and (pointer: coarse) {
+  input, select, textarea, [contenteditable="true"] { font-size:16px !important; }
 }
 
 /* Compact image-occlusion controls and responsive mask workspace. */
