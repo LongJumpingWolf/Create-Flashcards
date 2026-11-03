@@ -88,57 +88,101 @@ ANKI_CLOZE_MODEL = genanki.Model(
     css=DEFAULT_CARD_CSS + '.cloze { font-weight: bold; }', 
 )
 
-# Layered Image Occlusion model: the source image is a media file and masks
-# remain vector SVG overlays in the note fields (never flattened into screenshots).
-ANKI_IMAGE_OCCLUSION_MODEL = genanki.Model(
+class AnkiImageOcclusionModel(genanki.Model):
+    """Anki's stock Image Occlusion cloze notetype, represented in an APKG."""
+
+    def to_json(self, timestamp: float, deck_id):
+        model = super().to_json(timestamp, deck_id)
+        # Anki 2.1.62+ uses this marker to identify native stock note types.
+        model['originalStockKind'] = 6  # OriginalStockKind.ImageOcclusion
+        return model
+
+
+ANKI_IMAGE_OCCLUSION_MODEL = AnkiImageOcclusionModel(
     1607392321,
-    'Layered Image Occlusion',
-    fields=[{'name': 'Front'}, {'name': 'Back'}, {'name': 'Extra'}],
+    'Image Occlusion',
+    fields=[
+        {'name': 'Occlusions', 'tag': 0, 'preventDeletion': True},
+        {'name': 'Image', 'tag': 1, 'preventDeletion': True},
+        {'name': 'Header', 'tag': 2, 'preventDeletion': True},
+        {'name': 'Back Extra', 'tag': 3, 'preventDeletion': True},
+        {'name': 'Comments', 'tag': 4, 'preventDeletion': False},
+    ],
     templates=[{
         'name': 'Image Occlusion',
-        'qfmt': '<div class="io-card">{{Front}}</div>',
-        'afmt': '<div class="io-card">{{Back}}</div>{{#Extra}}<div class="io-extra">{{Extra}}</div>{{/Extra}}',
+        'qfmt': '''{{#Header}}<div>{{Header}}</div>{{/Header}}
+<div style="display:none">{{cloze:Occlusions}}</div>
+<div id="err"></div>
+<div id="image-occlusion-container">
+    {{Image}}
+    <canvas id="image-occlusion-canvas"></canvas>
+</div>
+<script>
+try { anki.imageOcclusion.setup(); }
+catch (exc) { document.getElementById("err").textContent = "Image Occlusion requires Anki 23.10 or newer: " + exc; }
+</script>''',
+        'afmt': '''{{#Header}}<div>{{Header}}</div>{{/Header}}
+<div style="display:none">{{cloze:Occlusions}}</div>
+<div id="err"></div>
+<div id="image-occlusion-container">
+    {{Image}}
+    <canvas id="image-occlusion-canvas"></canvas>
+</div>
+<script>
+try { anki.imageOcclusion.setup(); }
+catch (exc) { document.getElementById("err").textContent = "Image Occlusion requires Anki 23.10 or newer: " + exc; }
+</script>
+<div><button id="toggle">Toggle Masks</button></div>
+{{#Back Extra}}<div>{{Back Extra}}</div>{{/Back Extra}}''',
     }],
-    css=DEFAULT_CARD_CSS + """
-.io-card { max-width: 100%; margin: 0 auto; text-align: center; }
-.io-stage { position: relative; display: inline-block; max-width: 100%; line-height: 0; vertical-align: middle; }
-.io-stage img { display: block; max-width: 100%; max-height: 78vh; width: auto; height: auto; }
-.io-stage svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-.io-stage .io-mask { fill: #29332c; stroke: #fff; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.io-answer-label { display: block; margin: 12px 0 0; font-weight: bold; line-height: 1.35; }
-.io-extra { margin-top: 14px; text-align: left; }
-""",
+    css='''#image-occlusion-canvas {
+    --inactive-shape-color: #ffeba2;
+    --active-shape-color: #ff8e8e;
+    --inactive-shape-border: 1px #212121;
+    --active-shape-border: 1px #212121;
+    --highlight-shape-color: #ff8e8e00;
+    --highlight-shape-border: 1px #ff8e8e;
+}
+.card { font-family: arial; font-size: 20px; text-align: center; color: black; background-color: white; }''',
+    model_type=genanki.Model.CLOZE,
+    sort_field_index=1,
 )
 
 
-def _io_overlay_html(image_name: str, image_width: int, image_height: int, masks: list[dict], hidden_groups: set[str]) -> str:
-    """Keep the original image and vector mask overlay as separate Anki elements."""
-    shapes = []
-    for mask in masks:
-        group = str(mask.get("group") or mask.get("id"))
-        if group not in hidden_groups:
-            continue
-        shape = mask.get("shape", "rect")
-        if shape == "ellipse":
-            cx = (mask["x"] + mask["width"] / 2) * image_width
-            cy = (mask["y"] + mask["height"] / 2) * image_height
-            rx = mask["width"] * image_width / 2
-            ry = mask["height"] * image_height / 2
-            shapes.append(f'<ellipse class="io-mask" cx="{cx:.2f}" cy="{cy:.2f}" rx="{rx:.2f}" ry="{ry:.2f}"/>')
-        elif shape == "polygon":
-            points = " ".join(
-                f'{float(point["x"]) * image_width:.2f},{float(point["y"]) * image_height:.2f}'
-                for point in mask.get("points", [])
-            )
-            shapes.append(f'<polygon class="io-mask" points="{points}"/>')
-        else:
-            x = mask["x"] * image_width
-            y = mask["y"] * image_height
-            width = mask["width"] * image_width
-            height = mask["height"] * image_height
-            shapes.append(f'<rect class="io-mask" x="{x:.2f}" y="{y:.2f}" width="{width:.2f}" height="{height:.2f}"/>')
-    svg = f'<svg viewBox="0 0 {image_width} {image_height}" preserveAspectRatio="none" aria-hidden="true">{"".join(shapes)}</svg>' if shapes else ''
-    return f'<div class="io-stage"><img src="{image_name}" alt="Image occlusion source">{svg}</div>'
+def _io_cloze_field(masks: list[dict], occlusion_mode: str) -> str:
+    """Serialize vector regions in Anki's native image-occlusion cloze syntax."""
+    grouped: dict[str, list[dict]] = {}
+    for index, mask in enumerate(masks):
+        grouped.setdefault(str(mask.get('group') or mask.get('id') or f'mask-{index + 1}'), []).append(mask)
+
+    def display(value: float) -> str:
+        # Match Anki's floatToDisplay convention: 4 decimal places, trim zeros.
+        return f'{value:.4f}'.rstrip('0').rstrip('.') or '0'
+
+    def escape_prop(value: str) -> str:
+        return value.replace('\\', '\\\\').replace(':', '\\:')
+
+    clozes = []
+    for ordinal, group_masks in enumerate(grouped.values(), 1):
+        for mask in group_masks:
+            shape = mask.get('shape', 'rect')
+            props = []
+            if shape == 'ellipse':
+                props.extend((('left', mask['x']), ('top', mask['y']),
+                              ('rx', mask['width'] / 2), ('ry', mask['height'] / 2)))
+            elif shape == 'polygon':
+                points = ' '.join(f'{display(float(point["x"]))},{display(float(point["y"]))}'
+                                  for point in mask.get('points', []))
+                props.extend((('left', mask['x']), ('top', mask['y']), ('points', points)))
+            else:
+                props.extend((('left', mask['x']), ('top', mask['y']),
+                              ('width', mask['width']), ('height', mask['height'])))
+            if occlusion_mode == 'hide-all':
+                props.append(('oi', '1'))
+            encoded = ':'.join(f'{key}={escape_prop(str(value) if isinstance(value, str) else display(value))}'
+                               for key, value in props)
+            clozes.append(f'{{{{c{ordinal}::image-occlusion:{shape}:{encoded}}}}}<br>')
+    return ''.join(clozes)
 
 
 # --- FastAPI Models ---
@@ -262,30 +306,22 @@ def create_anki_deck(deck_payload: DeckPayload) -> bytes:
             image_buffer = io.BytesIO()
             image.save(image_buffer, format="PNG")
             all_media_files[image_name] = image_buffer.getvalue()
-            all_group_ids = set(groups)
 
-            for index, (target_group, target_masks) in enumerate(groups.items(), 1):
-                if card_data.occlusion_mode == "hide-all":
-                    front_hidden = all_group_ids
-                    back_hidden = all_group_ids - {target_group}
-                else:
-                    front_hidden = {target_group}
-                    back_hidden = set()
-
-                front_html = _io_overlay_html(image_name, image.width, image.height, normalized_masks, front_hidden)
-                back_html = _io_overlay_html(image_name, image.width, image.height, normalized_masks, back_hidden)
-                label = ", ".join(
-                    str(mask.get("label", "")).strip()
-                    for mask in target_masks
-                    if str(mask.get("label", "")).strip()
-                ) or f"Region {index}"
-                back_html += f'<div class="io-answer-label">{html_escape(label)}</div>'
-                note = genanki.Note(
-                    model=ANKI_IMAGE_OCCLUSION_MODEL,
-                    fields=[front_html, back_html, card_data.answer],
-                    tags=card_data.tags,
-                )
-                deck.add_note(note)
+            # Anki's native IO type stores all shapes as image-occlusion clozes
+            # in one note. Anki then creates one sibling card per cloze ordinal.
+            occlusions = _io_cloze_field(normalized_masks, card_data.occlusion_mode)
+            note = genanki.Note(
+                model=ANKI_IMAGE_OCCLUSION_MODEL,
+                fields=[
+                    occlusions,
+                    f'<img src="{image_name}">',
+                    '',
+                    card_data.answer,
+                    '',
+                ],
+                tags=card_data.tags,
+            )
+            deck.add_note(note)
             continue
         if card_data.type == "Basic":
             # Extract and replace images from question and answer
