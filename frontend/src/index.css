@@ -362,10 +362,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, [contenteditabl
 .snip-toggle.snip-active { background:#eef4ec; color:#315c45; }
 .pdf-page-viewport { position:relative; flex:1; min-height:140px; overflow:auto; display:flex; justify-content:center; align-items:flex-start; padding:16px; background:#f2f3ef; overscroll-behavior:contain; touch-action:pan-x pan-y; }
 .pdf-page-viewport.is-snipping { cursor:crosshair; touch-action:none; }
+.pdf-page-position { position:relative; flex:none; line-height:0; }
 .pdf-page-stage { position:relative; flex:none; line-height:0; box-shadow:0 3px 16px rgba(30,37,31,.14); }
 .pdf-page-stage canvas { display:block; max-width:none; background:#fff; }
 .pdf-selection-box { position:absolute; z-index:2; border:1px solid #315c45; background:rgba(70,123,87,.16); pointer-events:none; }
 .snip-instruction { position:sticky; bottom:12px; align-self:flex-end; margin-left:-190px; padding:8px 12px; border-radius:8px; background:rgba(34,48,38,.91); color:white; font-size:12px; pointer-events:none; }
+.snip-touch-help { display:none; }
 .pdf-empty-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:30px; text-align:center; }
 .pdf-empty-icon { width:52px; height:52px; margin-bottom:13px; }
 .pdf-empty-state h3 { font-size:16px; font-weight:650; }
@@ -558,6 +560,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, [contenteditabl
 /* Keep iOS from auto-zooming its viewport when a small text control receives focus. */
 @media (hover: none) and (pointer: coarse) {
   input, select, textarea, [contenteditable="true"] { font-size:16px !important; }
+  .snip-touch-help { display:inline; }
+  .snip-instruction { display:grid; gap:2px; max-width:calc(100% - 16px); margin-left:0; }
 }
 
 /* Compact image-occlusion controls and responsive mask workspace. */
