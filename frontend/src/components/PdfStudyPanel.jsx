@@ -40,6 +40,7 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   const pdfPanRef = useRef({ x: 0, y: 0 });
   const snipTouchStartRef = useRef(null);
   const captureSnipRef = useRef(null);
+  const touchSnippetDragRef = useRef(null);
   const pdfStoredRef = useRef(false);
   const rememberTokenRef = useRef(0);
   const progressSaveTokenRef = useRef(0);
@@ -61,6 +62,7 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   const [pdfMemoryStatus, setPdfMemoryStatus] = useState('idle');
 
   zoomRef.current = zoom;
+  const nativeDragEnabled = window.matchMedia?.('(pointer: fine)').matches ?? true;
 
   const constrainPan = (pan) => {
     const viewport = hostRef.current?.getBoundingClientRect();
@@ -564,6 +566,68 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
     event.dataTransfer.setData('text/plain', 'Anki study snip');
   };
 
+  const clearTouchSnippetDrag = () => {
+    const drag = touchSnippetDragRef.current;
+    if (!drag) return;
+    clearTimeout(drag.armTimer);
+    window.removeEventListener('pointermove', drag.onMove);
+    window.removeEventListener('pointerup', drag.onEnd);
+    window.removeEventListener('pointercancel', drag.onEnd);
+    drag.dropTarget?.classList.remove('snip-drop-target-active');
+    drag.ghost?.remove();
+    touchSnippetDragRef.current = null;
+  };
+
+  const onTouchSnippetPointerDown = (event, snippet) => {
+    if (event.pointerType !== 'touch' || !event.target.closest('img') || event.target.closest('button')) return;
+    clearTouchSnippetDrag();
+    const drag = { snippet, pointerId: event.pointerId, x: event.clientX, y: event.clientY, ready: false, active: false, dropTarget: null, ghost: null };
+    drag.armTimer = window.setTimeout(() => { drag.ready = true; }, 280);
+    drag.onMove = moveEvent => {
+      if (moveEvent.pointerId !== drag.pointerId) return;
+      const distance = Math.hypot(moveEvent.clientX - drag.x, moveEvent.clientY - drag.y);
+      if (!drag.active) {
+        if (!drag.ready && distance > 12) { clearTouchSnippetDrag(); return; }
+        if (!drag.ready || distance <= 7) return;
+        drag.active = true;
+        drag.ghost = document.createElement('div');
+        drag.ghost.className = 'touch-snippet-ghost';
+        drag.ghost.innerHTML = `<img src="${snippet.image}" alt=""><span>${snippet.masks?.length ? 'Image occlusion' : 'PDF snip'}</span>`;
+        document.body.appendChild(drag.ghost);
+      }
+      moveEvent.preventDefault();
+      if (drag.ghost) drag.ghost.style.transform = `translate3d(${moveEvent.clientX + 16}px, ${moveEvent.clientY + 16}px, 0)`;
+      const target = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+      const editorTab = target?.closest('[data-workspace-tab="editor"]');
+      if (editorTab) onMobileView?.('editor');
+      const nextDropTarget = target?.closest('[data-editor-drop-target]');
+      if (drag.dropTarget !== nextDropTarget) {
+        drag.dropTarget?.classList.remove('snip-drop-target-active');
+        drag.dropTarget = nextDropTarget;
+        drag.dropTarget?.classList.add('snip-drop-target-active');
+      }
+    };
+    drag.onEnd = endEvent => {
+      if (endEvent.pointerId !== drag.pointerId) return;
+      const target = document.elementFromPoint(endEvent.clientX, endEvent.clientY);
+      const field = target?.closest('[data-editor-drop-target]');
+      const active = drag.active;
+      const currentSnippet = drag.snippet;
+      clearTouchSnippetDrag();
+      if (active && field) {
+        onInsertSnippet(currentSnippet, field.dataset.editorDropTarget, { clientX: endEvent.clientX, clientY: endEvent.clientY });
+      } else if (active && target?.closest('[data-workspace-tab="editor"]')) {
+        onMobileView?.('editor');
+      }
+    };
+    touchSnippetDragRef.current = drag;
+    window.addEventListener('pointermove', drag.onMove, { passive: false });
+    window.addEventListener('pointerup', drag.onEnd);
+    window.addEventListener('pointercancel', drag.onEnd);
+  };
+
+  useEffect(() => () => clearTouchSnippetDrag(), []);
+
   return (
     <section className="pdf-study-panel" aria-label="PDF study panel">
       <header className="pdf-panel-header">
@@ -584,9 +648,9 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
           <div ref={pagePositionRef} className="pdf-page-position"><div ref={pageStageRef} className="pdf-page-stage"><canvas ref={pageCanvasRef} aria-label={`PDF page ${pageNumber}`} />{(pageWidth < 80 || rendering || captureLoading) && <div className="pdf-page-rendering">{captureLoading ? 'Rendering high resolution capture…' : pageWidth < 80 ? 'Preparing page view…' : 'Rendering page…'}</div>}{selection && <div className="pdf-selection-box" style={{ left: selection.x, top: selection.y, width: selection.width, height: selection.height }} />}</div></div>
           {snipping && <div className="snip-instruction">Drag to capture <kbd>Esc</kbd> to cancel</div>}
         </div>
-        {snippets.length > 0 && <div className="snip-tray"><div className="snip-tray-heading"><span>CAPTURES <b>{snippets.length}</b></span><span>Drag a snip onto a card field</span></div><div className="snip-tray-list">{snippets.map(snippet => <article key={snippet.id} className="snip-tray-item" draggable onDragStart={event => onDragStart(event, snippet)}>
+        {snippets.length > 0 && <div className="snip-tray"><div className="snip-tray-heading"><span>CAPTURES <b>{snippets.length}</b></span><span>Newest first · drag to Write card</span></div><div className="snip-tray-list">{snippets.map((snippet, index) => <article key={snippet.id} className="snip-tray-item" draggable={nativeDragEnabled} onDragStart={event => onDragStart(event, snippet)} onPointerDown={event => onTouchSnippetPointerDown(event, snippet)}>
           <img src={snippet.image} alt="Captured PDF region" draggable="false" />
-          <div className="snip-tray-info"><strong>{snippet.masks.length ? `Occlusion · ${snippet.masks.length} regions` : 'PDF capture'}</strong><span>{snippet.name}</span></div>
+          <div className="snip-tray-info"><strong><span className="snip-number">{snippets.length - index}</span>{snippet.masks.length ? `Occlusion · ${snippet.masks.length} regions` : 'PDF capture'}</strong><span>{snippet.name}</span></div>
           <div className="snip-tray-actions"><button onClick={() => onInsertSnippet(snippet, 'front')} title="Insert into front/text">Front</button><button onClick={() => onInsertSnippet(snippet, 'back')} title="Insert into back/extra">Back</button></div>
         </article>)}</div></div>}
       </>}

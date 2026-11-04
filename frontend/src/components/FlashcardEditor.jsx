@@ -1418,28 +1418,58 @@ export default function FlashcardEditor() {
     setLinkTargetRef(null);
   };
 
+  const moveFrontContentToExtra = (sourceImage = null) => {
+    if (!frontRef.current) return;
+    const content = document.createElement('div');
+    content.innerHTML = frontRef.current.innerHTML;
+    if (sourceImage) {
+      const image = [...content.querySelectorAll('img')].find(node => node.src === sourceImage || node.getAttribute('src') === sourceImage);
+      image?.remove();
+    }
+    const remaining = content.innerHTML.trim();
+    if (remaining) {
+      const currentExtra = backRef.current?.innerHTML.trim() || '';
+      const nextExtra = currentExtra ? `${currentExtra}<br>${remaining}` : remaining;
+      if (backRef.current) backRef.current.innerHTML = nextExtra;
+      syncBackContent(nextExtra, true);
+    }
+    frontRef.current.innerHTML = '';
+    syncFrontContent('', true);
+  };
+
+  const setCaretForDrop = (targetRef, dropEvent) => {
+    if (!targetRef.current) return;
+    targetRef.current.focus();
+    let range = document.caretRangeFromPoint?.(dropEvent.clientX, dropEvent.clientY);
+    if (!range && document.caretPositionFromPoint) {
+      const position = document.caretPositionFromPoint(dropEvent.clientX, dropEvent.clientY);
+      if (position) { range = document.createRange(); range.setStart(position.offsetNode, position.offset); range.collapse(true); }
+    }
+    if (range && targetRef.current.contains(range.commonAncestorContainer)) {
+      const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); savedRangeRef.current = range.cloneRange();
+    } else restoreSavedSelection(targetRef);
+  };
+
   const insertStudySnippet = (snippet, target = 'front', dropEvent = null) => {
     const targetRef = target === 'back' ? backRef : frontRef;
     const hasOcclusion = Array.isArray(snippet.masks) && snippet.masks.length > 0;
-    if (hasOcclusion || cardType === 'Image Occlusion') {
+    if (target === 'front' && (hasOcclusion || cardType === 'Image Occlusion')) {
       if (cardType !== 'Image Occlusion') previousCardTypeRef.current = cardType;
+      if (cardType !== 'Image Occlusion') moveFrontContentToExtra();
       setCardType('Image Occlusion');
       setOcclusionImage(snippet.image);
       setOcclusionMasks(snippet.masks || []);
       setOcclusionMode(snippet.mode || 'hide-all');
+      setOcclusionEditorOpen(true);
       setMobileView('editor');
-      setFormMessage('Occlusion ready. Add an optional Extra, then save this card. The next card will return to your previous type.');
+      setFormMessage('Occlusion source ready. Adjust the masks, then save the card.');
       return;
     }
 
     if (!targetRef.current) return;
-    targetRef.current.focus();
-    if (dropEvent) {
-      const dropRange = document.caretRangeFromPoint?.(dropEvent.clientX, dropEvent.clientY);
-      if (dropRange && targetRef.current.contains(dropRange.commonAncestorContainer)) {
-        const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(dropRange); savedRangeRef.current = dropRange.cloneRange();
-      }
-    } else {
+    if (dropEvent) setCaretForDrop(targetRef, dropEvent);
+    else {
+      targetRef.current.focus();
       const saved = savedRangeRef.current;
       if (!saved || !targetRef.current.contains(saved.commonAncestorContainer)) {
         const range = document.createRange(); range.selectNodeContents(targetRef.current); range.collapse(false);
@@ -1457,15 +1487,56 @@ export default function FlashcardEditor() {
 
   const handleSnippetDrop = (event, target) => {
     const payload = event.dataTransfer.getData('application/x-anki-study-snippet');
-    if (!payload) return;
+    if (payload) {
+      event.preventDefault();
+      try { insertStudySnippet(JSON.parse(payload), target, event); }
+      catch { setFormMessage('This capture could not be inserted. Try capturing the region again.'); }
+      return;
+    }
+    const imageFile = [...(event.dataTransfer.files || [])].find(file => file.type.startsWith('image/'));
+    const droppedHtml = event.dataTransfer.getData('text/html');
+    const droppedImage = droppedHtml ? new DOMParser().parseFromString(droppedHtml, 'text/html').querySelector('img') : null;
+    const imageUrl = droppedImage?.getAttribute('src') || event.dataTransfer.getData('text/uri-list').split('\n').find(line => /^https?:\/\//i.test(line.trim()))?.trim();
+    if (!imageFile && !imageUrl) return;
     event.preventDefault();
-    try { insertStudySnippet(JSON.parse(payload), target, event); }
-    catch { setFormMessage('This capture could not be inserted. Try capturing the region again.'); }
+    const dropPoint = { clientX: event.clientX, clientY: event.clientY };
+    const placeImage = src => {
+      if (target === 'front' && cardType === 'Image Occlusion') {
+        setOcclusionImage(src); setOcclusionMasks([]); setManualMaskPreview(null); setOcclusionEditorOpen(true);
+        setFormMessage('Image ready to occlude. Draw or adjust hide regions, then save the card.');
+        return;
+      }
+      const targetRef = target === 'back' ? backRef : frontRef;
+      if (!targetRef.current) return;
+      setCaretForDrop(targetRef, dropPoint);
+      const safeSrc = String(src).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+      document.execCommand('insertHTML', false, `<img src="${safeSrc}" alt="Dropped image" style="display:inline-block;max-width:min(100%,480px);height:auto;vertical-align:middle;">&nbsp;`);
+      if (targetRef === frontRef) syncFrontContent(targetRef.current.innerHTML);
+      else syncBackContent(targetRef.current.innerHTML);
+    };
+    if (imageFile) {
+      const reader = new FileReader();
+      reader.onload = () => placeImage(reader.result);
+      reader.onerror = () => setFormMessage('That image could not be read. Try a different image.');
+      reader.readAsDataURL(imageFile);
+    } else if (imageUrl && (/^data:image\//i.test(imageUrl) || /^https?:\/\//i.test(imageUrl))) placeImage(imageUrl);
   };
 
   const handleCardTypeChange = (nextType) => {
     if (nextType === 'Image Occlusion') {
-      if (cardType !== 'Image Occlusion') previousCardTypeRef.current = cardType;
+      if (cardType !== 'Image Occlusion') {
+        previousCardTypeRef.current = cardType;
+        const frontContent = document.createElement('div');
+        frontContent.innerHTML = frontRef.current?.innerHTML || front || '';
+        const source = frontContent.querySelector('img');
+        if (source) {
+          const imageData = source.src;
+          setOcclusionImage(imageData);
+          setOcclusionMasks([]);
+          setOcclusionEditorOpen(true);
+        }
+        moveFrontContentToExtra(source?.src || null);
+      }
     } else if (cardType === 'Image Occlusion') {
       previousCardTypeRef.current = nextType;
       setOcclusionImage(null); setOcclusionMasks([]);
@@ -1586,7 +1657,7 @@ export default function FlashcardEditor() {
       </header>
 
       <div className="workspace-tabs" role="tablist" aria-label="Workspace views">
-        <button role="tab" aria-selected={mobileView === 'editor'} onClick={() => setMobileView('editor')}><Edit size={16} /> Write card</button>
+        <button role="tab" data-workspace-tab="editor" aria-selected={mobileView === 'editor'} onClick={() => setMobileView('editor')}><Edit size={16} /> Write card</button>
         {pdfOpen ? <button role="tab" aria-selected={mobileView === 'pdf'} onClick={() => setMobileView('pdf')}><FileText size={16} /> PDF</button> : <button role="tab" aria-selected={mobileView === 'cards'} onClick={() => setMobileView('cards')}><BookOpen size={16} /> Cards <span className="tab-count">{cards.length}</span></button>}
       </div>
 
@@ -1647,7 +1718,7 @@ export default function FlashcardEditor() {
               </div>
             </div>}
 
-            {cardType === 'Image Occlusion' && <section className="io-source-card" tabIndex={0} aria-label="Image occlusion source image. Focus here and paste an image, or choose one." onPaste={pasteImageIntoOcclusion} onDragOver={e => e.preventDefault()} onDrop={e => handleSnippetDrop(e, 'front')}>
+            {cardType === 'Image Occlusion' && <section className="io-source-card" data-editor-drop-target="front" tabIndex={0} aria-label="Image occlusion source image. Focus here and paste an image, or choose one." onPaste={pasteImageIntoOcclusion} onDragOver={e => e.preventDefault()} onDrop={e => handleSnippetDrop(e, 'front')}>
               <div className="io-source-heading"><div><span className="section-eyebrow">IMAGE OCCLUSION</span><h3>Choose an image, then add masks</h3></div><div className="io-source-actions">{occlusionImage && <><div className="io-region-count"><strong>{occlusionMasks.length}</strong><span>regions</span></div><button className="quiet-button" type="button" onClick={() => setOcclusionEditorOpen(true)}>Open editor</button></>}<button className="quiet-button" type="button" onClick={() => openImagePicker(frontRef)}><Upload size={16} /> Choose image</button></div></div>
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, frontRef)} />
               {!occlusionImage ? <div className="io-image-empty"><Crop size={22}/><span>Paste an image here, drop an occluded capture, or choose a file</span></div> : <div className="io-image-preview"><div className="io-mask-draw-area" onPointerDown={e => { if (e.target.closest('.manual-mask-remove')) return; e.currentTarget.setPointerCapture(e.pointerId); manualMaskStartRef.current = manualMaskPoint(e); setManualMaskPreview({ x: manualMaskStartRef.current.x, y: manualMaskStartRef.current.y, width: 0, height: 0 }); }} onPointerMove={e => { if (!manualMaskStartRef.current) return; const p = manualMaskPoint(e), s = manualMaskStartRef.current; setManualMaskPreview({ x: Math.min(s.x,p.x), y: Math.min(s.y,p.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }} onPointerUp={finishManualMask} onPointerCancel={finishManualMask}><img src={occlusionImage} alt="Image occlusion source" draggable="false"/>{occlusionMasks.map((mask,index) => <button type="button" className="manual-mask-remove" key={mask.id} title={`Remove region ${index+1}`} onPointerDown={e => e.stopPropagation()} onClick={() => setOcclusionMasks(prev => prev.filter(m => m.id !== mask.id))} style={{left:`${mask.x*100}%`,top:`${mask.y*100}%`,width:`${mask.width*100}%`,height:`${mask.height*100}%`,borderRadius:mask.shape === 'ellipse' ? '50%' : 0,clipPath:mask.shape === 'polygon' && mask.points?.length >= 3 ? `polygon(${mask.points.map(point => `${((point.x-mask.x)/Math.max(mask.width,.0001))*100}% ${((point.y-mask.y)/Math.max(mask.height,.0001))*100}%`).join(',')})` : undefined}}>{index+1} ×</button>)}{manualMaskPreview && <span className="manual-mask-draft" style={{left:`${manualMaskPreview.x*100}%`,top:`${manualMaskPreview.y*100}%`,width:`${manualMaskPreview.width*100}%`,height:`${manualMaskPreview.height*100}%`}}/>}</div><div><strong>{occlusionMasks.length} hidden region{occlusionMasks.length === 1 ? '' : 's'}</strong><span>Drag over image to add a mask; tap a mask to remove it.</span></div></div>}
@@ -1663,6 +1734,7 @@ export default function FlashcardEditor() {
               </h3>
               <div
                 ref={frontRef}
+                data-editor-drop-target="front"
                 onDragOver={e => e.preventDefault()}
                 onDrop={e => handleSnippetDrop(e, 'front')}
                 contentEditable="true"
@@ -1687,6 +1759,7 @@ export default function FlashcardEditor() {
               <h3 className="text-sm font-medium block mb-1">{cardType === "Cloze" || cardType === 'Image Occlusion' ? "Extra (Optional)" : "Back"}</h3>
               <div
                 ref={backRef}
+                data-editor-drop-target="back"
                 onDragOver={e => e.preventDefault()}
                 onDrop={e => handleSnippetDrop(e, 'back')}
                 contentEditable="true"
