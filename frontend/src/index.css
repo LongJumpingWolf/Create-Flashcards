@@ -604,3 +604,51 @@ button:focus-visible, input:focus-visible, select:focus-visible, [contenteditabl
   .pdf-workspace.pdf-pdf-view { overflow: visible; }
   .pdf-workspace.pdf-pdf-view > div:not(.cards-panel) { min-height: 0; }
 }
+
+/* Snip editor: compact, separate markup and occlusion controls on touch screens. */
+.snip-header-actions { display:flex; align-items:center; gap:4px; }
+.annotation-history-button { width:34px; height:34px; display:grid; place-items:center; border:1px solid rgba(43,57,47,.1); border-radius:8px; color:#596259; }
+.annotation-history-button:disabled { opacity:.32; }
+.annotation-toolbar button,.occlusion-toolbar button { flex:none; min-height:34px; display:inline-flex; align-items:center; justify-content:center; gap:5px; padding:0 8px; border:1px solid transparent; border-radius:8px; color:#596259; font-size:11px; white-space:nowrap; }
+.annotation-toolbar button.active,.occlusion-toolbar button.active { border-color:rgba(49,92,69,.17); background:#edf4ec; color:#315c45; }
+.annotation-toolbar button:disabled,.occlusion-toolbar button:disabled { opacity:.35; }
+.occlusion-toolbar { display:flex; align-items:center; gap:3px; margin:0 0 12px; }
+.occlusion-tool-divider { height:22px; margin:0 3px; border-left:1px solid rgba(43,57,47,.12); }
+@media (max-width:700px) {
+  .snip-modal-backdrop { padding:0; }
+  .snip-editor { width:100%; height:100dvh; max-height:100dvh; border:0; border-radius:0; }
+  .snip-editor-header { flex:none; min-height:48px; padding:6px 10px; }
+  .snip-editor-header .section-eyebrow { font-size:9px; letter-spacing:.11em; }
+  .snip-editor-header h2 { font-size:13px; }
+  .snip-header-actions { gap:3px; }
+  .annotation-history-button,.snip-close { width:32px; height:32px; padding:5px; }
+  .annotation-toolbar { flex:none; min-height:42px; gap:2px; overflow-x:auto; padding:4px 6px; scrollbar-width:none; }
+  .annotation-toolbar::-webkit-scrollbar,.occlusion-toolbar::-webkit-scrollbar { display:none; }
+  .annotation-toolbar button,.occlusion-toolbar button { width:30px; min-width:30px; min-height:32px; padding:0; }
+  .annotation-tool-label,.annotation-toolbar kbd,.brush-size span { display:none !important; }
+  .annotation-color { width:28px; min-width:28px; height:30px; }
+  .annotation-color input { width:25px; height:25px; }
+  .brush-size { gap:0; }
+  .brush-size input { width:42px; }
+  .annotation-body { min-height:0; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) auto; }
+  .annotation-canvas-scroll { min-height:0; padding:5px; }
+  .annotation-options { min-height:0; max-height:clamp(118px,22dvh,170px); overflow:auto; display:flex; flex-direction:column; gap:3px; padding:5px 8px max(6px, env(safe-area-inset-bottom)); border-top:1px solid rgba(43,57,47,.09); border-left:0; }
+  .occlusion-toolbar { flex:none; width:100%; min-height:34px; gap:2px; overflow-x:auto; margin:0; }
+  .occlusion-tool-divider { height:18px; margin:0 2px; }
+  .annotation-mode-label { margin:1px 0 2px; font-size:9px; }
+  .mode-option { flex:none; width:calc(50% - 3px); min-height:37px; display:inline-flex; gap:5px; margin:0; padding:4px 6px; }
+  .annotation-options .mode-option:nth-of-type(2) { margin-left:calc(50% + 3px); margin-top:-40px; }
+  .mode-visual { width:25px; min-width:25px; height:22px; gap:2px; }
+  .mode-visual i { width:4px; height:10px; }
+  .mode-one i { width:12px; height:14px; }
+  .mode-option strong { font-size:9px; }
+  .mode-option small { font-size:8px; }
+  .mask-count { margin:3px 0; font-size:18px; font-weight:700; line-height:1.1; }
+  .mask-label-list { display:flex; gap:5px; overflow-x:auto; }
+  .mask-label-list h3 { display:none; }
+  .mask-label-list label { flex:none; width:130px; margin:0; }
+  .annotation-tip { display:none; }
+  .snip-editor-footer { flex:none; min-height:44px; padding:5px 10px; }
+  .snip-editor-footer p { max-width:62%; font-size:9px; }
+  .snip-save-button { min-height:34px; padding:0 10px; }
+}

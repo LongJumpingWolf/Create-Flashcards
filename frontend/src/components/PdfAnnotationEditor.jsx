@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Eraser, Redo, Undo, XCircle } from './Icons';
+import { Arrow, Check, Ellipse, Eraser, Group, Highlighter, Line, MaskEllipse, MaskRectangle, Pen, Polygon, Rectangle, Redo, Select, Text, Trash2, Undo, Ungroup, XCircle } from './Icons';
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const HISTORY_LIMIT = 40;
@@ -9,6 +9,9 @@ const TOOL_ITEMS = [
   ['mask-rect', 'Hide box'], ['mask-ellipse', 'Hide oval'], ['mask-polygon', 'Hide polygon'],
 ];
 const KEY_TOOLS = ['pen', 'marker', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'eraser', 'mask-rect'];
+const TOOL_ICONS = { select: Select, pen: Pen, marker: Highlighter, line: Line, arrow: Arrow, rectangle: Rectangle, ellipse: Ellipse, text: Text, eraser: Eraser, 'mask-rect': MaskRectangle, 'mask-ellipse': MaskEllipse, 'mask-polygon': Polygon };
+const MARKUP_TOOLS = TOOL_ITEMS.filter(([value]) => !value.startsWith('mask-'));
+const OCCLUSION_TOOLS = TOOL_ITEMS.filter(([value]) => value.startsWith('mask-'));
 
 function pointsString(points = []) { return points.map(point => `${point.x},${point.y}`).join(' '); }
 
@@ -285,21 +288,14 @@ export default function PdfAnnotationEditor({ snip, onClose, onSave }) {
   return (
     <div className="snip-modal-backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onClose()}>
       <section className="snip-editor" role="dialog" aria-modal="true" aria-label="Annotate PDF snip">
-        <header className="snip-editor-header"><div><p className="section-eyebrow">SNIP · PAGE {snip.page}</p><h2>Mark up your capture</h2></div><button className="snip-close" onClick={onClose} aria-label="Close annotation editor"><XCircle size={19} /></button></header>
-        <div className="annotation-toolbar">
-          {TOOL_ITEMS.map(([value, label]) => {
-            const shortcut = KEY_TOOLS.indexOf(value) + 1;
-            return <button key={value} className={tool === value ? 'active' : ''} aria-pressed={tool === value} title={`${label}${shortcut ? ` · ${shortcut} when Select is active` : ''}`} onClick={() => setTool(value)}>{shortcut > 0 && <kbd>{shortcut}</kbd>}{label}</button>;
+        <header className="snip-editor-header"><div><p className="section-eyebrow">SNIP / PAGE {snip.page}</p><h2>Mark up your capture</h2></div><div className="snip-header-actions"><button className="annotation-history-button" onClick={undo} disabled={historyIndex <= 0} aria-label="Undo" title="Undo"><Undo size={18} /></button><button className="annotation-history-button" onClick={redo} disabled={historyIndex >= history.length - 1} aria-label="Redo" title="Redo"><Redo size={18} /></button><button className="snip-close" onClick={onClose} aria-label="Close annotation editor"><XCircle size={19} /></button></div></header>
+        <div className="annotation-toolbar" aria-label="Markup tools">
+          {MARKUP_TOOLS.map(([value, label]) => {
+            const Icon = TOOL_ICONS[value];
+            return <button key={value} className={tool === value ? 'active' : ''} aria-pressed={tool === value} aria-label={label} title={label} onClick={() => setTool(value)}><Icon size={17} /><span className="annotation-tool-label">{label}</span></button>;
           })}
-          <span className="annotation-separator" />
-          <button onClick={undo} disabled={historyIndex <= 0} title="Undo (Ctrl/⌘ Z)"><Undo size={16} /></button>
-          <button onClick={redo} disabled={historyIndex >= history.length - 1} title="Redo (Ctrl/⌘ Y)"><Redo size={16} /></button>
-          <button onClick={removeSelected} disabled={!selectedMasks.length && !selectedAnnotations.length} title="Delete selected (Delete)"><Eraser size={16} /></button>
-          <button onClick={groupSelected} disabled={selectedMasks.length < 2} title="Group selected masks">Group</button>
-          <button onClick={ungroupSelected} disabled={!masks.some(mask => selectedMasks.includes(mask.id) && mask.group)} title="Ungroup selected masks">Ungroup</button>
-          {polygonPoints.length >= 3 && <button className="active" onClick={() => finishPolygon()}>Finish polygon</button>}
-          <label className="annotation-color" title="Ink color"><input type="color" value={color} onChange={event => setColor(event.target.value)} /></label>
-          <label className="brush-size" title="Stroke size"><span>Size</span><input type="range" min="1" max="8" value={brushSize} onChange={event => setBrushSize(Number(event.target.value))} /></label>
+          <label className="annotation-color" title="Ink color"><input aria-label="Ink color" type="color" value={color} onChange={event => setColor(event.target.value)} /></label>
+          <label className="brush-size" title={`Stroke size ${brushSize}`}><span>Size</span><input aria-label="Stroke size" type="range" min="1" max="8" value={brushSize} onChange={event => setBrushSize(Number(event.target.value))} /></label>
         </div>
         <div className="annotation-body">
           <div ref={canvasScrollRef} className="annotation-canvas-scroll">
@@ -321,12 +317,24 @@ export default function PdfAnnotationEditor({ snip, onClose, onSave }) {
             </div>
           </div>
           <aside className="annotation-options">
+            <div className="occlusion-toolbar" aria-label="Occlusion tools">
+              {OCCLUSION_TOOLS.map(([value, label]) => {
+                const Icon = TOOL_ICONS[value];
+                return <button key={value} className={tool === value ? 'active' : ''} aria-pressed={tool === value} aria-label={label} title={label} onClick={() => setTool(value)}><Icon size={17} /><span className="annotation-tool-label">{label}</span></button>;
+              })}
+              <span className="occlusion-tool-divider" />
+              <button aria-label="Delete selected" title="Delete selected" onClick={removeSelected} disabled={!selectedMasks.length && !selectedAnnotations.length}><Trash2 size={16} /></button>
+              <button aria-label="Group regions" title="Group selected regions" onClick={groupSelected} disabled={selectedMasks.length < 2}><Group size={16} /></button>
+              <button aria-label="Ungroup regions" title="Ungroup selected regions" onClick={ungroupSelected} disabled={!masks.some(mask => selectedMasks.includes(mask.id) && mask.group)}><Ungroup size={16} /></button>
+              {polygonPoints.length >= 3 && <button className="active" aria-label="Finish polygon" title="Finish polygon" onClick={() => finishPolygon()}><Check size={16} /></button>}
+            </div>
+
             <label className="annotation-mode-label">Occlusion mode</label>
             <button className={`mode-option ${mode === 'hide-all' ? 'selected' : ''}`} onClick={() => setMode('hide-all')}><span className="mode-visual mode-all"><i /><i /><i /></span><span><strong>Hide All, Guess One</strong><small>Reveal one region at a time</small></span></button>
             <button className={`mode-option ${mode === 'hide-one' ? 'selected' : ''}`} onClick={() => setMode('hide-one')}><span className="mode-visual mode-one"><i /></span><span><strong>Hide One, Guess One</strong><small>Hide a single region per card</small></span></button>
             <div className="mask-count">{masks.length} {masks.length === 1 ? 'region' : 'regions'} · {new Set(masks.map(mask => mask.group).filter(Boolean)).size + masks.filter(mask => !mask.group).length} cards</div>
             {masks.length > 0 && <div className="mask-label-list"><h3>Region labels</h3>{masks.map((mask, index) => <label key={mask.id}><span>{String(index + 1).padStart(2, '0')}</span><input value={mask.label} onChange={event => updateLabel(mask.id, event.target.value)} placeholder={`Region ${index + 1}`} /></label>)}</div>}
-            <p className="annotation-tip">Select · draw · number keys 1–9 switch tools · Enter saves · Esc returns to Select.</p>
+            <p className="annotation-tip">Enter saves; Esc selects.</p>
           </aside>
         </div>
         <footer className="snip-editor-footer"><p>{masks.length ? 'Each separate region creates a review card.' : 'Markup stays crisp while you work; saved captures retain high resolution.'}</p><button className="snip-save-button" onClick={finish}><Check size={16} /> Save snip <kbd>Enter</kbd></button></footer>

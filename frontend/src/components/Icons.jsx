@@ -34,6 +34,18 @@ const iconPaths = {
   undo: ["M9 14 4 9l5-5", "M4 9h9a7 7 0 0 1 0 14h-2"],
   redo: ["m15 14 5-5-5-5", "M20 9h-9a7 7 0 0 0 0 14h2"],
   rotate: ["M20 7v5h-5", "M20 12a8 8 0 1 1-2.3-5.7L20 9"],
+  select: ["M5 3v17l5-5 3 6 3-1.5-3-6.2h7L5 3Z"],
+  marker: ["m4 16 9-9 5 5-9 9H4z", "m11 9 5 5", "M4 21h16"],
+  line: ["M5 19 19 5"],
+  arrow: ["M5 19 19 5", "M10 5h9v9"],
+  rect: ["M4 5h16v14H4z"],
+  ellipse: ["M12 4c5.1 0 9 3.4 9 8s-3.9 8-9 8-9-3.4-9-8 3.9-8 9-8Z"],
+  text: ["M4 6h16", "M12 6v14", "M8 20h8"],
+  maskRect: ["M4 5h16v14H4z", "M8 9h8v6H8z"],
+  maskEllipse: ["M12 4c5.1 0 9 3.4 9 8s-3.9 8-9 8-9-3.4-9-8 3.9-8 9-8Z", "M9 9h6v6H9z"],
+  polygon: ["m12 3 8 6-3 11H7L4 9z"],
+  group: ["M4 4h10v10H4z", "M10 10h10v10H10z"],
+  ungroup: ["M4 4h10v10H4z", "m14 14 6 6", "m20 14-6 6"],
 };
 
 function Glyph({ name, size = 16, className = '', strokeWidth = 1.65, ...props }) {
@@ -82,3 +94,15 @@ export const Minus = icon('minus');
 export const Undo = icon('undo');
 export const Redo = icon('redo');
 export const Rotate = icon('rotate');
+export const Select = icon('select');
+export const Highlighter = icon('marker');
+export const Line = icon('line');
+export const Arrow = icon('arrow');
+export const Rectangle = icon('rect');
+export const Ellipse = icon('ellipse');
+export const Text = icon('text');
+export const MaskRectangle = icon('maskRect');
+export const MaskEllipse = icon('maskEllipse');
+export const Polygon = icon('polygon');
+export const Group = icon('group');
+export const Ungroup = icon('ungroup');
