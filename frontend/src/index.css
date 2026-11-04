@@ -361,7 +361,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, [contenteditabl
 .pdf-zoom-controls { color:#677166; font-size:11px; }
 .snip-toggle { background:#315c45; color:white; border-color:#315c45; }
 .snip-toggle.snip-active { background:#eef4ec; color:#315c45; }
-.pdf-page-viewport { position:relative; flex:1; min-height:140px; overflow:auto; display:flex; justify-content:center; align-items:flex-start; padding:16px; background:#f2f3ef; overscroll-behavior:contain; touch-action:pan-x pan-y; }
+.pdf-page-viewport { position:relative; flex:1; min-height:140px; overflow:auto; display:flex; justify-content:center; align-items:flex-start; padding:16px; background:#f2f3ef; overscroll-behavior:contain; overflow-anchor:none; touch-action:pan-x pan-y; }
 .pdf-page-viewport.is-snipping { cursor:crosshair; touch-action:none; }
 .pdf-page-position { position:relative; flex:none; line-height:0; }
 .pdf-page-stage { position:relative; flex:none; line-height:0; box-shadow:0 3px 16px rgba(30,37,31,.14); }

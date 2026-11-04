@@ -62,6 +62,21 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
 
   zoomRef.current = zoom;
 
+  const constrainPan = (pan) => {
+    const viewport = hostRef.current?.getBoundingClientRect();
+    const stage = pageStageRef.current;
+    if (!viewport || !stage) return pan;
+    const rect = stage.getBoundingClientRect();
+    const current = pdfPanRef.current;
+    const edge = 36;
+    const baseLeft = rect.left - current.x;
+    const baseTop = rect.top - current.y;
+    return {
+      x: clamp(pan.x, viewport.left + edge - rect.width - baseLeft, viewport.right - edge - baseLeft),
+      y: clamp(pan.y, viewport.top + edge - rect.height - baseTop, viewport.bottom - edge - baseTop),
+    };
+  };
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -145,6 +160,10 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
     let canceled = false;
     const render = async () => {
       if (!pdfDoc || !pageCanvasRef.current || pageWidth < 80) return;
+      const previousPage = displayedPageRef.current;
+      const previousStageRect = previousPage?.pageNumber === pageNumber
+        ? pageStageRef.current?.getBoundingClientRect()
+        : null;
       renderTaskRef.current?.cancel();
       setRendering(true);
       try {
@@ -171,6 +190,16 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
         pageStageRef.current?.style.removeProperty('transform-origin');
         pageStageRef.current?.style.removeProperty('will-change');
         pagePositionRef.current?.style.removeProperty('will-change');
+        if (previousStageRect && pageStageRef.current && pagePositionRef.current) {
+          const nextRect = pageStageRef.current.getBoundingClientRect();
+          const currentPan = pdfPanRef.current;
+          const adjustedPan = constrainPan({
+            x: currentPan.x + previousStageRect.left - nextRect.left,
+            y: currentPan.y + previousStageRect.top - nextRect.top,
+          });
+          pdfPanRef.current = adjustedPan;
+          pagePositionRef.current.style.transform = `translate3d(${adjustedPan.x}px, ${adjustedPan.y}px, 0)`;
+        }
       } catch (err) {
         if (err?.name !== 'RenderingCancelledException' && !canceled) setError(`Could not render this page: ${err.message}`);
       } finally {
@@ -259,10 +288,10 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
       const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
       const midpointX = (first.clientX + second.clientX) / 2;
       const midpointY = (first.clientY + second.clientY) / 2;
-      const pan = {
+      const pan = constrainPan({
         x: gesture.startPan.x + midpointX - gesture.startMidpointX,
         y: gesture.startPan.y + midpointY - gesture.startMidpointY,
-      };
+      });
       if (pagePositionRef.current) pagePositionRef.current.style.willChange = 'transform';
       pdfPanRef.current = pan;
       if (pagePositionRef.current) pagePositionRef.current.style.transform = `translate3d(${pan.x}px, ${pan.y}px, 0)`;
