@@ -3,6 +3,7 @@ import * as pdfjs from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { BookOpen, ChevronLeft, ChevronRight, Crop, FileText, Minus, PlusCircle, XCircle } from './Icons';
 import PdfAnnotationEditor from './PdfAnnotationEditor';
+import { forgetSavedPdf, readSavedPdf, rememberPdf, savePdfProgress } from '../pdfResumeStorage';
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 if (typeof Promise.withResolvers !== 'function') {
@@ -27,6 +28,8 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   const docRef = useRef(null);
   const loadingTaskRef = useRef(null);
   const sourceUrlRef = useRef(null);
+  const sourceFileRef = useRef(null);
+  const loadPdfFileRef = useRef(null);
   const renderedPageRef = useRef(null);
   const displayedPageRef = useRef(null);
   const highQualityPageRef = useRef(null);
@@ -37,6 +40,9 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   const pdfPanRef = useRef({ x: 0, y: 0 });
   const snipTouchStartRef = useRef(null);
   const captureSnipRef = useRef(null);
+  const pdfStoredRef = useRef(false);
+  const rememberTokenRef = useRef(0);
+  const progressSaveTokenRef = useRef(0);
   const [pdfName, setPdfName] = useState('');
   const [pdfDoc, setPdfDoc] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -52,6 +58,7 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   const [loadProgress, setLoadProgress] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [captureLoading, setCaptureLoading] = useState(false);
+  const [pdfMemoryStatus, setPdfMemoryStatus] = useState('idle');
 
   zoomRef.current = zoom;
 
@@ -70,6 +77,51 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
     docRef.current = pdfDoc;
     return () => { renderTaskRef.current?.cancel(); };
   }, [pdfDoc]);
+
+  useEffect(() => {
+    let canceled = false;
+    const restoreToken = ++loadTokenRef.current;
+    const restoreLastPdf = async () => {
+      try {
+        const saved = await readSavedPdf();
+        if (canceled || restoreToken !== loadTokenRef.current || !saved?.file) return;
+        const file = saved.file instanceof File
+          ? saved.file
+          : new File([saved.file], saved.name || 'Study PDF', { type: saved.type || 'application/pdf', lastModified: saved.lastModified || Date.now() });
+        pdfStoredRef.current = true;
+        sourceFileRef.current = file;
+        setPdfMemoryStatus('restoring');
+        await loadPdfFileRef.current?.(file, { restorePage: saved.pageNumber, restoreZoom: saved.zoom, fromRestore: true });
+      } catch (restoreError) {
+        if (!canceled && restoreToken === loadTokenRef.current) {
+          setPdfMemoryStatus('error');
+          setError(`The saved PDF could not be restored. Choose it again to continue. ${restoreError.message}`);
+        }
+      }
+    };
+    restoreLastPdf();
+    return () => {
+      canceled = true;
+      if (loadTokenRef.current === restoreToken) loadTokenRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pdfDoc || !pdfStoredRef.current) return undefined;
+    const saveToken = ++progressSaveTokenRef.current;
+    const timer = setTimeout(async () => {
+      if (!pdfStoredRef.current || progressSaveTokenRef.current !== saveToken) return;
+      try {
+        await savePdfProgress(pageNumber, zoom);
+      } catch (saveError) {
+        if (progressSaveTokenRef.current === saveToken) {
+          setPdfMemoryStatus('error');
+          setError(`PDF open, but its last page could not be saved. ${saveError.message}`);
+        }
+      }
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [pdfDoc, pageNumber, zoom]);
 
   useEffect(() => {
     pdfPanRef.current = { x: 0, y: 0 };
@@ -302,13 +354,12 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [snipping]);
 
-  const openFile = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
+  const loadPdfFile = async (file, { restorePage = 1, restoreZoom = 1, fromRestore = false } = {}) => {
     if (!file) return;
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) { setError('Choose a PDF file to open.'); return; }
     const loadToken = ++loadTokenRef.current;
-    setLoading(true); setLoadProgress(0); setRendering(false); setError(''); setPdfDoc(null); setSnippets([]); setPageNumber(1); setZoom(1);
+    if (!fromRestore) pdfStoredRef.current = false;
+    setLoading(true); setLoadProgress(0); setRendering(false); setError(''); setPdfDoc(null); setSnippets([]);
     let activeTask = null;
     try {
       const previousRender = renderTaskRef.current;
@@ -341,7 +392,29 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
       };
       const document = await activeTask.promise;
       if (loadTokenRef.current !== loadToken) { await document.destroy(); return; }
-      docRef.current = document; setPdfName(file.name); setPdfDoc(document); setLoadProgress(100);
+      const targetPage = clamp(Number(restorePage) || 1, 1, document.numPages);
+      const targetZoom = clamp(Number(restoreZoom) || 1, .55, 2.2);
+      sourceFileRef.current = file;
+      docRef.current = document; setPdfName(file.name); setPageNumber(targetPage); setZoom(targetZoom); setPdfDoc(document); setLoadProgress(100);
+      if (fromRestore) {
+        pdfStoredRef.current = true;
+        setPdfMemoryStatus('saved');
+      } else {
+        const rememberToken = ++rememberTokenRef.current;
+        setPdfMemoryStatus('saving');
+        rememberPdf(file, { pageNumber: targetPage, zoom: targetZoom }).then(() => {
+          if (rememberTokenRef.current === rememberToken) {
+            pdfStoredRef.current = true;
+            setPdfMemoryStatus('saved');
+          }
+        }).catch(saveError => {
+          if (rememberTokenRef.current === rememberToken) {
+            pdfStoredRef.current = false;
+            setPdfMemoryStatus('error');
+            setError(`PDF opened, but could not be saved for next time. ${saveError.message}`);
+          }
+        });
+      }
     } catch (err) {
       if (loadingTaskRef.current === activeTask) {
         setError(`This PDF could not be opened: ${err.message}`);
@@ -350,6 +423,27 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
       }
     }
     finally { if (loadTokenRef.current === loadToken) setLoading(false); }
+  };
+  loadPdfFileRef.current = loadPdfFile;
+
+  const openFile = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (file) loadPdfFile(file);
+  };
+
+  const forgetCurrentPdf = async () => {
+    ++rememberTokenRef.current;
+    ++progressSaveTokenRef.current;
+    pdfStoredRef.current = false;
+    try {
+      await forgetSavedPdf();
+      setPdfMemoryStatus('idle');
+      setError('');
+    } catch (forgetError) {
+      setPdfMemoryStatus('error');
+      setError(`Could not remove the saved PDF. ${forgetError.message}`);
+    }
   };
 
   const cancelLoading = () => {
@@ -444,8 +538,8 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   return (
     <section className="pdf-study-panel" aria-label="PDF study panel">
       <header className="pdf-panel-header">
-        <div className="pdf-panel-title"><span className="pdf-mark"><FileText size={18} /></span><div><p className="section-eyebrow">SOURCE DOCUMENT</p><h2>{pdfName || 'PDF study'}</h2></div></div>
-        <div className="pdf-panel-tools"><button className="pdf-toolbar-button" onClick={() => fileInputRef.current?.click()}><PlusCircle size={16} />{pdfDoc ? 'Change PDF' : 'Open PDF'}</button><input ref={fileInputRef} type="file" accept="application/pdf,.pdf" onChange={openFile} hidden />{isSmallScreen && onMobileView && <button className="pdf-toolbar-button" onClick={() => onMobileView('editor')}><BookOpen size={16} />Write</button>}</div>
+        <div className="pdf-panel-title"><span className="pdf-mark"><FileText size={18} /></span><div><p className="section-eyebrow">SOURCE DOCUMENT</p><h2>{pdfName || 'PDF study'}</h2>{pdfMemoryStatus !== 'idle' && <span className={`pdf-memory-status ${pdfMemoryStatus}`} role="status">{pdfMemoryStatus === 'saving' ? 'Saving on this device…' : pdfMemoryStatus === 'restoring' ? 'Restoring…' : pdfMemoryStatus === 'saved' ? 'Saved on this device' : 'Local save unavailable'}</span>}</div></div>
+        <div className="pdf-panel-tools">{pdfMemoryStatus === 'saved' && <button className="pdf-toolbar-button pdf-forget-button" onClick={forgetCurrentPdf}>Forget saved PDF</button>}<button className="pdf-toolbar-button" onClick={() => fileInputRef.current?.click()}><PlusCircle size={16} />{pdfDoc ? 'Change PDF' : 'Open PDF'}</button><input ref={fileInputRef} type="file" accept="application/pdf,.pdf" onChange={openFile} hidden />{isSmallScreen && onMobileView && <button className="pdf-toolbar-button" onClick={() => onMobileView('editor')}><BookOpen size={16} />Write</button>}</div>
       </header>
 
       {pdfDoc && <div className="pdf-controls">

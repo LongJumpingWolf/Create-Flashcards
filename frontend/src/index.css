@@ -348,6 +348,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, [contenteditabl
 .pdf-panel-header { min-height:64px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 16px; border-bottom:1px solid rgba(43,57,47,.08); }
 .pdf-panel-title { display:flex; align-items:center; gap:11px; min-width:0; }
 .pdf-panel-title h2 { max-width:35vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; font-weight:650; }
+.pdf-memory-status { display:block; margin-top:3px; color:#768178; font-size:11px; line-height:1.2; }
+.pdf-memory-status.error { color:#a45d48; }
+.pdf-forget-button { color:#768178; }
 .pdf-mark,.pdf-empty-icon { display:grid; place-items:center; flex:none; width:36px; height:36px; border-radius:11px; background:#eef4ec; color:#4c7558; }
 .pdf-panel-tools,.pdf-controls,.pdf-page-controls,.pdf-zoom-controls { display:flex; align-items:center; gap:7px; }
 .pdf-toolbar-button,.pdf-icon-button,.snip-toggle { min-height:36px; display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:0 10px; border:1px solid rgba(43,57,47,.11); border-radius:9px; background:#fff; color:#39453b; font-size:12px; white-space:nowrap; }

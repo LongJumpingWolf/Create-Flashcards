@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo } from "react";
 // NEW: Import the modal component
 import DocumentationModal from './DocumentationModal';
+import { hasSavedPdf } from '../pdfResumeStorage';
 
 const PdfStudyPanel = lazy(() => import('./PdfStudyPanel'));
 
@@ -368,6 +369,18 @@ export default function FlashcardEditor() {
   const [manualMaskPreview, setManualMaskPreview] = useState(null);
   const manualMaskStartRef = useRef(null);
   const imageResizeStartRef = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    hasSavedPdf().then(hasPdf => {
+      if (active && hasPdf) {
+        setPdfOpen(true);
+        setShowLibrary(false);
+        setMobileView('pdf');
+      }
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const [clozeColor, setClozeColor] = useState(DEFAULT_CLOZE_COLOR);
   const [basicColorPresets, setBasicColorPresets] = useState(DEFAULT_BASIC_PRESETS);
