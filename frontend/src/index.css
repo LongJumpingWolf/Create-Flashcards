@@ -709,6 +709,14 @@ body { background:radial-gradient(ellipse at 15% -18%,rgba(50,91,63,.18),transpa
   .snip-tray-item>img { touch-action:none; }
 }
 
+/* Give the compact phone header useful deck status instead of repeating the app name. */
+@media (max-width:700px) {
+  .brand-lockup > div:last-child { display:none; }
+  .header-status { flex:1; justify-content:center; min-width:0; white-space:nowrap; }
+  .header-status .status-divider { display:none; }
+  .header-status span:last-child { display:inline-flex; align-items:center; padding-left:7px; border-left:1px solid rgba(199,220,204,.15); color:#9cac9f; font-variant-numeric:tabular-nums; }
+}
+
 
 /* Keep the PDF card-library drawer reachable after a document has been loaded. */
 @media (max-width: 1060px) {
