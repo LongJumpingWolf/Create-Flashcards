@@ -1879,7 +1879,7 @@ export default function FlashcardEditor() {
 
         </div>
 
-        {pdfOpen && <div className={mobileView === 'pdf' ? '' : 'pdf-panel-mobile-hidden'}><PdfPanelErrorBoundary onClose={closePdfWorkspace}><Suspense fallback={<section className="pdf-study-panel pdf-loading-state">Loading PDF tools…</section>}><PdfStudyPanel onInsertSnippet={insertStudySnippet} isSmallScreen={false} onMobileView={setMobileView} /></Suspense></PdfPanelErrorBoundary></div>}
+        {pdfOpen && <div className={mobileView === 'pdf' ? '' : 'pdf-panel-mobile-hidden'}><PdfPanelErrorBoundary onClose={closePdfWorkspace}><Suspense fallback={<section className="pdf-study-panel pdf-loading-state">Loading PDF tools…</section>}><PdfStudyPanel fieldOptions={cardType === 'Basic' ? [{ target: 'front', label: 'Front' }, { target: 'back', label: 'Back' }] : cardType === 'Cloze' ? [{ target: 'front', label: 'Text' }, { target: 'back', label: 'Extra' }] : [{ target: 'front', label: 'Image' }, { target: 'back', label: 'Extra' }]} onInsertSnippet={insertStudySnippet} isSmallScreen={false} onMobileView={setMobileView} /></Suspense></PdfPanelErrorBoundary></div>}
         <div className={`cards-panel ${mobileView !== 'cards' ? 'mobile-hidden' : ''} ${pdfOpen ? `library-drawer ${showLibrary ? 'library-open' : ''}` : ''}`}>
           <div className="library-heading">
             <div><p className="section-eyebrow">YOUR DECK</p><h2><BookOpen size={19} /> Card library <span className="library-count">{cards.length}</span></h2></div>

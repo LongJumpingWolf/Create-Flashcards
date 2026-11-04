@@ -18,7 +18,7 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const MAX_CANVAS_PIXELS = 12_000_000;
 const RANGE_CHUNK_SIZE = 256 * 1024;
 
-export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, onMobileView }) {
+export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ target: 'front', label: 'Front' }, { target: 'back', label: 'Back' }], isSmallScreen = false, onMobileView }) {
   const fileInputRef = useRef(null);
   const hostRef = useRef(null);
   const pagePositionRef = useRef(null);
@@ -38,6 +38,8 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   const zoomGestureRef = useRef(null);
   const zoomCommitTimerRef = useRef(null);
   const pdfPanRef = useRef({ x: 0, y: 0 });
+  const pdfInteractionActiveRef = useRef(false);
+  const captureIntentRef = useRef('normal');
   const snipTouchStartRef = useRef(null);
   const captureSnipRef = useRef(null);
   const touchSnippetDragRef = useRef(null);
@@ -50,9 +52,11 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   const [pageWidth, setPageWidth] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [snipping, setSnipping] = useState(false);
+  const [snipIntent, setSnipIntent] = useState('normal');
   const [selection, setSelection] = useState(null);
   const [snipStart, setSnipStart] = useState(null);
   const [pendingSnip, setPendingSnip] = useState(null);
+  const [targetPromptSnip, setTargetPromptSnip] = useState(null);
   const [snippets, setSnippets] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -73,9 +77,25 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
     const edge = 36;
     const baseLeft = rect.left - current.x;
     const baseTop = rect.top - current.y;
+    // When the page is larger than the viewport, constrain translation so
+    // its edges can travel across the whole viewing area. The old bounds only
+    // required a sliver of the page to remain visible, which made zoomed pages
+    // feel as if vertical panning had hit an invisible limit.
+    const minX = rect.width > viewport.width
+      ? viewport.right - edge - baseLeft - rect.width
+      : viewport.left - edge - baseLeft;
+    const maxX = rect.width > viewport.width
+      ? viewport.left + edge - baseLeft
+      : viewport.right + edge - baseLeft - rect.width;
+    const minY = rect.height > viewport.height
+      ? viewport.bottom - edge - baseTop - rect.height
+      : viewport.top - edge - baseTop;
+    const maxY = rect.height > viewport.height
+      ? viewport.top + edge - baseTop
+      : viewport.bottom + edge - baseTop - rect.height;
     return {
-      x: clamp(pan.x, viewport.left + edge - rect.width - baseLeft, viewport.right - edge - baseLeft),
-      y: clamp(pan.y, viewport.top + edge - rect.height - baseTop, viewport.bottom - edge - baseTop),
+      x: clamp(pan.x, minX, maxX),
+      y: clamp(pan.y, minY, maxY),
     };
   };
 
@@ -174,33 +194,50 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
         const natural = page.getViewport({ scale: 1 });
         const scale = Math.min((pageWidth - 28) / natural.width, 1.5) * zoom;
         const viewport = page.getViewport({ scale });
-        displayedPageRef.current = { pageNumber, viewport };
         if (highQualityPageRef.current?.pageNumber !== pageNumber) highQualityPageRef.current = null;
         const requestedDpr = Math.min(window.devicePixelRatio || 1, 1.75);
         const pixelBudgetDpr = Math.sqrt(MAX_CANVAS_PIXELS / Math.max(1, viewport.width * viewport.height));
         const dimensionBudgetDpr = 8192 / Math.max(viewport.width, viewport.height, 1);
         const dpr = Math.max(.01, Math.min(requestedDpr, pixelBudgetDpr, dimensionBudgetDpr));
-        const canvas = pageCanvasRef.current;
-        canvas.width = Math.ceil(viewport.width * dpr);
-        canvas.height = Math.ceil(viewport.height * dpr);
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
-        const context = canvas.getContext('2d', { alpha: false });
+        // Render into a back buffer. Resizing the visible canvas clears it, so
+        // drawing directly there caused a white flash on every zoom gesture.
+        const buffer = document.createElement('canvas');
+        buffer.width = Math.ceil(viewport.width * dpr);
+        buffer.height = Math.ceil(viewport.height * dpr);
+        buffer.style.width = `${viewport.width}px`;
+        buffer.style.height = `${viewport.height}px`;
+        const context = buffer.getContext('2d', { alpha: false });
         renderTaskRef.current = page.render({ canvasContext: context, viewport, transform: dpr === 1 ? null : [dpr, 0, 0, dpr, 0, 0] });
         await renderTaskRef.current.promise;
+        if (canceled || !pageCanvasRef.current) return;
+        const canvas = pageCanvasRef.current;
+        canvas.width = buffer.width;
+        canvas.height = buffer.height;
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+        canvas.getContext('2d', { alpha: false }).drawImage(buffer, 0, 0);
+        displayedPageRef.current = { pageNumber, viewport };
         pageStageRef.current?.style.removeProperty('transform');
         pageStageRef.current?.style.removeProperty('transform-origin');
         pageStageRef.current?.style.removeProperty('will-change');
         pagePositionRef.current?.style.removeProperty('will-change');
         if (previousStageRect && pageStageRef.current && pagePositionRef.current) {
+          // Native horizontal overflow can retain an old scroll offset after a
+          // zoom resize. Clear it before measuring so centering is based on the
+          // visible viewport, not the prior scroll position.
+          if (hostRef.current) hostRef.current.scrollLeft = 0;
           const nextRect = pageStageRef.current.getBoundingClientRect();
           const currentPan = pdfPanRef.current;
-          const adjustedPan = constrainPan({
-            x: currentPan.x + previousStageRect.left - nextRect.left,
-            y: currentPan.y + previousStageRect.top - nextRect.top,
-          });
+          const constrainedY = constrainPan({ x: currentPan.x, y: currentPan.y + previousStageRect.top - nextRect.top }).y;
+          // Keep horizontal position in one system. Combining scrollLeft with
+          // translateX caused phantom overflow and one-sided green gutters.
+          const adjustedPan = { x: 0, y: constrainedY };
           pdfPanRef.current = adjustedPan;
           pagePositionRef.current.style.transform = `translate3d(${adjustedPan.x}px, ${adjustedPan.y}px, 0)`;
+          if (hostRef.current) {
+            const horizontalOverflow = Math.max(0, hostRef.current.scrollWidth - hostRef.current.clientWidth);
+            hostRef.current.scrollLeft = horizontalOverflow / 2;
+          }
         }
       } catch (err) {
         if (err?.name !== 'RenderingCancelledException' && !canceled) setError(`Could not render this page: ${err.message}`);
@@ -324,6 +361,7 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
     };
 
     const onWheel = (event) => {
+      pdfInteractionActiveRef.current = true;
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
       const stage = pageStageRef.current;
@@ -334,12 +372,23 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
         gesture = {
           startZoom: zoomRef.current,
           nextZoom: zoomRef.current,
-          originX: event.clientX - bounds.left,
+          // Keep horizontal gutters balanced while trackpad zoom is in
+          // progress; anchoring to an off-center cursor leaves a one-sided
+          // green strip around pages that still fit the viewer.
+          originX: (host.getBoundingClientRect().left + host.clientLeft + host.clientWidth / 2) - bounds.left,
           originY: event.clientY - bounds.top,
         };
         zoomGestureRef.current = gesture;
       }
-      previewZoom(gesture, gesture.nextZoom * Math.exp(-event.deltaY * .002));
+      // Trackpads report very small pixel deltas for pinch gestures. A slightly
+      // higher exponential sensitivity keeps the gesture fluid while making a
+      // typical pinch reach a useful zoom range in fewer finger movements.
+      const delta = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? event.deltaY * 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? event.deltaY * (host.clientHeight || 800)
+          : event.deltaY;
+      previewZoom(gesture, gesture.nextZoom * Math.exp(-delta * .0045));
       if (zoomCommitTimerRef.current) clearTimeout(zoomCommitTimerRef.current);
       zoomCommitTimerRef.current = setTimeout(commitZoom, 140);
     };
@@ -380,10 +429,30 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   }, [pdfDoc, snipping]);
 
   useEffect(() => {
-    const onKeyDown = (event) => { if (event.key === 'Escape' && snipping) { setSnipping(false); setSelection(null); } };
+    const trackActivePanel = event => {
+      pdfInteractionActiveRef.current = Boolean(event.target?.closest?.('.pdf-study-panel'));
+    };
+    document.addEventListener('pointerdown', trackActivePanel, true);
+    return () => document.removeEventListener('pointerdown', trackActivePanel, true);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape' && snipping) { setSnipping(false); setSelection(null); return; }
+      if (event.repeat || event.key.toLowerCase() !== 's' || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (!pdfDoc || !pdfInteractionActiveRef.current || target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      event.preventDefault();
+      const intent = event.shiftKey ? 'occlusion' : 'normal';
+      captureIntentRef.current = intent;
+      setSnipIntent(intent);
+      setSnipping(value => !value);
+      setSelection(null);
+      setSnipStart(null);
+    };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [snipping]);
+  }, [pdfDoc, snipping]);
 
   const loadPdfFile = async (file, { restorePage = 1, restoreZoom = 1, fromRestore = false } = {}) => {
     if (!file) return;
@@ -505,6 +574,7 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   };
   const captureSnip = async (start, end) => {
     if (!snipping || captureLoading) return;
+    const captureIntent = captureIntentRef.current;
     const canvas = pageCanvasRef.current;
     const pageInfo = displayedPageRef.current;
     const x = Math.min(start.x, end.x), y = Math.min(start.y, end.y);
@@ -546,7 +616,9 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
       const outputHeight = Math.max(1, Math.round(sourceHeight * outputScale));
       const crop = document.createElement('canvas'); crop.width = outputWidth; crop.height = outputHeight;
       crop.getContext('2d', { alpha: false }).drawImage(qualityPage.canvas, sx, sy, sourceWidth, sourceHeight, 0, 0, outputWidth, outputHeight);
-      setPendingSnip({ image: crop.toDataURL('image/jpeg', .95), width: outputWidth, height: outputHeight, page: pageNumber, name: `${pdfName} · p. ${pageNumber}` });
+      const captured = { image: crop.toDataURL('image/jpeg', .95), width: outputWidth, height: outputHeight, page: pageNumber, name: `${pdfName} · p. ${pageNumber}`, intent: captureIntent, masks: [], mode: 'hide-all', id: crypto.randomUUID() };
+      if (captureIntent === 'occlusion') setPendingSnip(captured);
+      else setTargetPromptSnip(captured);
     } catch (err) {
       setError(`Could not capture this region: ${err.message}`);
     } finally { setCaptureLoading(false); }
@@ -559,6 +631,13 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
   };
 
   const saveSnippet = (snippet) => { setSnippets(prev => [snippet, ...prev]); setPendingSnip(null); };
+  const insertCapturedSnippet = target => {
+    if (!targetPromptSnip) return;
+    const snippet = targetPromptSnip;
+    setSnippets(previous => [snippet, ...previous]);
+    setTargetPromptSnip(null);
+    onInsertSnippet(snippet, target);
+  };
 
   const onDragStart = (event, snippet) => {
     event.dataTransfer.effectAllowed = 'copy';
@@ -638,15 +717,15 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
       {pdfDoc && <div className="pdf-controls">
         <div className="pdf-page-controls"><button className="pdf-icon-button" onClick={() => setPageNumber(page => Math.max(1, page - 1))} disabled={pageNumber <= 1 || captureLoading} title="Previous page"><ChevronLeft size={17} /></button><label><input aria-label="PDF page number" inputMode="numeric" value={pageNumber} disabled={captureLoading} onChange={event => setPageNumber(clamp(Number(event.target.value) || 1, 1, pdfDoc.numPages))} /> <span>/ {pdfDoc.numPages}</span></label><button className="pdf-icon-button" onClick={() => setPageNumber(page => Math.min(pdfDoc.numPages, page + 1))} disabled={pageNumber >= pdfDoc.numPages || captureLoading} title="Next page"><ChevronRight size={17} /></button></div>
         <div className="pdf-zoom-controls"><button className="pdf-icon-button" onClick={() => setZoom(value => clamp(value - .15, .55, 2.2))} disabled={captureLoading} title="Zoom out"><Minus size={16} /></button><span>{Math.round(zoom * 100)}%</span><button className="pdf-icon-button" onClick={() => setZoom(value => clamp(value + .15, .55, 2.2))} disabled={captureLoading} title="Zoom in"><PlusCircle size={16} /></button></div>
-        <button className={`snip-toggle ${snipping ? 'snip-active' : ''}`} title="Drag with one finger to capture; use two fingers to move and zoom" onClick={() => { setSnipping(value => !value); setSelection(null); setSnipStart(null); }} disabled={!pdfDoc || rendering || captureLoading}>{captureLoading ? 'Preparing capture…' : snipping ? 'Select a region…' : <><Crop size={15} /> Snip region</>}</button>
+        <button className={`snip-toggle ${snipping ? 'snip-active' : ''}`} title="Snip: S · Snip for image occlusion: Shift+S" onClick={() => { captureIntentRef.current = 'normal'; setSnipIntent('normal'); setSnipping(value => !value); setSelection(null); setSnipStart(null); }} disabled={!pdfDoc || rendering || captureLoading}>{captureLoading ? 'Preparing capture…' : snipping ? snipIntent === 'occlusion' ? 'Select an occlusion image…' : 'Select a region…' : <><Crop size={15} /> Snip region</>}</button>
       </div>}
 
       {error && <div className="pdf-error" role="alert"><span>{error}</span><button onClick={() => setError('')}><XCircle size={15} /></button></div>}
       {loading && <div className="pdf-loading-progress" role="status"><span>Reading PDF ranges… {loadProgress}%</span><div><i style={{width:`${loadProgress}%`}} /></div><button onClick={cancelLoading}>Cancel</button></div>}
       {!pdfDoc ? <div className="pdf-empty-state"><div className="pdf-empty-icon"><FileText size={23} /></div><h3>{loading ? 'Opening your PDF…' : 'Bring your source into view'}</h3><p>Open a PDF and snip a diagram, definition, or worked example. Your document stays in this browser.</p><button onClick={() => fileInputRef.current?.click()} disabled={loading}>{loading ? 'Loading…' : 'Choose a PDF'} <ChevronRight size={15} /></button></div> : <>
-        <div ref={hostRef} className={`pdf-page-viewport ${snipping ? 'is-snipping' : ''}`} onPointerDown={onSnipPointerDown} onPointerMove={onSnipPointerMove} onPointerUp={onSnipPointerUp} onPointerCancel={onSnipPointerUp}>
-          <div ref={pagePositionRef} className="pdf-page-position"><div ref={pageStageRef} className="pdf-page-stage"><canvas ref={pageCanvasRef} aria-label={`PDF page ${pageNumber}`} />{(pageWidth < 80 || rendering || captureLoading) && <div className="pdf-page-rendering">{captureLoading ? 'Rendering high resolution capture…' : pageWidth < 80 ? 'Preparing page view…' : 'Rendering page…'}</div>}{selection && <div className="pdf-selection-box" style={{ left: selection.x, top: selection.y, width: selection.width, height: selection.height }} />}</div></div>
-          {snipping && <div className="snip-instruction">Drag to capture <kbd>Esc</kbd> to cancel</div>}
+        <div ref={hostRef} className={`pdf-page-viewport ${zoom > 1 ? 'is-zoomed' : ''} ${snipping ? 'is-snipping' : ''}`} onPointerDown={onSnipPointerDown} onPointerMove={onSnipPointerMove} onPointerUp={onSnipPointerUp} onPointerCancel={onSnipPointerUp}>
+          <div ref={pagePositionRef} className="pdf-page-position"><div ref={pageStageRef} className="pdf-page-stage"><canvas ref={pageCanvasRef} aria-label={`PDF page ${pageNumber}`} />{(pageWidth < 80 || (rendering && displayedPageRef.current?.pageNumber !== pageNumber) || captureLoading) && <div className="pdf-page-rendering">{captureLoading ? 'Rendering high resolution capture…' : pageWidth < 80 ? 'Preparing page view…' : 'Rendering page…'}</div>}{selection && <div className="pdf-selection-box" style={{ left: selection.x, top: selection.y, width: selection.width, height: selection.height }} />}</div></div>
+          {snipping && <div className="snip-instruction">{snipIntent === 'occlusion' ? 'Capture image for occlusion' : 'Drag to capture'} <kbd>Esc</kbd> to cancel</div>}
         </div>
         {snippets.length > 0 && <div className="snip-tray"><div className="snip-tray-heading"><span>CAPTURES <b>{snippets.length}</b></span><span>Newest first · drag to Write card</span></div><div className="snip-tray-list">{snippets.map((snippet, index) => <article key={snippet.id} className="snip-tray-item" draggable={nativeDragEnabled} onDragStart={event => onDragStart(event, snippet)} onPointerDown={event => onTouchSnippetPointerDown(event, snippet)}>
           <img src={snippet.image} alt="Captured PDF region" draggable="false" />
@@ -654,7 +733,8 @@ export default function PdfStudyPanel({ onInsertSnippet, isSmallScreen = false, 
           <div className="snip-tray-actions"><button onClick={() => onInsertSnippet(snippet, 'front')} title="Insert into front/text">Front</button><button onClick={() => onInsertSnippet(snippet, 'back')} title="Insert into back/extra">Back</button></div>
         </article>)}</div></div>}
       </>}
-      {pendingSnip && <PdfAnnotationEditor snip={pendingSnip} onClose={() => setPendingSnip(null)} onSave={saveSnippet} />}
+      {pendingSnip && <PdfAnnotationEditor snip={pendingSnip} initialTool={pendingSnip.intent === 'occlusion' ? 'mask-rect' : 'select'} onClose={() => setPendingSnip(null)} onSave={saveSnippet} />}
+      {targetPromptSnip && <div className="snip-modal-backdrop snip-target-backdrop" role="dialog" aria-modal="true" aria-label="Choose where to insert the capture"><section className="snip-target-dialog"><header><div><span className="section-eyebrow">CAPTURE READY · PAGE {targetPromptSnip.page}</span><h2>Insert image into…</h2></div><button type="button" className="snip-close" aria-label="Cancel capture" onClick={() => { saveSnippet(targetPromptSnip); setTargetPromptSnip(null); }}><XCircle size={19} /></button></header><img src={targetPromptSnip.image} alt="Captured PDF region preview"/><p>Choose one of the current card’s fields.</p><div className="snip-target-options">{fieldOptions.map(field => <button key={field.target} type="button" onClick={() => insertCapturedSnippet(field.target)}>{field.label}</button>)}</div></section></div>}
     </section>
   );
 }

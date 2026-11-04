@@ -50,7 +50,7 @@ function drawMark(context, mark, scaleX, scaleY) {
   context.restore();
 }
 
-export default function PdfAnnotationEditor({ snip, onClose, onSave }) {
+export default function PdfAnnotationEditor({ snip, onClose, onSave, initialTool = 'select' }) {
   const imageRef = useRef(null);
   const canvasScrollRef = useRef(null);
   const layerRef = useRef(null);
@@ -59,7 +59,7 @@ export default function PdfAnnotationEditor({ snip, onClose, onSave }) {
   const pendingDraftRef = useRef(null);
   const keyboardActionsRef = useRef(null);
   const [canvasViewport, setCanvasViewport] = useState({ width: 0, height: 0 });
-  const [tool, setTool] = useState('select');
+  const [tool, setTool] = useState(initialTool);
   const [color, setColor] = useState('#315c45');
   const [brushSize, setBrushSize] = useState(4);
   const [annotations, setAnnotations] = useState([]);

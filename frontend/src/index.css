@@ -362,7 +362,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, [contenteditabl
 .pdf-zoom-controls { color:#677166; font-size:11px; }
 .snip-toggle { background:#315c45; color:white; border-color:#315c45; }
 .snip-toggle.snip-active { background:#eef4ec; color:#315c45; }
-.pdf-page-viewport { position:relative; flex:1; min-height:140px; overflow:auto; display:flex; justify-content:center; align-items:flex-start; padding:16px; background:#f2f3ef; overscroll-behavior:contain; overflow-anchor:none; touch-action:pan-x pan-y; }
+.pdf-page-viewport { position:relative; flex:1; min-height:140px; overflow:auto; display:flex; justify-content:safe center; align-items:flex-start; padding:16px; background:#f2f3ef; overscroll-behavior:contain; overflow-anchor:none; touch-action:pan-x pan-y; }
+.pdf-page-viewport.is-zoomed::before,.pdf-page-viewport.is-zoomed::after { content:""; display:block; flex:0 0 20px; align-self:stretch; pointer-events:none; }
 .pdf-page-viewport.is-snipping { cursor:crosshair; touch-action:none; }
 .pdf-page-position { position:relative; flex:none; line-height:0; }
 .pdf-page-stage { position:relative; flex:none; line-height:0; box-shadow:0 3px 16px rgba(30,37,31,.14); }
@@ -519,6 +520,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, [contenteditabl
   .workspace-tabs button[aria-selected="true"] { background: #edf4ec; color: #315c45; box-shadow: 0 1px 3px rgba(34,55,38,.08); }
   .workspace-grid { display: block; padding-top: 0; }
   .editor-panel, .cards-panel { position: static; max-height: none; overflow: visible; padding: 15px 13px 0; border-radius: 14px; }
+  .editor-panel { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
   .deck-settings { display: grid; grid-template-columns: minmax(0,1fr) minmax(112px,.72fr); gap: 9px; margin-bottom: 12px; }
   .field-label { font-size: 10px; margin-bottom: 4px; }
   .app-input { min-height: 40px; font-size: 13px; }
@@ -536,9 +538,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, [contenteditabl
   .action-buttons .preview-button svg { margin: 0; }
   .primary-button, .export-button, .secondary-button { min-height: 43px; padding: 0 9px; font-size: 11px; }
   .io-source-card { padding: 11px; }
-  .io-source-heading { align-items: flex-start; gap: 8px; margin-bottom: 9px; }
-  .io-source-heading h3 { max-width: 230px; font-size: 12px; line-height: 1.35; }
-  .io-source-heading .quiet-button { min-height: 34px; flex: none; padding: 0 8px; font-size: 10px; }
+  .io-source-heading { display:grid; grid-template-columns:minmax(0,1fr); align-items:start; gap:8px; margin-bottom:9px; }
+  .io-source-heading h3 { max-width:none; font-size:11px; line-height:1.35; }
+  .io-source-actions { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; }
+  .io-source-heading .quiet-button { min-height:34px; flex:1 1 auto; justify-content:center; padding:0 8px; font-size:10px; white-space:nowrap; }
+  .io-region-count { flex:0 0 auto; }
   .io-image-preview { display: block; }
   .io-mask-draw-area { display: block; width: 100%; max-width: 100%; margin: 0 auto; }
   .io-mask-draw-area img { display: block; width: 100%; max-width: 100%; max-height: min(52dvh, 520px); height: auto; object-fit: contain; }
@@ -739,6 +743,20 @@ body { background:radial-gradient(ellipse at 15% -18%,rgba(50,91,63,.18),transpa
 .annotation-toolbar button:disabled,.occlusion-toolbar button:disabled { opacity:.35; }
 .occlusion-toolbar { display:flex; align-items:center; gap:3px; margin:0 0 12px; }
 .occlusion-tool-divider { height:22px; margin:0 3px; border-left:1px solid rgba(43,57,47,.12); }
+/* Keep the secondary occlusion toolbar usable in narrow inspector columns. */
+.occlusion-toolbar { flex-wrap:wrap; width:100%; overflow:visible; }
+.occlusion-toolbar .annotation-tool-label { display:none; }
+.occlusion-toolbar button { width:34px; min-width:34px; height:34px; padding:0; }
+.snip-target-backdrop { z-index:1100; }
+.snip-target-dialog { width:min(420px,100%); display:flex; flex-direction:column; gap:12px; padding:17px; border:1px solid rgba(199,220,204,.14); border-radius:15px; background:#141b16; color:#e6ede7; box-shadow:0 24px 80px rgba(0,0,0,.5); }
+.snip-target-dialog header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.snip-target-dialog h2 { margin-top:4px; font-size:16px; font-weight:650; }
+.snip-target-dialog > img { display:block; width:100%; max-height:38dvh; object-fit:contain; border:1px solid rgba(199,220,204,.1); border-radius:9px; background:#0d130f; }
+.snip-target-dialog > p { color:#9ba99d; font-size:12px; }
+.snip-target-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.snip-target-options button { min-height:43px; border:1px solid rgba(199,220,204,.14); border-radius:9px; background:#213127; color:#dce9de; font-weight:650; }
+.snip-target-options button:hover { background:#2b3d30; }
+@media(max-width:700px) { .snip-target-dialog { gap:10px; padding:14px; border-radius:13px; }.snip-target-dialog > img { max-height:32dvh; } }
 @media (max-width:700px) {
   .snip-modal-backdrop { padding:0; }
   .snip-editor { width:100%; height:100dvh; max-height:100dvh; border:0; border-radius:0; }
@@ -758,7 +776,8 @@ body { background:radial-gradient(ellipse at 15% -18%,rgba(50,91,63,.18),transpa
   .annotation-body { min-height:0; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) auto; }
   .annotation-canvas-scroll { min-height:0; padding:5px; }
   .annotation-options { min-height:0; max-height:clamp(118px,22dvh,170px); overflow:auto; display:flex; flex-direction:column; gap:3px; padding:5px 8px max(6px, env(safe-area-inset-bottom)); border-top:1px solid rgba(43,57,47,.09); border-left:0; }
-  .occlusion-toolbar { flex:none; width:100%; min-height:34px; gap:2px; overflow-x:auto; margin:0; }
+  .occlusion-toolbar { flex:none; width:100%; min-height:34px; gap:3px; overflow:visible; margin:0; }
+  .occlusion-toolbar button { width:32px; min-width:32px; min-height:32px; }
   .occlusion-tool-divider { height:18px; margin:0 2px; }
   .annotation-mode-label { margin:1px 0 2px; font-size:9px; }
   .mode-option { flex:none; width:calc(50% - 3px); min-height:37px; display:inline-flex; gap:5px; margin:0; padding:4px 6px; }
