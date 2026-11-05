@@ -31,14 +31,15 @@ const CARD_TYPES = ["Basic", "Cloze", "Image Occlusion"];
 const BASE_IMAGE_WIDTH = 300; // Define a constant for base image width
 
 const PRESET_COLORS = [
-  '#4ADE80',
   '#60A5FA',
-  '#FCD34D',
   '#F87171',
   '#A78BFA',
+  '#22D3EE',
+  '#FBBF24',
 ];
-const DEFAULT_CLOZE_COLOR = PRESET_COLORS[1];
-const DEFAULT_BASIC_PRESETS = [PRESET_COLORS[0], PRESET_COLORS[1], PRESET_COLORS[2]];
+const DEFAULT_CLOZE_COLOR = PRESET_COLORS[0];
+const DEFAULT_BASIC_PRESETS = [PRESET_COLORS[0], PRESET_COLORS[2], PRESET_COLORS[1]];
+const LEGACY_BASIC_PRESETS = ['#4ADE80', '#60A5FA', '#FCD34D'];
 const CLEAR_COLOR = '#F1F5F9';
 const ANKI_LINK_COLOR = '#38BDF8'; // A bright, contrast-safe blue
 
@@ -876,7 +877,8 @@ export default function FlashcardEditor() {
       const initialColor = storedColor || DEFAULT_CLOZE_COLOR;
       setClozeColor(initialColor);
       setCustomHex(initialColor);
-      setBasicColorPresets(storedBasicColors || DEFAULT_BASIC_PRESETS);
+      const isLegacyPalette = Array.isArray(storedBasicColors) && storedBasicColors.length === LEGACY_BASIC_PRESETS.length && storedBasicColors.every((color, index) => color.toUpperCase() === LEGACY_BASIC_PRESETS[index]);
+      setBasicColorPresets(isLegacyPalette ? DEFAULT_BASIC_PRESETS : (storedBasicColors || DEFAULT_BASIC_PRESETS));
 
       if (state.allAvailableTags) {
         setAllAvailableTags(new Set(state.allAvailableTags));
