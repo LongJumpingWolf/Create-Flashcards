@@ -404,6 +404,9 @@ export default function FlashcardEditor() {
   const [editingIndex, setEditingIndex] = useState(null);
   const [showTagSelector, setShowTagSelector] = useState(false);
   const [tagSelectorSearch, setTagSelectorSearch] = useState("");
+  const [showCardBrowser, setShowCardBrowser] = useState(false);
+  const [browserSearch, setBrowserSearch] = useState('');
+  const [browserSelectedIndex, setBrowserSelectedIndex] = useState(null);
 
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
@@ -514,8 +517,11 @@ export default function FlashcardEditor() {
       const finalBack = backRef.current ? backRef.current.innerHTML.trim() : back.trim();
       const finalOcclusionImage = occlusionImage || frontRef.current?.querySelector('img')?.src || null;
 
-      if (cardType === 'Image Occlusion' && (!finalOcclusionImage || occlusionMasks.length === 0)) {
-          setFormMessage('Add an image and at least one hide region before saving this occlusion card.'); return;
+      if (cardType === 'Image Occlusion' && !finalOcclusionImage) {
+          setFormMessage('Add an image to this Image Occlusion card first.'); return;
+      }
+      if (cardType === 'Image Occlusion' && occlusionMasks.length === 0) {
+          setFormMessage('This card is set to Image Occlusion, but no hidden regions were made. Draw at least one mask or switch back to the previous card type.'); return;
       }
 
       if (cardType === "Basic" && (!finalFront || !finalBack)) {
@@ -561,8 +567,12 @@ export default function FlashcardEditor() {
 
     if (cardType === 'Image Occlusion') {
       const finalOcclusionImage = occlusionImage || frontRef.current?.querySelector('img')?.src || null;
-      if (!finalOcclusionImage || occlusionMasks.length === 0) {
-        setFormMessage('Add an image and at least one hide region before creating this occlusion card.');
+      if (!finalOcclusionImage) {
+        setFormMessage('Add an image to this Image Occlusion card first.');
+        return;
+      }
+      if (occlusionMasks.length === 0) {
+        setFormMessage('This card is set to Image Occlusion, but no hidden regions were made. Draw at least one mask or switch back to the previous card type.');
         return;
       }
       const ioCard = { type: cardType, question: '', answer: finalBack, tags: currentTags, created: new Date().toLocaleTimeString(), imageData: finalOcclusionImage, imageWidth: occlusionImageWidth, masks: occlusionMasks, occlusionMode, restoreType: previousCardTypeRef.current };
@@ -1473,7 +1483,9 @@ export default function FlashcardEditor() {
       setOcclusionImage(snippet.image);
       setOcclusionMasks(snippet.masks || []);
       setOcclusionMode(snippet.mode || 'hide-all');
-      setOcclusionEditorOpen(true);
+      // The capture markup editor (or the inline image area below) is the mask
+      // workspace; do not send the user through a second, redundant modal.
+      setOcclusionEditorOpen(false);
       setMobileView('editor');
       setFormMessage('Occlusion source ready. Adjust the masks, then save the card.');
       return;
@@ -1629,6 +1641,11 @@ export default function FlashcardEditor() {
     const query = cardSearch.trim().toLowerCase();
     return cards.map((card, index) => ({ card, index })).filter(({ card }) => !query || `${card.type} ${getCardPreview(card.question)} ${getCardPreview(card.answer)} ${(card.masks || []).map(mask => mask.label).join(' ')} ${(card.tags || []).join(' ')}`.toLowerCase().includes(query));
   }, [cards, cardSearch]);
+  const browserCards = useMemo(() => {
+    const query = browserSearch.trim().toLowerCase();
+    return cards.map((card, index) => ({ card, index })).filter(({ card }) => !query || `${card.type} ${getCardPreview(card.question)} ${getCardPreview(card.answer)} ${(card.masks || []).map(mask => mask.label).join(' ')} ${(card.tags || []).join(' ')}`.toLowerCase().includes(query));
+  }, [cards, browserSearch]);
+  const browserSelection = browserCards.find(({ index }) => index === browserSelectedIndex) || browserCards[0] || null;
 
   const toolbarTargetRef = activeEditor === 'back' ? backRef : frontRef;
 
@@ -1799,10 +1816,10 @@ export default function FlashcardEditor() {
                     <Tag size={16} />Tags
                   </span>
                   <button
-                    onClick={() => { setShowTagSelector(true); setTagSelectorSearch(''); }}
-                    className="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1"
+                    onClick={() => { setBrowserSearch(''); setBrowserSelectedIndex(cards[0] ? 0 : null); setShowCardBrowser(true); }}
+                    className="tag-browse-button text-xs flex items-center gap-1"
                   >
-                    <Settings size={14} /> Browse & Select
+                    <BookOpen size={14} /> Browse cards
                   </button>
                 </label>
 
@@ -2043,78 +2060,23 @@ export default function FlashcardEditor() {
         </div >
       )}
 
-      {showTagSelector && (
-        <div className="fixed inset-0 bg-[rgba(0,0,0,0.7)] flex items-center justify-center z-50 p-4">
-          <div className="bg-neutral-800 rounded-xl shadow-lg max-w-2xl w-full max-h-[80vh] min-h-[300px] flex flex-col border border-neutral-700">
-            <div className="p-6 border-b border-neutral-700">
-              <div className="flex justify-between items-center mb-2">
-                <h2 className="text-xl font-bold">Browse & Select Tags</h2 >
-                <button
-                    onClick={() => setShowTagSelector(false)}
-                    className="p-1 rounded-full text-neutral-400 hover:text-white"
-                >
-                    <XCircle size={24} />
-                </button>
-              </div >
-              <p className="text-sm text-neutral-400 mb-4">
-                Select tags to add/remove from the current card. Search filters the hierarchy.
-              </p >
-
-              <input
-                type="text"
-                value={tagSelectorSearch}
-                onChange={(e) => setTagSelectorSearch(e.target.value)}
-                placeholder="Search tags..."
-                className={inputStyle}
-              />
-            </div >
-
-            <div className="flex-1 overflow-y-auto p-6">
-              
-              <div className="mb-6">
-                <h3 className="text-lg font-medium mb-2 border-b border-neutral-700 pb-1">Current Tags ({currentTags.length})</h3 >
-                <div className="flex flex-wrap gap-2 min-h-[30px]">
-                    {currentTags.length === 0 && (
-                        <p className="text-neutral-500 text-sm">No tags currently selected.</p>
-                    )}
-                    {currentTags.map((t) => (
-                        <span key={`current-${t}`} className="flex items-center gap-1 px-2 py-1 bg-sky-700 text-sky-100 rounded-full text-xs font-semibold">
-                            {formatTagForDisplay(t)}
-                            <button onClick={() => removeTag(t)} className="ml-1 font-bold hover:text-sky-300" title="Remove">×</button>
-                        </span >
-                    ))}
-                </div >
-              </div >
-
-              <h3 className="text-lg font-medium mb-2 border-b border-neutral-700 pb-1">All Tags ({allAvailableTags.size})</h3 >
-              {tagsHierarchyForSelector.length === 0 ? (
-                <p className="text-neutral-500 text-center">No tags match search.</p>
-              ) : (
-                <div className="space-y-1">
-                  <RenderTagHierarchy
-                    nodes={tagsHierarchyForSelector}
-                    currentTags={currentTags}
-                    onSelectTag={handleSelectTagInModal}
-                    getTagCardCount={getTagCardCount}
-                    onDeleteTag={deleteGlobalTag}
-                    onRenameTag={renameGlobalTag}
-                  />
-                </div >
-              )}
-            </div >
-
-            <div className="p-6 border-t border-neutral-700">
-              <button
-                onClick={() => setShowTagSelector(false)}
-                className="w-full px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition"
-              >
-                Done
-              </button>
-            </div >
-          </div >
-        </div >
+      {showCardBrowser && (
+        <div className="card-browser-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setShowCardBrowser(false); }}>
+          <section className="card-browser" role="dialog" aria-modal="true" aria-label="Browse cards">
+            <header className="card-browser-header"><div><span className="section-eyebrow">BROWSE</span><h2>Cards</h2></div><button className="card-browser-close" onClick={() => setShowCardBrowser(false)} aria-label="Close card browser"><XCircle size={21} /></button></header>
+            <div className="card-browser-search"><Search size={17} /><input autoFocus value={browserSearch} onChange={event => { setBrowserSearch(event.target.value); setBrowserSelectedIndex(null); }} placeholder="Search cards…" aria-label="Search cards" /><span>{browserCards.length} cards</span></div>
+            <div className="card-browser-body">
+              <aside className="card-browser-decks"><span className="card-browser-section-title">DECKS</span><button className="card-browser-deck active"><Layers3 size={16} /><span>{deckName || 'Default Deck'}</span><b>{cards.length}</b></button></aside>
+              <div className="card-browser-results" role="listbox" aria-label="Cards">
+                <div className="card-browser-columns"><span>Card</span><span>Type</span><span>Tags</span></div>
+                {browserCards.map(({ card, index }) => <button key={`${card.created}-${index}`} role="option" aria-selected={browserSelection?.index === index} className="card-browser-row" onClick={() => setBrowserSelectedIndex(index)}><span className="card-browser-row-content"><strong>{getCardPreview(card.question) || 'Image occlusion'}</strong><small>{card.type === 'Image Occlusion' ? `${(card.masks || []).length} hidden regions` : getCardPreview(card.answer) || 'No answer'}</small></span><span className="card-type-pill">{card.type || 'Basic'}</span><span className="card-browser-tags">{(card.tags || []).slice(0, 2).map(formatTagForDisplay).join(', ') || '—'}</span></button>)}
+                {!browserCards.length && <div className="card-browser-empty">{cards.length ? 'No cards match this search.' : 'This deck has no cards yet.'}</div>}
+              </div>
+              <aside className="card-browser-detail">{browserSelection ? <><div className="card-browser-detail-heading"><span className="card-type-pill">{browserSelection.card.type || 'Basic'}</span><span>Card {cards.length - browserSelection.index}</span></div>{browserSelection.card.type === 'Image Occlusion' ? <div className="card-browser-io"><img src={browserSelection.card.imageData} alt="Card image occlusion" /><span>{(browserSelection.card.masks || []).length} hidden regions</span></div> : <><section><span>{browserSelection.card.type === 'Cloze' ? 'TEXT' : 'FRONT'}</span><div dangerouslySetInnerHTML={{ __html: browserSelection.card.question || '(empty)' }} /></section>{browserSelection.card.type !== 'Cloze' && <section><span>BACK</span><div dangerouslySetInnerHTML={{ __html: browserSelection.card.answer || '(empty)' }} /></section>}{browserSelection.card.type === 'Cloze' && browserSelection.card.answer && <section><span>EXTRA</span><div dangerouslySetInnerHTML={{ __html: browserSelection.card.answer }} /></section>}</>}{(browserSelection.card.tags || []).length > 0 && <div className="card-browser-detail-tags">{browserSelection.card.tags.map(tag => <span key={tag}>{formatTagForDisplay(tag)}</span>)}</div>}<button className="primary-button" onClick={() => { loadCardForEdit(browserSelection.index); setShowCardBrowser(false); }}>Edit card</button></> : <div className="card-browser-placeholder"><BookOpen size={25} /><span>Select a card to preview it</span></div>}</aside>
+            </div>
+          </section>
+        </div>
       )}
-
       {showLinkModal && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
             <div className="bg-neutral-800 rounded-xl shadow-lg max-w-sm w-full p-6 border border-neutral-700">

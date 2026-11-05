@@ -17,6 +17,21 @@ if (typeof Promise.withResolvers !== 'function') {
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const MAX_CANVAS_PIXELS = 12_000_000;
 const RANGE_CHUNK_SIZE = 256 * 1024;
+const INSERT_PROMPT_STYLE = {
+  backdrop: { position: 'fixed', inset: 0, zIndex: 1100, display: 'grid', placeItems: 'center', padding: 14, background: 'rgba(3,7,4,.74)', backdropFilter: 'blur(8px)' },
+  panel: { boxSizing: 'border-box', width: 'min(420px, calc(100vw - 28px))', display: 'flex', flexDirection: 'column', gap: 12, padding: 17, border: '1px solid rgba(199,220,204,.14)', borderRadius: 15, background: '#141b16', color: '#e6ede7', boxShadow: '0 24px 80px rgba(0,0,0,.5)' },
+  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  eyebrow: { margin: 0, color: '#91a094', fontSize: 10, fontWeight: 750, letterSpacing: '.13em' },
+  title: { margin: '4px 0 0', color: '#e6ede7', fontSize: 17, fontWeight: 650 },
+  close: { width: 34, height: 34, display: 'grid', placeItems: 'center', flex: 'none', border: '1px solid rgba(199,220,204,.14)', borderRadius: 9, background: '#1a231d', color: '#d4e0d6' },
+  image: { display: 'block', width: '100%', maxHeight: '38dvh', boxSizing: 'border-box', objectFit: 'contain', border: '1px solid rgba(199,220,204,.1)', borderRadius: 9, background: '#0d130f' },
+  description: { margin: 0, color: '#9ba99d', fontSize: 12 },
+  options: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 },
+  option: { minWidth: 0, minHeight: 43, padding: '0 10px', border: '1px solid rgba(199,220,204,.14)', borderRadius: 9, background: '#213127', color: '#dce9de', fontWeight: 650, cursor: 'pointer' },
+  choice: { minWidth: 0, display: 'flex', gap: 5 },
+  key: { minWidth: 20, height: 20, display: 'inline-grid', placeItems: 'center', border: '1px solid rgba(199,220,204,.18)', borderRadius: 5, color: '#9cab9e', fontSize: 10, fontWeight: 600 },
+  occlusion: { width: 43, minWidth: 43, minHeight: 43, display: 'grid', placeItems: 'center', border: '1px solid rgba(129,190,144,.28)', borderRadius: 9, background: '#1e3425', color: '#b9dfc1', cursor: 'pointer' },
+};
 
 export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ target: 'front', label: 'Front' }, { target: 'back', label: 'Back' }], isSmallScreen = false, onMobileView }) {
   const fileInputRef = useRef(null);
@@ -630,14 +645,42 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
     captureSnip(snipStart, pagePoint(event));
   };
 
-  const saveSnippet = (snippet) => { setSnippets(prev => [snippet, ...prev]); setPendingSnip(null); };
-  const insertCapturedSnippet = target => {
+  const saveSnippet = (snippet) => {
+    const { autoInsertTarget, ...savedSnippet } = snippet;
+    setSnippets(prev => [savedSnippet, ...prev]);
+    setPendingSnip(null);
+    if (autoInsertTarget) onInsertSnippet(savedSnippet, autoInsertTarget);
+  };
+  const insertCapturedSnippet = (target, asOcclusion = false) => {
     if (!targetPromptSnip) return;
+    if (asOcclusion) {
+      setTargetPromptSnip(null);
+      setPendingSnip({ ...targetPromptSnip, intent: 'occlusion', masks: [], autoInsertTarget: target });
+      return;
+    }
     const snippet = targetPromptSnip;
     setSnippets(previous => [snippet, ...previous]);
     setTargetPromptSnip(null);
     onInsertSnippet(snippet, target);
   };
+
+  useEffect(() => {
+    if (!targetPromptSnip) return undefined;
+    const chooseFieldByNumber = event => {
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      if (event.key === '1' || event.key === '2') {
+        const field = fieldOptions[Number(event.key) - 1];
+        if (!field) return;
+        event.preventDefault();
+        insertCapturedSnippet(field.target);
+      } else if (event.key === '3') {
+        event.preventDefault();
+        insertCapturedSnippet(fieldOptions[0]?.target || 'front', true);
+      }
+    };
+    window.addEventListener('keydown', chooseFieldByNumber);
+    return () => window.removeEventListener('keydown', chooseFieldByNumber);
+  }, [targetPromptSnip, fieldOptions]);
 
   const onDragStart = (event, snippet) => {
     event.dataTransfer.effectAllowed = 'copy';
@@ -734,7 +777,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
         </article>)}</div></div>}
       </>}
       {pendingSnip && <PdfAnnotationEditor snip={pendingSnip} initialTool={pendingSnip.intent === 'occlusion' ? 'mask-rect' : 'select'} onClose={() => setPendingSnip(null)} onSave={saveSnippet} />}
-      {targetPromptSnip && <div className="snip-modal-backdrop snip-target-backdrop" role="dialog" aria-modal="true" aria-label="Choose where to insert the capture"><section className="snip-target-dialog"><header><div><span className="section-eyebrow">CAPTURE READY · PAGE {targetPromptSnip.page}</span><h2>Insert image into…</h2></div><button type="button" className="snip-close" aria-label="Cancel capture" onClick={() => { saveSnippet(targetPromptSnip); setTargetPromptSnip(null); }}><XCircle size={19} /></button></header><img src={targetPromptSnip.image} alt="Captured PDF region preview"/><p>Choose one of the current card’s fields.</p><div className="snip-target-options">{fieldOptions.map(field => <button key={field.target} type="button" onClick={() => insertCapturedSnippet(field.target)}>{field.label}</button>)}</div></section></div>}
+      {targetPromptSnip && <div className="snip-modal-backdrop snip-target-backdrop" style={INSERT_PROMPT_STYLE.backdrop} role="dialog" aria-modal="true" aria-label="Choose where to insert the capture"><section className="snip-target-dialog" style={INSERT_PROMPT_STYLE.panel}><header style={INSERT_PROMPT_STYLE.header}><div><span className="section-eyebrow" style={INSERT_PROMPT_STYLE.eyebrow}>CAPTURE READY · PAGE {targetPromptSnip.page}</span><h2 style={INSERT_PROMPT_STYLE.title}>Insert image into…</h2></div><button type="button" className="snip-close" style={INSERT_PROMPT_STYLE.close} aria-label="Cancel capture" onClick={() => { saveSnippet(targetPromptSnip); setTargetPromptSnip(null); }}><XCircle size={19} /></button></header><img style={INSERT_PROMPT_STYLE.image} src={targetPromptSnip.image} alt="Captured PDF region preview"/><p style={INSERT_PROMPT_STYLE.description}>Press 1 or 2 to insert into a field, or 3 to make an image occlusion card.</p><div className="snip-target-options" style={INSERT_PROMPT_STYLE.options}>{fieldOptions.map((field, index) => <div key={field.target} style={INSERT_PROMPT_STYLE.choice}><button style={{ ...INSERT_PROMPT_STYLE.option, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} type="button" onClick={() => insertCapturedSnippet(field.target)}><kbd style={INSERT_PROMPT_STYLE.key}>{index + 1}</kbd>{field.label}</button>{index === 0 && <button style={INSERT_PROMPT_STYLE.occlusion} type="button" aria-label="Use as image occlusion and open editor" title="Use field 1 as the image occlusion source" onClick={() => insertCapturedSnippet(field.target, true)}><Crop size={18} /></button>}</div>)}</div></section></div>}
     </section>
   );
 }
