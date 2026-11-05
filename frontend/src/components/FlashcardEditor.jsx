@@ -4,7 +4,15 @@ import { createPortal } from 'react-dom';
 import DocumentationModal from './DocumentationModal';
 import { hasSavedPdf } from '../pdfResumeStorage';
 
-const PdfStudyPanel = lazy(() => import('./PdfStudyPanel'));
+let pdfStudyPanelPromise;
+const preloadPdfStudyPanel = () => {
+  pdfStudyPanelPromise ||= import('./PdfStudyPanel').catch(error => {
+    pdfStudyPanelPromise = null;
+    throw error;
+  });
+  return pdfStudyPanelPromise;
+};
+const PdfStudyPanel = lazy(preloadPdfStudyPanel);
 
 class PdfPanelErrorBoundary extends React.Component {
   state = { error: null };
@@ -357,6 +365,13 @@ export default function FlashcardEditor() {
   const [contentInitialized, setContentInitialized] = useState(false);
   const [saveStatus, setSaveStatus] = useState('Saved');
   const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    const scheduleIdle = window.requestIdleCallback || (callback => window.setTimeout(callback, 900));
+    const cancelIdle = window.cancelIdleCallback || window.clearTimeout;
+    const idleId = scheduleIdle(() => { preloadPdfStudyPanel().catch(() => {}); }, { timeout: 1800 });
+    return () => cancelIdle(idleId);
+  }, []);
   const [exportMessage, setExportMessage] = useState('');
   const [formMessage, setFormMessage] = useState('');
   const [cardSearch, setCardSearch] = useState('');
@@ -1572,6 +1587,7 @@ export default function FlashcardEditor() {
   };
 
   const openPdfWorkspace = () => {
+    preloadPdfStudyPanel().catch(() => {});
     setPdfOpen(true); setShowLibrary(false); setMobileView('pdf');
   };
 
@@ -1683,7 +1699,7 @@ export default function FlashcardEditor() {
         <div className="header-actions">
           <button onClick={() => setShowDocumentationModal(true)} title="Help and keyboard shortcuts" className="icon-button"><HelpCircle size={18} /><span>Help</span></button>
           {pdfOpen && <button onClick={() => { const opening = !(showLibrary && mobileView === 'cards'); setShowLibrary(opening); setMobileView(opening ? 'cards' : 'pdf'); }} aria-pressed={showLibrary && mobileView === 'cards'} title={showLibrary && mobileView === 'cards' ? 'Return to PDF' : 'Open card library'} className={`icon-button library-toggle ${showLibrary && mobileView === 'cards' ? 'active' : ''}`}><BookOpen size={17} /><span>Cards {cards.length}</span></button>}
-          <button onClick={() => pdfOpen ? closePdfWorkspace() : openPdfWorkspace()} className="quiet-button"><FileText size={16} /><span>{pdfOpen ? 'Close PDF' : 'Open PDF'}</span></button>
+          <button onPointerEnter={() => { if (!pdfOpen) preloadPdfStudyPanel().catch(() => {}); }} onFocus={() => { if (!pdfOpen) preloadPdfStudyPanel().catch(() => {}); }} onTouchStart={() => { if (!pdfOpen) preloadPdfStudyPanel().catch(() => {}); }} onClick={() => pdfOpen ? closePdfWorkspace() : openPdfWorkspace()} className="quiet-button"><FileText size={16} /><span>{pdfOpen ? 'Close PDF' : 'Open PDF'}</span></button>
           <button onClick={startNewDeck} className="quiet-button"><PlusCircle size={16} /><span>New deck</span></button>
         </div>
       </header>
