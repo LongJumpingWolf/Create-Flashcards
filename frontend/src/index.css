@@ -1085,3 +1085,24 @@ body { background:#202124; }
 .card-browser-close { border-color:#484a50; background:#333438; color:#d1d5dc; }
 .card-browser-backdrop { background:rgba(0,0,0,.74); }
 @media(max-width:700px) { .editor-actions { border-color:#414348; background:rgba(39,40,43,.98); } }
+
+/* Final dark palette overrides: these intentionally come after legacy component styles. */
+:root { --green:#6aa9ff !important; --accent:#6aa9ff !important; }
+.app-shell .save-dot { background:#70aaff !important; box-shadow:0 0 0 3px rgba(93,157,239,.14) !important; }
+.app-shell .save-dot.save-error { background:#f07878 !important; }
+.app-shell .pdf-empty-state button,.app-shell .pdf-load-error button { border:1px solid #5482b8 !important; background:#3f83d5 !important; color:#fff !important; }
+.app-shell .pdf-empty-state button:hover:not(:disabled),.app-shell .pdf-load-error button:hover { background:#5294e4 !important; }
+.app-shell .pdf-empty-state h3,.app-shell .pdf-load-error h2 { color:#e4e6ea !important; }
+.app-shell .pdf-empty-state p,.app-shell .pdf-load-error p,.app-shell .pdf-loading-state { color:#b0b4bc !important; }
+.app-shell .pdf-empty-icon,.app-shell .pdf-mark { background:#353a43 !important; color:#b6d4ff !important; }
+.app-shell .snip-toggle,.app-shell .snip-save-button,.app-shell .guide-footer button { border-color:#5482b8 !important; background:#3f83d5 !important; color:#fff !important; }
+.app-shell .snip-toggle:hover:not(:disabled),.app-shell .snip-save-button:hover,.app-shell .guide-footer button:hover { background:#5294e4 !important; }
+.app-shell .snip-toggle.snip-active { border-color:#5b79a1 !important; background:#353d49 !important; color:#c2dcff !important; }
+.app-shell .annotation-toolbar button.active,.app-shell .occlusion-toolbar button.active,.app-shell .mode-option.selected { border-color:#6487b4 !important; background:#35404e !important; color:#c3dcff !important; }
+.app-shell .io-reviewer-flip button[aria-pressed="true"] { background:#3d424a !important; color:#e5e8ed !important; }
+.app-shell .empty-library button { border-color:#526b8a !important; background:#333c49 !important; color:#c0d9fa !important; }
+.app-shell .library-heading h2,.app-shell .library-heading h2 svg { color:#e1e3e6 !important; }
+.app-shell .empty-library h3 { color:#e0e3e8 !important; }
+.app-shell .empty-library p { color:#b0b5be !important; }
+.app-shell .card-type-pill { border-color:#4c6380 !important; background:#303a48 !important; color:#a8ceff !important; }
+.app-shell .tag-chip,.app-shell .card-tags span { border-color:#484a50 !important; background:#292a2e !important; color:#c1c6ce !important; }
