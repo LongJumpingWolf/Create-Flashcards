@@ -1111,3 +1111,13 @@ body { background:#202124; }
 .pdf-zoom-readout { min-width:48px; min-height:30px; padding:0 6px; border:1px solid transparent; border-radius:7px; background:transparent; color:inherit; font:inherit; font-size:11px; font-variant-numeric:tabular-nums; cursor:pointer; }
 .pdf-zoom-readout:hover:not(:disabled) { border-color:rgba(128,150,135,.35); background:rgba(128,150,135,.12); }
 .pdf-zoom-readout:disabled { opacity:.5; cursor:default; }
+
+/* Action bar: one solid surface, no content showing through, matching buttons. */
+.editor-actions { --bar-bg:#2b2c2f; background:var(--bar-bg); backdrop-filter:none; -webkit-backdrop-filter:none; }
+.editor-actions::before { content:""; position:absolute; left:0; right:0; bottom:100%; height:22px; background:linear-gradient(to bottom, transparent, var(--bar-bg)); pointer-events:none; }
+.editor-actions .primary-button, .editor-actions .export-button, .editor-actions .secondary-button { height:40px; min-height:40px; box-sizing:border-box; border-radius:10px; }
+.editor-actions .export-button, .editor-actions .secondary-button { border:1px solid #4a4c52; background:#36383c; color:#e0e3e8; opacity:1; }
+.editor-actions .export-button:hover:not(:disabled), .editor-actions .secondary-button:hover { background:#404247; color:#fff; }
+.editor-actions .export-button:disabled { border-color:#3b3d42; background:#303135; color:#80848b; opacity:1; cursor:not-allowed; }
+@media (min-width:701px) { .editor-panel > .editor-actions { border-radius:0 0 15px 15px; } }
+@media (max-width:700px) { .editor-actions { --bar-bg:#27282b; } }
