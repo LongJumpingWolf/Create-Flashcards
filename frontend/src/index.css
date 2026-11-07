@@ -1125,3 +1125,38 @@ body { background:#202124; }
 /* Search field: show focus once, on the rounded wrapper, not as a square box inside it. */
 .card-search-wrap input:focus, .card-search-wrap input:focus-visible { outline:none !important; box-shadow:none; }
 .card-search-wrap:focus-within { border-color:#5c9ae6; box-shadow:0 0 0 3px rgba(92,154,230,.18); }
+
+/* Quick-reference guide: full dark treatment (WCAG AA contrast). The older rules only
+   darkened some containers, leaving white cards with pale text. */
+.guide-modal { background:#26272a; color:#e2e5e9; border-color:#45474d; }
+.guide-modal .guide-header, .guide-modal .guide-footer { border-color:#3d3f44; }
+.guide-modal .guide-header { background:#26272a; }
+.guide-modal .guide-header .section-eyebrow, .guide-modal .guide-shortcuts > .section-eyebrow { color:#a8aeb7; }
+.guide-modal .guide-header h2 { color:#f3f5f7; }
+.guide-modal .guide-intro { color:#b4bac3; }
+.guide-modal .guide-close { border-color:#4a4c52; color:#cfd4db; }
+.guide-modal .guide-close:hover { background:#34363a; color:#fff; }
+.guide-modal .guide-body { background:#2b2c30; }
+.guide-modal .guide-section, .guide-modal .guide-shortcuts { border-color:#41434a; background:#323439; }
+.guide-modal .guide-section-mark { background:#3d4a42; color:#a9d8b8; }
+.guide-modal .guide-section-heading > span { color:#9fb7a6; }
+.guide-modal .guide-section-heading h3 { color:#f3f5f7; font-size:13px; }
+.guide-modal .guide-section-copy > p { color:#c3c8d0; font-size:11px; }
+.guide-modal .guide-section-detail strong { color:#e6e9ed; font-size:11px; }
+.guide-modal .guide-section-detail span, .guide-modal .guide-section-detail p { color:#bcc2ca; font-size:11px; }
+.guide-modal .guide-section-detail p strong { color:#a9d8b8; }
+.guide-modal .guide-shortcut { border-color:#43454b; color:#d0d4db; font-size:11px; }
+.guide-modal .guide-shortcut kbd { border-color:#5a5d65; background:#41444a; color:#eef0f3; font-size:10px; }
+.guide-modal .guide-note, .guide-modal .guide-export { border:1px solid #3f5547; background:#2b3a31; color:#b9e0c4; }
+.guide-modal .guide-note p, .guide-modal .guide-export p { color:#cfdcd3; font-size:11px; }
+.guide-modal .guide-note code { color:#e1f1e6; }
+.guide-modal .guide-export > span { color:#e4f3e8; font-size:12px; }
+.guide-modal .guide-export p strong { color:#e4f3e8; }
+.guide-modal .guide-footer { background:#222326; }
+.guide-modal .guide-footer > span { color:#b0b6bf; font-size:11px; }
+
+/* Primary blue buttons: white text on the old #3f83d5 was only 3.9:1; these meet WCAG AA (4.5:1). */
+.primary-button, .app-shell .primary-button { background:#2f6dbd; color:#fff; }
+.primary-button:hover:not(:disabled), .app-shell .primary-button:hover:not(:disabled) { background:#3774c4; }
+.snip-toggle, .app-shell .snip-toggle, .app-shell .snip-save-button, .app-shell .guide-footer button, .app-shell .pdf-empty-state button, .app-shell .pdf-load-error button { border-color:#4a82c9 !important; background:#2f6dbd !important; color:#fff !important; }
+.snip-toggle:hover:not(:disabled), .app-shell .snip-toggle:hover:not(:disabled), .app-shell .snip-save-button:hover, .app-shell .guide-footer button:hover, .app-shell .pdf-empty-state button:hover:not(:disabled), .app-shell .pdf-load-error button:hover { background:#3774c4 !important; }
