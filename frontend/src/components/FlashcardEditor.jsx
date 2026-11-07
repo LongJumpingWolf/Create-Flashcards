@@ -708,18 +708,55 @@ export default function FlashcardEditor() {
       }))
     };
 
-    console.log("Exporting deck... contacting backend.");
+    // Preferred path: build the .apkg on this device. No upload, so there is no
+    // size limit, it works offline, and large images are shrunk automatically.
+    try {
+      const { exportDeckLocally, CardError } = await import('../browserExport');
+      try {
+        const result = await exportDeckLocally(payload, {
+          onProgress: (stage, done, total) => setExportMessage(stage === 'prepare'
+            ? `Preparing cards… ${done}/${total}`
+            : total > 1 ? `Building package ${done}/${total}…` : 'Building package…'),
+        });
+        setExportMessage(result.parts > 1
+          ? `Deck exported as ${result.parts} files because it is large. Import all of them into Anki; they merge into one deck.`
+          : 'Deck exported successfully. Open the downloaded .apkg file in Anki.');
+        setIsExporting(false);
+        return;
+      } catch (localError) {
+        if (localError instanceof CardError) {
+          setExportMessage(`Export failed: ${localError.message}`);
+          setIsExporting(false);
+          return;
+        }
+        console.warn('Local export failed, trying the export service.', localError);
+      }
+    } catch (loadError) {
+      console.warn('Local exporter could not be loaded, trying the export service.', loadError);
+    }
+
+    // Fallback: the hosted export service (only possible while the payload fits
+    // within the host's ~4.5 MB request limit).
+    const body = JSON.stringify(payload);
+    if (body.length > 4_000_000) {
+      setExportMessage('Export failed on this device (low memory?). Try again, or remove a few large images and export in two parts.');
+      setIsExporting(false);
+      return;
+    }
 
     try {
+      setExportMessage('Building on the export service…');
       const res = await fetch(`${BACKEND_URL}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body
       });
 
       if (!res.ok) {
         const errorText = await res.text();
-        setExportMessage(`Export failed (${res.status}): ${errorText.substring(0, 180)}`);
+        let detail = errorText;
+        try { const parsed = JSON.parse(errorText); detail = typeof parsed.detail === 'string' ? parsed.detail : JSON.stringify(parsed.detail); } catch { /* plain text */ }
+        setExportMessage(`Export failed (${res.status}): ${detail.substring(0, 180)}`);
         return;
       }
 
@@ -747,7 +784,7 @@ export default function FlashcardEditor() {
 
     } catch (err) {
       console.error("Network or Fetch Error:", err);
-      setExportMessage(`Could not reach the export service at ${BACKEND_URL}. Check that the backend is running and try again.`);
+      setExportMessage(`Could not build the deck on this device or reach the export service. Please try again.`);
     } finally {
       setIsExporting(false);
     }
