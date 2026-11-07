@@ -2184,7 +2184,7 @@ export default function FlashcardEditor() {
                             <button
                                 key={`slot-${index}`}
                                 onClick={() => { setColorPickerTarget(`basic-${index}`); setCustomHex(basicColorPresets[index]); }}
-                                className={`px-3 py-1 text-sm rounded-lg border-2 transition ${colorPickerTarget === `basic-${index}` ? 'border-sky-500 bg-sky-700' : 'border-neutral-600 hover:bg-neutral-700'}`}
+                                className={`px-3 py-1 text-sm rounded-lg border-2 transition ${colorPickerTarget === `basic-${index}` ? 'border-sky-500 bg-sky-700 text-white' : 'border-neutral-600 hover:bg-neutral-700'}`}
                             >
                                 Preset {index + 1}
                             </button>

@@ -518,7 +518,7 @@ body { background:#202124; }
 .app-shell .bg-neutral-700, .app-shell .bg-neutral-700\/50, .app-shell .bg-neutral-700\/70 { background-color:#eef1ec !important; }
 .app-shell .border-neutral-700, .app-shell .border-neutral-600 { border-color:rgba(43,57,47,.12) !important; }
 .app-shell .bg-sky-600 { background-color:#315c45 !important; }
-.app-shell .bg-sky-700 { background-color:#e6efe5 !important; }
+.app-shell .bg-sky-700 { background-color:#2f5a44 !important; color:#f2f8f3; }
 .app-shell .text-sky-100 { color:#365d41 !important; }
 .app-shell .bg-emerald-600 { background-color:#3e7852 !important; }
 .app-shell .bg-red-600 { background-color:#9b6658 !important; }
