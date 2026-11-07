@@ -147,6 +147,12 @@ class CardPayload(BaseModel):
     masks: List[dict] = Field(default_factory=list, max_length=300)
     occlusion_mode: Literal["hide-all", "hide-one"] = "hide-all"
 
+    @field_validator("tags")
+    @classmethod
+    def clean_tags(cls, value: List[str]) -> List[str]:
+        # genanki raises on tags containing whitespace; Anki tags cannot contain spaces.
+        return [re.sub(r'\s+', '_', tag.strip()) for tag in value if tag and tag.strip()]
+
     @field_validator("question")
     @classmethod
     def require_question_for_text_cards(cls, value: str, info):
@@ -188,8 +194,8 @@ def extract_media_from_html(html_content: str) -> tuple[str, Dict[str, bytes]]:
             image_data = b64decode(base64_data)
             
             # Determine file extension
-            ext = mime_type.split('/')[1]
-            if not ext or len(ext) > 4: ext = 'png' # Fallback
+            ext = {'jpeg': 'jpg', 'svg+xml': 'svg'}.get(mime_type.split('/')[1].lower(), mime_type.split('/')[1].lower())
+            if not re.fullmatch(r'[a-z0-9]{1,4}', ext): ext = 'png' # Fallback
             
             # Generate a unique filename
             filename = f"media_{random.randint(1000, 9999)}_{os.urandom(4).hex()}.{ext}"
@@ -202,7 +208,7 @@ def extract_media_from_html(html_content: str) -> tuple[str, Dict[str, bytes]]:
             html_content = html_content[:match.start()] + replacement_tag + html_content[match.end():]
             
         except Exception as e:
-            print(f"Error processing image: {e}")
+            logger.warning("Error processing embedded image: %s", e)
             continue
 
     return html_content, media_files
@@ -284,7 +290,11 @@ def create_anki_deck(deck_payload: DeckPayload) -> bytes:
                     if len(points) < 3:
                         raise ValueError("Polygon masks need at least three points")
                     for point in points:
-                        if not (0 <= float(point.get("x", -1)) <= 1 and 0 <= float(point.get("y", -1)) <= 1):
+                        try:
+                            px, py = float(point.get("x", -1)), float(point.get("y", -1))
+                        except (TypeError, ValueError, AttributeError):
+                            raise ValueError("Polygon points must be normalized between 0 and 1")
+                        if not (0 <= px <= 1 and 0 <= py <= 1):
                             raise ValueError("Polygon points must be normalized between 0 and 1")
                 mask_id = str(mask.get("id") or f"mask-{index + 1}")
                 group = str(mask.get("group") or mask_id)
@@ -438,6 +448,9 @@ async def generate_anki_package(deck_payload: DeckPayload):
         
         return Response(content=apkg_data, headers=headers)
 
+    except ValueError as exc:
+        # Validation problems with the user's content (e.g. bad image/mask data) are client errors.
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception:
         logger.exception("Anki package generation failed")
         raise HTTPException(status_code=500, detail="Could not generate the Anki package. Check the deck content and try again.")

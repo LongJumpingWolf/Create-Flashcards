@@ -5,7 +5,7 @@ const LAST_DOCUMENT_KEY = 'last-opened';
 let databasePromise;
 
 function openDatabase() {
-  if (!('indexedDB' in window)) return Promise.reject(new Error('This browser does not support local PDF storage.'));
+  if (typeof window === 'undefined' || !('indexedDB' in window) || !window.indexedDB) return Promise.reject(new Error('This browser does not support local PDF storage.'));
   if (!databasePromise) {
     databasePromise = new Promise((resolve, reject) => {
       const request = window.indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
@@ -14,7 +14,13 @@ function openDatabase() {
         if (!database.objectStoreNames.contains('documents')) database.createObjectStore('documents', { keyPath: 'key' });
         if (!database.objectStoreNames.contains('progress')) database.createObjectStore('progress', { keyPath: 'key' });
       };
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        const database = request.result;
+        // Drop the cached handle if the browser closes it or another tab upgrades the schema.
+        database.onversionchange = () => { database.close(); databasePromise = null; };
+        database.onclose = () => { databasePromise = null; };
+        resolve(database);
+      };
       request.onerror = () => reject(request.error || new Error('Could not open local PDF storage.'));
       request.onblocked = () => reject(new Error('Local PDF storage is busy in another tab. Close the other app tab and try again.'));
     }).catch(error => {

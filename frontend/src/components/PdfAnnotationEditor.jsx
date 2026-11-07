@@ -3,6 +3,12 @@ import { Arrow, Check, Ellipse, Eraser, Group, Highlighter, Line, MaskEllipse, M
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const HISTORY_LIMIT = 40;
+// crypto.randomUUID is unavailable on non-secure origins (e.g. http://LAN-ip dev on an iPad).
+const makeId = () => (globalThis.crypto?.randomUUID?.() ?? `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
+const withCurrentLabels = (snapshotMasks, currentMasks) => snapshotMasks.map(mask => {
+  const current = currentMasks.find(item => item.id === mask.id);
+  return current ? { ...mask, label: current.label } : mask;
+});
 const TOOL_ITEMS = [
   ['select', 'Select'], ['pen', 'Pen'], ['marker', 'Marker'], ['line', 'Line'], ['arrow', 'Arrow'],
   ['rectangle', 'Box'], ['ellipse', 'Oval'], ['text', 'Text'], ['eraser', 'Erase'],
@@ -106,13 +112,13 @@ export default function PdfAnnotationEditor({ snip, onClose, onSave, initialTool
   const undo = () => {
     if (historyIndex <= 0) return;
     const index = historyIndex - 1; setHistoryIndex(index);
-    setAnnotations(history[index].annotations); setMasks(history[index].masks);
+    setAnnotations(history[index].annotations); setMasks(withCurrentLabels(history[index].masks, masks));
     setSelectedAnnotations([]); setSelectedMasks([]);
   };
   const redo = () => {
     if (historyIndex >= history.length - 1) return;
     const index = historyIndex + 1; setHistoryIndex(index);
-    setAnnotations(history[index].annotations); setMasks(history[index].masks);
+    setAnnotations(history[index].annotations); setMasks(withCurrentLabels(history[index].masks, masks));
     setSelectedAnnotations([]); setSelectedMasks([]);
   };
 
@@ -124,7 +130,7 @@ export default function PdfAnnotationEditor({ snip, onClose, onSave, initialTool
   const addMask = shape => {
     const width = snip.width, height = snip.height;
     const mask = {
-      id: crypto.randomUUID(), shape: shape.kind,
+      id: makeId(), shape: shape.kind,
       x: clamp(Math.min(shape.from.x, shape.to.x) / width, 0, 1),
       y: clamp(Math.min(shape.from.y, shape.to.y) / height, 0, 1),
       width: clamp(Math.abs(shape.to.x - shape.from.x) / width, 0, 1),
@@ -145,12 +151,14 @@ export default function PdfAnnotationEditor({ snip, onClose, onSave, initialTool
   };
 
   const addAnnotation = mark => {
-    const next = [...annotations, { ...mark, id: crypto.randomUUID() }];
+    const next = [...annotations, { ...mark, id: makeId() }];
     setAnnotations(next); setSelectedAnnotations([]); setSelectedMasks([]); remember(next, masks);
   };
 
   const onPointerDown = event => {
     if (tool === 'select') return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (gestureRef.current) return; // ignore a second finger while a stroke is active
     const point = pointerPosition(event);
     if (tool === 'mask-polygon') {
       const next = [...polygonPoints, point];
@@ -170,7 +178,7 @@ export default function PdfAnnotationEditor({ snip, onClose, onSave, initialTool
 
   const onPointerMove = event => {
     const gesture = gestureRef.current;
-    if (!gesture) return;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
     const point = pointerPosition(event);
     gesture.to = point;
     if (tool === 'pen' || tool === 'marker' || tool === 'eraser') gesture.points.push(point);
@@ -181,9 +189,10 @@ export default function PdfAnnotationEditor({ snip, onClose, onSave, initialTool
   const onPointerUp = event => {
     const gesture = gestureRef.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
-    const to = gesture.to || pointerPosition(event);
+    const to = event.type === 'pointercancel' ? gesture.to : pointerPosition(event);
     gestureRef.current = null;
     cancelAnimationFrame(draftFrameRef.current); draftFrameRef.current = 0; pendingDraftRef.current = null; setDraft(null);
+    if (event.type === 'pointercancel') return; // browser took over the touch (scroll/system gesture): discard
     if (tool === 'mask-rect' || tool === 'mask-ellipse') {
       addMask({ kind: tool === 'mask-ellipse' ? 'ellipse' : 'rect', from: gesture.from, to }); return;
     }
@@ -197,6 +206,8 @@ export default function PdfAnnotationEditor({ snip, onClose, onSave, initialTool
       if (keep.length !== annotations.length) { setAnnotations(keep); setSelectedAnnotations([]); remember(keep, masks); }
       return;
     }
+    const isShapeTool = ['line', 'arrow', 'rectangle', 'ellipse'].includes(tool);
+    if (isShapeTool && Math.hypot(to.x - gesture.from.x, to.y - gesture.from.y) < 2) return; // ignore accidental taps
     const mark = { type: tool, from: gesture.from, to, points: gesture.points, color, size: brushSize };
     if (tool === 'pen' || tool === 'marker') mark.points = gesture.points;
     addAnnotation(mark);
@@ -219,7 +230,7 @@ export default function PdfAnnotationEditor({ snip, onClose, onSave, initialTool
   };
   const groupSelected = () => {
     if (selectedMasks.length < 2) return;
-    const group = crypto.randomUUID();
+    const group = makeId();
     const next = masks.map(mask => selectedMasks.includes(mask.id) ? { ...mask, group } : mask);
     setMasks(next); remember(annotations, next);
   };
@@ -237,7 +248,7 @@ export default function PdfAnnotationEditor({ snip, onClose, onSave, initialTool
     const context = output.getContext('2d'); context.drawImage(image, 0, 0, output.width, output.height);
     const scaleX = output.width / snip.width, scaleY = output.height / snip.height;
     annotations.forEach(mark => drawMark(context, mark, scaleX, scaleY));
-    onSave({ ...snip, image: output.toDataURL('image/jpeg', .93), width: output.width, height: output.height, masks, mode, id: crypto.randomUUID() });
+    onSave({ ...snip, image: output.toDataURL('image/jpeg', .93), width: output.width, height: output.height, masks, mode, id: makeId() });
   };
   keyboardActionsRef.current = { finish, redo, removeSelected, undo };
 

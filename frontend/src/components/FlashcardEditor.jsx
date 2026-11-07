@@ -68,6 +68,15 @@ const colorClozeContent = (html, color) => {
     });
 }
 
+const makeId = () => (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+  ? crypto.randomUUID()
+  : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
+
+// contentEditable leaves things like "<br>" behind when emptied; treat those as blank.
+const isBlankHtml = (html) => !html || (!/<img\b/i.test(html) && html.replace(/<[^>]*>/g, '').replace(/&nbsp;|\s/gi, '').length === 0);
+const normalizeHtml = (html) => (isBlankHtml(html) ? '' : html.trim());
+const escapeHtmlAttr = (text) => String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 function OcclusionPreview({ image, masks, imageWidth = 720, mode = 'hide-all', cardIndex = 0, answerSide = false }) {
   const [dimensions, setDimensions] = useState(null);
   const groups = [...new Set(masks.map((mask, index) => String(mask.group || mask.id || `mask-${index + 1}`)))];
@@ -101,7 +110,7 @@ function OcclusionPreview({ image, masks, imageWidth = 720, mode = 'hide-all', c
             const y = mask.y * dimensions.height;
             const width = mask.width * dimensions.width;
             const height = mask.height * dimensions.height;
-            const common = {
+            const { key: maskKey, ...common } = {
               key: mask.id || index,
               fill: isQuestionMask ? '#ff8e8e' : '#ffeba2',
               stroke: isQuestionMask ? '#b94d4d' : '#b89a3a',
@@ -110,12 +119,12 @@ function OcclusionPreview({ image, masks, imageWidth = 720, mode = 'hide-all', c
               vectorEffect: 'non-scaling-stroke',
             };
             if (mask.shape === 'polygon' && mask.points?.length >= 3) {
-              return <polygon {...common} points={mask.points.map(point => `${point.x * dimensions.width},${point.y * dimensions.height}`).join(' ')} />;
+              return <polygon key={maskKey} {...common} points={mask.points.map(point => `${point.x * dimensions.width},${point.y * dimensions.height}`).join(' ')} />;
             }
             if (mask.shape === 'ellipse') {
-              return <ellipse {...common} cx={x + width / 2} cy={y + height / 2} rx={width / 2} ry={height / 2} />;
+              return <ellipse key={maskKey} {...common} cx={x + width / 2} cy={y + height / 2} rx={width / 2} ry={height / 2} />;
             }
-            return <rect {...common} x={x} y={y} width={width} height={height} />;
+            return <rect key={maskKey} {...common} x={x} y={y} width={width} height={height} />;
           })}
         </svg>
       )}
@@ -469,10 +478,14 @@ export default function FlashcardEditor() {
   const frontSaveTimerRef = useRef(null);
   const backSaveTimerRef = useRef(null);
 
+  const pendingSavesRef = useRef({});
+  const isLoadedRef = useRef(false);
   const saveLocal = useCallback((key, value) => {
     window.clearTimeout(storageTimersRef.current[key]);
     setSaveStatus('Saving');
+    pendingSavesRef.current[key] = value;
     storageTimersRef.current[key] = window.setTimeout(() => {
+      delete pendingSavesRef.current[key];
       try {
         localStorage.setItem(key, typeof value === 'function' ? value() : value);
         setSaveStatus('Saved');
@@ -481,6 +494,22 @@ export default function FlashcardEditor() {
         setSaveStatus('Storage full');
       }
     }, 260);
+  }, []);
+
+  // Flush debounced saves when the page is hidden/closed so a quick refresh does not lose work.
+  useEffect(() => {
+    const flush = () => {
+      if (!isLoadedRef.current) return;
+      const pending = { ...pendingSavesRef.current };
+      if (frontRef.current) pending[FRONT_LS_KEY] = cleanColorSpans(frontRef.current.innerHTML);
+      if (backRef.current) pending[FRONT_LS_KEY + '_back'] = backRef.current.innerHTML;
+      Object.entries(pending).forEach(([key, value]) => {
+        try { localStorage.setItem(key, typeof value === 'function' ? value() : value); } catch { /* storage unavailable */ }
+      });
+      pendingSavesRef.current = {};
+    };
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
   }, []);
 
   useEffect(() => () => {
@@ -498,7 +527,8 @@ export default function FlashcardEditor() {
           saveLocal(FRONT_LS_KEY, cleanColorSpans(content));
           if (commit) {
             setFront(cleanColorSpans(content));
-            if (cardType === 'Cloze') frontRef.current.innerHTML = colorClozeContent(content, clozeColor);
+            // Never rewrite the DOM while the user is typing: it would reset the caret.
+            if (cardType === 'Cloze' && document.activeElement !== frontRef.current) frontRef.current.innerHTML = colorClozeContent(content, clozeColor);
           }
       }
   }, [saveLocal, cardType, clozeColor]);
@@ -529,8 +559,8 @@ export default function FlashcardEditor() {
   };
 
   const updateCard = useCallback(() => {
-      const finalFront = frontRef.current ? frontRef.current.innerHTML.trim() : front.trim();
-      const finalBack = backRef.current ? backRef.current.innerHTML.trim() : back.trim();
+      const finalFront = normalizeHtml(frontRef.current ? frontRef.current.innerHTML : front);
+      const finalBack = normalizeHtml(backRef.current ? backRef.current.innerHTML : back);
       const finalOcclusionImage = occlusionImage || frontRef.current?.querySelector('img')?.src || null;
 
       if (cardType === 'Image Occlusion' && !finalOcclusionImage) {
@@ -573,13 +603,24 @@ export default function FlashcardEditor() {
   const deleteCard = (indexToDelete) => {
       if (window.confirm(`Are you sure you want to delete Card #${cards.length - indexToDelete}?`)) {
           setCards(prevCards => prevCards.filter((_, i) => i !== indexToDelete));
+          // Keep the card being edited in sync with the shifted list.
+          if (editingIndex !== null) {
+              if (editingIndex === indexToDelete) {
+                  setEditingIndex(null);
+                  setFront(""); setBack(""); setCurrentTags([]);
+                  if (frontRef.current) frontRef.current.innerHTML = '';
+                  if (backRef.current) backRef.current.innerHTML = '';
+              } else if (editingIndex > indexToDelete) {
+                  setEditingIndex(editingIndex - 1);
+              }
+          }
       }
   };
 
 
   const addCard = useCallback(() => {
-    const finalFront = frontRef.current ? frontRef.current.innerHTML.trim() : front.trim();
-    const finalBack = backRef.current ? backRef.current.innerHTML.trim() : back.trim();
+    const finalFront = normalizeHtml(frontRef.current ? frontRef.current.innerHTML : front);
+    const finalBack = normalizeHtml(backRef.current ? backRef.current.innerHTML : back);
 
     if (cardType === 'Image Occlusion') {
       const finalOcclusionImage = occlusionImage || frontRef.current?.querySelector('img')?.src || null;
@@ -634,7 +675,7 @@ export default function FlashcardEditor() {
         created: new Date().toLocaleTimeString()
     };
 
-    setCards([newCard, ...cards]);
+    setCards(prev => [newCard, ...prev]);
 
     window.clearTimeout(frontSaveTimerRef.current); window.clearTimeout(backSaveTimerRef.current);
     setFront("");
@@ -645,7 +686,7 @@ export default function FlashcardEditor() {
     if (frontRef.current) frontRef.current.innerHTML = '';
     if (backRef.current) backRef.current.innerHTML = '';
 
-  }, [cardType, front, back, currentTags, cards, editingIndex, updateCard, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode]);
+  }, [cardType, front, back, currentTags, editingIndex, updateCard, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode]);
 
 
   const exportDeck = useCallback(async () => {
@@ -754,13 +795,15 @@ export default function FlashcardEditor() {
       setOcclusionImage(null); setOcclusionMasks([]);
     }
 
-    const displayFront = card.type === 'Cloze' ? colorClozeContent(card.question, clozeColor) : card.question;
-    setFront(card.question);
-    setBack(card.answer);
-    setCurrentTags(card.tags);
+    const question = card.question || '';
+    const answer = card.answer || '';
+    const displayFront = card.type === 'Cloze' ? colorClozeContent(question, clozeColor) : question;
+    setFront(question);
+    setBack(answer);
+    setCurrentTags(card.tags || []);
 
     if (frontRef.current) frontRef.current.innerHTML = displayFront;
-    if (backRef.current) backRef.current.innerHTML = card.answer;
+    if (backRef.current) backRef.current.innerHTML = answer;
   };
 
   const deleteGlobalTag = (tagToDelete) => {
@@ -776,7 +819,7 @@ export default function FlashcardEditor() {
     setCurrentTags(currentTags.filter(t => t !== tagToDelete));
     setCards(prevCards => prevCards.map(card => ({
         ...card,
-        tags: card.tags.filter(t => t !== tagToDelete)
+        tags: (card.tags || []).filter(t => t !== tagToDelete)
     })));
   };
 
@@ -802,7 +845,7 @@ export default function FlashcardEditor() {
     
     setCards(prevCards => prevCards.map(card => ({
         ...card,
-        tags: card.tags.map(t => t === oldTag ? trimmedNewTag : t)
+        tags: (card.tags || []).map(t => t === oldTag ? trimmedNewTag : t)
     })));
 
     setCurrentTags(currentTags.map(t => t === oldTag ? trimmedNewTag : t));
@@ -824,8 +867,34 @@ export default function FlashcardEditor() {
     }
   }, [front, activeClozeId, cardType]);
 
+  // The front editor is unmounted while in Image Occlusion mode; refill it when it comes back
+  // (e.g. editing a Basic/Cloze card while the form was in Image Occlusion mode).
+  useEffect(() => {
+    if (cardType === 'Image Occlusion' || !contentInitialized) return;
+    const editor = frontRef.current;
+    if (editor && isBlankHtml(editor.innerHTML) && front) {
+      editor.innerHTML = cardType === 'Cloze' ? colorClozeContent(front, clozeColor) : front;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardType, contentInitialized, editingIndex]);
+
+  useEffect(() => {
+    if (!occlusionEditorOpen && !showPreview && !showCardBrowser && !showLinkModal && !showColorPicker) return undefined;
+    const onEscape = (e) => {
+      if (e.key !== 'Escape') return;
+      if (showLinkModal) setShowLinkModal(false);
+      else if (showColorPicker) { setShowColorPicker(false); setColorPickerTarget(null); }
+      else if (showCardBrowser) setShowCardBrowser(false);
+      else if (showPreview) setShowPreview(false);
+      else if (occlusionEditorOpen) setOcclusionEditorOpen(false);
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [occlusionEditorOpen, showPreview, showCardBrowser, showLinkModal, showColorPicker]);
+
   useEffect(() => {
     const handleKeyDown = (e) => {
+      if (!e.key) return;
       if ((e.key === 'Control' || e.metaKey) && !isCtrlPressed) {
         setIsCtrlPressed(true);
         if (activeClozeId === null) {
@@ -863,12 +932,17 @@ export default function FlashcardEditor() {
       }
     };
 
+    // keyup is never delivered if the window loses focus while Ctrl/Cmd is held (alt-tab).
+    const handleBlur = () => { setIsCtrlPressed(false); setActiveClozeId(null); };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
     };
   }, [isCtrlPressed, front, activeClozeId, addCard, exportDeck]);
 
@@ -882,7 +956,8 @@ export default function FlashcardEditor() {
 
 
       setDeckName(state.deck || initialDecks[0]);
-      const initialCardType = state.cardType || "Basic";
+      // Occlusion image/masks are not persisted, so an empty Image Occlusion form would be a dead end.
+      const initialCardType = state.cardType && state.cardType !== 'Image Occlusion' ? state.cardType : "Basic";
       setCardType(initialCardType);
       setCards(state.cards || []);
       setCurrentTags(state.tags || []);
@@ -917,6 +992,7 @@ export default function FlashcardEditor() {
         backRef.current.innerHTML = backContent || "";
       }
 
+      isLoadedRef.current = true;
       setIsLoaded(true);
       setContentInitialized(true);
 
@@ -924,6 +1000,7 @@ export default function FlashcardEditor() {
 
     } catch (e) {
       console.error("Could not load state from localStorage", e);
+      isLoadedRef.current = true;
       setIsLoaded(true);
       setContentInitialized(true);
     }
@@ -953,12 +1030,12 @@ export default function FlashcardEditor() {
 
   useEffect(() => {
     if (!isLoaded) return;
-    localStorage.setItem(CLOZE_COLOR_LS_KEY, clozeColor);
+    try { localStorage.setItem(CLOZE_COLOR_LS_KEY, clozeColor); } catch { /* storage unavailable */ }
   }, [isLoaded, clozeColor]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    localStorage.setItem(BASIC_COLORS_LS_KEY, JSON.stringify(basicColorPresets));
+    try { localStorage.setItem(BASIC_COLORS_LS_KEY, JSON.stringify(basicColorPresets)); } catch { /* storage unavailable */ }
   }, [isLoaded, basicColorPresets]);
 
   const getFilteredSuggestions = () => {
@@ -1012,10 +1089,10 @@ export default function FlashcardEditor() {
       }
     }
 
-    if (e.key === 'Tab') {
-      e.preventDefault();
+    if (e.key === 'Tab' && !e.shiftKey) {
       const trimmedInput = tagInput.trim();
       if (trimmedInput.length > 0 && !trimmedInput.endsWith('::')) {
+        e.preventDefault();
         setTagInput(trimmedInput + '::');
         setShowTagSuggestions(true);
         setTagSuggestionIndex(-1);
@@ -1109,7 +1186,7 @@ export default function FlashcardEditor() {
         currentSelection.removeAllRanges();
         currentSelection.addRange(endRange);
       }
-      const tempImgId = `pasted-img-${crypto.randomUUID()}`;
+      const tempImgId = `pasted-img-${makeId()}`;
       const imgHtml = `<img id="${tempImgId}" src="${reader.result}" alt="Pasted image" style="display:inline-block;max-width:${BASE_IMAGE_WIDTH}px;height:auto;vertical-align:middle;">&nbsp;`;
       document.execCommand('insertHTML', false, imgHtml);
       const newImage = editor.querySelector(`#${tempImgId}`);
@@ -1306,6 +1383,27 @@ export default function FlashcardEditor() {
       });
   };
 
+  // Touch devices (iPad/iPhone) move selection handles without firing mouseup/keyup, so
+  // track selection changes directly to keep the toolbar's saved range and size controls current.
+  const selectionHandlerRef = useRef(null);
+  selectionHandlerRef.current = handleSelectionChange;
+  useEffect(() => {
+    const onSelectionChange = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+      const range = selection.getRangeAt(0);
+      const editor = [frontRef.current, backRef.current].find(node => node && node.contains(range.commonAncestorContainer));
+      if (!editor) return;
+      // Leave image selections to the click handler (it owns the image resize context).
+      const startNode = range.startContainer;
+      if (startNode === range.endContainer && range.endOffset - range.startOffset === 1 && startNode.childNodes?.[range.startOffset]?.nodeName === 'IMG') return;
+      if (selection.isCollapsed) { savedRangeRef.current = range.cloneRange(); return; }
+      selectionHandlerRef.current?.({ currentTarget: editor, target: editor });
+    };
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => document.removeEventListener('selectionchange', onSelectionChange);
+  }, []);
+
   const resizeContent = (delta) => {
       if (!selectionContext || !savedRangeRef.current) return;
 
@@ -1358,8 +1456,8 @@ export default function FlashcardEditor() {
 
           document.execCommand('insertHTML', false, finalHtml);
           
-          const parent = range.commonAncestorContainer;
-          const newSpan = Array.from(parent.querySelectorAll(`span[style*="font-size: ${newPxSize}px"]`)).pop();
+          // commonAncestorContainer may be a text node (no querySelectorAll); search the editor instead.
+          const newSpan = Array.from(targetRef.current.querySelectorAll(`span[style*="font-size: ${newPxSize}px"]`)).pop();
           
           if(newSpan){
               const newRange = document.createRange();
@@ -1384,7 +1482,15 @@ export default function FlashcardEditor() {
 
     restoreSavedSelection(targetRef);
     const selection = window.getSelection();
-    const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : document.createRange();
+    let range = selection.rangeCount > 0 ? selection.getRangeAt(0) : document.createRange();
+    if (!targetRef.current.contains(range.commonAncestorContainer)) {
+      // Selection is outside the editor (or missing): insert at the end of the editor instead.
+      range = document.createRange();
+      range.selectNodeContents(targetRef.current);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
   
     const selectedText = selection.toString().trim();
     const placeholderText = selectedText || 'text';
@@ -1440,7 +1546,7 @@ export default function FlashcardEditor() {
     restoreSavedSelection(linkTargetRef);
 
     const cleanUrl = url.trim().replace(/^https?:\/\//i, '');
-    const linkHtml = `<a href="https://${cleanUrl}" style="color: ${ANKI_LINK_COLOR};">(${heading})</a>`;
+    const linkHtml = `<a href="https://${escapeHtmlAttr(cleanUrl)}" style="color: ${ANKI_LINK_COLOR};">(${escapeHtmlAttr(heading.trim())})</a>`;
 
     document.execCommand('insertHTML', false, linkHtml);
     document.execCommand('insertHTML', false, '&nbsp;');
@@ -1593,15 +1699,18 @@ export default function FlashcardEditor() {
 
   const manualMaskPoint = (event) => {
     const rect = (event.currentTarget.querySelector('img') || event.currentTarget).getBoundingClientRect();
-    return { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) };
+    const w = rect.width || 1, h = rect.height || 1;
+    return { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / w)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / h)) };
   };
+  // A cancelled pointer (e.g. the browser took over for scrolling) must not create a mask.
+  const cancelManualMask = () => { manualMaskStartRef.current = null; setManualMaskPreview(null); };
   const finishManualMask = (event) => {
     const start = manualMaskStartRef.current;
     if (!start) return;
     const end = manualMaskPoint(event); manualMaskStartRef.current = null; setManualMaskPreview(null);
     const x = Math.min(start.x, end.x), y = Math.min(start.y, end.y), width = Math.abs(end.x - start.x), height = Math.abs(end.y - start.y);
     if (width < .01 || height < .01) return;
-    setOcclusionMasks(prev => [...prev, { id: crypto.randomUUID(), shape: 'rect', x, y, width, height, points: [], label: '', group: null }]);
+    setOcclusionMasks(prev => [...prev, { id: makeId(), shape: 'rect', x, y, width, height, points: [], label: '', group: null }]);
   };
   const beginImageResize = (event, direction) => {
     event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId);
@@ -1769,12 +1878,12 @@ export default function FlashcardEditor() {
             {cardType === 'Image Occlusion' && <section className="io-source-card" data-editor-drop-target="front" tabIndex={0} aria-label="Image occlusion source image. Focus here and paste an image, or choose one." onPaste={pasteImageIntoOcclusion} onDragOver={e => e.preventDefault()} onDrop={e => handleSnippetDrop(e, 'front')}>
               <div className="io-source-heading"><div><span className="section-eyebrow">IMAGE OCCLUSION</span><h3>Choose an image, then add masks</h3></div><div className="io-source-actions">{occlusionImage && <><div className="io-region-count"><strong>{occlusionMasks.length}</strong><span>regions</span></div><button className="quiet-button" type="button" onClick={() => setOcclusionEditorOpen(true)}>Open editor</button></>}<button className="quiet-button" type="button" onClick={() => openImagePicker(frontRef)}><Upload size={16} /> Choose image</button></div></div>
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, frontRef)} />
-              {!occlusionImage ? <div className="io-image-empty"><Crop size={22}/><span>Paste an image here, drop an occluded capture, or choose a file</span></div> : <div className="io-image-preview"><div className="io-mask-draw-area" onPointerDown={e => { if (e.target.closest('.manual-mask-remove')) return; e.currentTarget.setPointerCapture(e.pointerId); manualMaskStartRef.current = manualMaskPoint(e); setManualMaskPreview({ x: manualMaskStartRef.current.x, y: manualMaskStartRef.current.y, width: 0, height: 0 }); }} onPointerMove={e => { if (!manualMaskStartRef.current) return; const p = manualMaskPoint(e), s = manualMaskStartRef.current; setManualMaskPreview({ x: Math.min(s.x,p.x), y: Math.min(s.y,p.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }} onPointerUp={finishManualMask} onPointerCancel={finishManualMask}><img src={occlusionImage} alt="Image occlusion source" draggable="false"/>{occlusionMasks.map((mask,index) => <button type="button" className="manual-mask-remove" key={mask.id} title={`Remove region ${index+1}`} onPointerDown={e => e.stopPropagation()} onClick={() => setOcclusionMasks(prev => prev.filter(m => m.id !== mask.id))} style={{left:`${mask.x*100}%`,top:`${mask.y*100}%`,width:`${mask.width*100}%`,height:`${mask.height*100}%`,borderRadius:mask.shape === 'ellipse' ? '50%' : 0,clipPath:mask.shape === 'polygon' && mask.points?.length >= 3 ? `polygon(${mask.points.map(point => `${((point.x-mask.x)/Math.max(mask.width,.0001))*100}% ${((point.y-mask.y)/Math.max(mask.height,.0001))*100}%`).join(',')})` : undefined}}>{index+1} ×</button>)}{manualMaskPreview && <span className="manual-mask-draft" style={{left:`${manualMaskPreview.x*100}%`,top:`${manualMaskPreview.y*100}%`,width:`${manualMaskPreview.width*100}%`,height:`${manualMaskPreview.height*100}%`}}/>}</div><div><strong>{occlusionMasks.length} hidden region{occlusionMasks.length === 1 ? '' : 's'}</strong><span>Drag over image to add a mask; tap a mask to remove it.</span></div></div>}
+              {!occlusionImage ? <div className="io-image-empty"><Crop size={22}/><span>Paste an image here, drop an occluded capture, or choose a file</span></div> : <div className="io-image-preview"><div className="io-mask-draw-area" onPointerDown={e => { if (e.target.closest('.manual-mask-remove')) return; e.currentTarget.setPointerCapture(e.pointerId); manualMaskStartRef.current = manualMaskPoint(e); setManualMaskPreview({ x: manualMaskStartRef.current.x, y: manualMaskStartRef.current.y, width: 0, height: 0 }); }} onPointerMove={e => { if (!manualMaskStartRef.current) return; const p = manualMaskPoint(e), s = manualMaskStartRef.current; setManualMaskPreview({ x: Math.min(s.x,p.x), y: Math.min(s.y,p.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }} onPointerUp={finishManualMask} onPointerCancel={cancelManualMask}><img src={occlusionImage} alt="Image occlusion source" draggable="false"/>{occlusionMasks.map((mask,index) => <button type="button" className="manual-mask-remove" key={mask.id} title={`Remove region ${index+1}`} onPointerDown={e => e.stopPropagation()} onClick={() => setOcclusionMasks(prev => prev.filter(m => m.id !== mask.id))} style={{left:`${mask.x*100}%`,top:`${mask.y*100}%`,width:`${mask.width*100}%`,height:`${mask.height*100}%`,borderRadius:mask.shape === 'ellipse' ? '50%' : 0,clipPath:mask.shape === 'polygon' && mask.points?.length >= 3 ? `polygon(${mask.points.map(point => `${((point.x-mask.x)/Math.max(mask.width,.0001))*100}% ${((point.y-mask.y)/Math.max(mask.height,.0001))*100}%`).join(',')})` : undefined}}>{index+1} ×</button>)}{manualMaskPreview && <span className="manual-mask-draft" style={{left:`${manualMaskPreview.x*100}%`,top:`${manualMaskPreview.y*100}%`,width:`${manualMaskPreview.width*100}%`,height:`${manualMaskPreview.height*100}%`}}/>}</div><div><strong>{occlusionMasks.length} hidden region{occlusionMasks.length === 1 ? '' : 's'}</strong><span>Drag over image to add a mask; tap a mask to remove it.</span></div></div>}
               <p className="io-helper">Draw masks on a PDF capture, then drag it here. The source image and mask geometry stay attached to this card.</p>
               <label className="io-mode-select">Review mode <select value={occlusionMode} onChange={e => setOcclusionMode(e.target.value)}><option value="hide-all">Hide All, Guess One</option><option value="hide-one">Hide One, Guess One</option></select></label>
             </section>}
 
-            {cardType === 'Image Occlusion' && occlusionImage && occlusionEditorOpen && createPortal(<div className="io-editor-backdrop" role="dialog" aria-modal="true" aria-label="Image occlusion editor" onPointerDown={e => { if (e.target === e.currentTarget) setOcclusionEditorOpen(false); }}><section className="io-editor-dialog"><header className="io-editor-header"><div><span className="section-eyebrow">IMAGE OCCLUSION</span><h2>Arrange masks</h2></div><div className="io-editor-actions"><label>Image size <input aria-label="Image width" type="range" min="180" max="1800" step="10" value={occlusionImageWidth} onChange={e => setOcclusionImageWidth(Number(e.target.value))}/><span>{occlusionImageWidth}px</span></label><button type="button" className="quiet-button" onClick={() => setOcclusionEditorOpen(false)}>Done</button></div></header><div className="io-editor-stage"><div className="io-editor-resize-frame" style={{width:`min(${occlusionImageWidth}px, calc(100vw - 64px))`}}><div className="io-mask-draw-area io-editor-mask-area" onPointerDown={e => { if (e.target.closest('.manual-mask-remove,.io-resize-handle')) return; e.currentTarget.setPointerCapture(e.pointerId); manualMaskStartRef.current = manualMaskPoint(e); setManualMaskPreview({ x: manualMaskStartRef.current.x, y: manualMaskStartRef.current.y, width: 0, height: 0 }); }} onPointerMove={e => { if (!manualMaskStartRef.current) return; const p = manualMaskPoint(e), s = manualMaskStartRef.current; setManualMaskPreview({ x: Math.min(s.x,p.x), y: Math.min(s.y,p.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }} onPointerUp={finishManualMask} onPointerCancel={finishManualMask}><img src={occlusionImage} alt="Image occlusion source" draggable="false"/>{occlusionMasks.map((mask,index) => <button type="button" className="manual-mask-remove" key={mask.id} title={`Remove region ${index+1}`} onPointerDown={e => e.stopPropagation()} onClick={() => setOcclusionMasks(prev => prev.filter(m => m.id !== mask.id))} style={{left:`${mask.x*100}%`,top:`${mask.y*100}%`,width:`${mask.width*100}%`,height:`${mask.height*100}%`,borderRadius:mask.shape === 'ellipse' ? '50%' : 0}}>{index+1} ×</button>)}{manualMaskPreview && <span className="manual-mask-draft" style={{left:`${manualMaskPreview.x*100}%`,top:`${manualMaskPreview.y*100}%`,width:`${manualMaskPreview.width*100}%`,height:`${manualMaskPreview.height*100}%`}}/>}</div>{['n','ne','e','se','s','sw','w','nw'].map(direction => <button type="button" key={direction} aria-label={`Resize image ${direction}`} className={`io-resize-handle ${direction}`} onPointerDown={e => beginImageResize(e,direction)} onPointerMove={moveImageResize} onPointerUp={endImageResize} onPointerCancel={endImageResize}/>)}</div></div><footer className="io-editor-footer"><span>{occlusionMasks.length} hidden region{occlusionMasks.length === 1 ? '' : 's'} · Drag to add a mask, select a mask to remove it. Resize handles keep the image proportions.</span><button type="button" className="primary-button" onClick={() => setOcclusionEditorOpen(false)}>Done</button></footer></section></div>, document.body)}
+            {cardType === 'Image Occlusion' && occlusionImage && occlusionEditorOpen && createPortal(<div className="io-editor-backdrop" role="dialog" aria-modal="true" aria-label="Image occlusion editor" onPointerDown={e => { if (e.target === e.currentTarget) setOcclusionEditorOpen(false); }}><section className="io-editor-dialog"><header className="io-editor-header"><div><span className="section-eyebrow">IMAGE OCCLUSION</span><h2>Arrange masks</h2></div><div className="io-editor-actions"><label>Image size <input aria-label="Image width" type="range" min="180" max="1800" step="10" value={occlusionImageWidth} onChange={e => setOcclusionImageWidth(Number(e.target.value))}/><span>{occlusionImageWidth}px</span></label><button type="button" className="quiet-button" onClick={() => setOcclusionEditorOpen(false)}>Done</button></div></header><div className="io-editor-stage"><div className="io-editor-resize-frame" style={{width:`min(${occlusionImageWidth}px, calc(100vw - 64px))`}}><div className="io-mask-draw-area io-editor-mask-area" onPointerDown={e => { if (e.target.closest('.manual-mask-remove,.io-resize-handle')) return; e.currentTarget.setPointerCapture(e.pointerId); manualMaskStartRef.current = manualMaskPoint(e); setManualMaskPreview({ x: manualMaskStartRef.current.x, y: manualMaskStartRef.current.y, width: 0, height: 0 }); }} onPointerMove={e => { if (!manualMaskStartRef.current) return; const p = manualMaskPoint(e), s = manualMaskStartRef.current; setManualMaskPreview({ x: Math.min(s.x,p.x), y: Math.min(s.y,p.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }} onPointerUp={finishManualMask} onPointerCancel={cancelManualMask}><img src={occlusionImage} alt="Image occlusion source" draggable="false"/>{occlusionMasks.map((mask,index) => <button type="button" className="manual-mask-remove" key={mask.id} title={`Remove region ${index+1}`} onPointerDown={e => e.stopPropagation()} onClick={() => setOcclusionMasks(prev => prev.filter(m => m.id !== mask.id))} style={{left:`${mask.x*100}%`,top:`${mask.y*100}%`,width:`${mask.width*100}%`,height:`${mask.height*100}%`,borderRadius:mask.shape === 'ellipse' ? '50%' : 0}}>{index+1} ×</button>)}{manualMaskPreview && <span className="manual-mask-draft" style={{left:`${manualMaskPreview.x*100}%`,top:`${manualMaskPreview.y*100}%`,width:`${manualMaskPreview.width*100}%`,height:`${manualMaskPreview.height*100}%`}}/>}</div>{['n','ne','e','se','s','sw','w','nw'].map(direction => <button type="button" key={direction} aria-label={`Resize image ${direction}`} className={`io-resize-handle ${direction}`} onPointerDown={e => beginImageResize(e,direction)} onPointerMove={moveImageResize} onPointerUp={endImageResize} onPointerCancel={endImageResize}/>)}</div></div><footer className="io-editor-footer"><span>{occlusionMasks.length} hidden region{occlusionMasks.length === 1 ? '' : 's'} · Drag to add a mask, select a mask to remove it. Resize handles keep the image proportions.</span><button type="button" className="primary-button" onClick={() => setOcclusionEditorOpen(false)}>Done</button></footer></section></div>, document.body)}
 
             {cardType !== 'Image Occlusion' && <section className="space-y-2 mb-4">
               <h3 className="text-sm font-medium block mb-1">
@@ -1890,7 +1999,7 @@ export default function FlashcardEditor() {
                     </button>
                     {editingIndex !== null && (
                          <button
-                            onClick={() => { setEditingIndex(null); setFront(""); setBack(""); setCurrentTags([]); if(frontRef.current) frontRef.current.innerHTML = ""; if(backRef.current) backRef.current.innerHTML = ""; }}
+                            onClick={() => { setEditingIndex(null); setFormMessage(''); setFront(""); setBack(""); setCurrentTags([]); if (cardType === 'Image Occlusion') { setCardType(previousCardTypeRef.current); setOcclusionImage(null); setOcclusionMasks([]); } if(frontRef.current) frontRef.current.innerHTML = ""; if(backRef.current) backRef.current.innerHTML = ""; }}
                             className="secondary-button"
                         >
                             Cancel Edit

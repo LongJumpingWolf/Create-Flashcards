@@ -15,6 +15,9 @@ if (typeof Promise.withResolvers !== 'function') {
 }
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const MIN_ZOOM = .55;
+const MAX_ZOOM = 3.5;
+const VIEW_PAD = 14;
 const MAX_CANVAS_PIXELS = 12_000_000;
 const RANGE_CHUNK_SIZE = 256 * 1024;
 const INSERT_PROMPT_STYLE = {
@@ -50,9 +53,9 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
   const highQualityPageRef = useRef(null);
   const loadTokenRef = useRef(0);
   const zoomRef = useRef(1);
-  const zoomGestureRef = useRef(null);
-  const zoomCommitTimerRef = useRef(null);
-  const pdfPanRef = useRef({ x: 0, y: 0 });
+  const viewRef = useRef({ x: 0, y: 0, s: 1 });
+  const renderedZoomRef = useRef(1);
+  const needsPlaceRef = useRef(true);
   const pdfInteractionActiveRef = useRef(false);
   const captureIntentRef = useRef('normal');
   const snipTouchStartRef = useRef(null);
@@ -64,6 +67,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
   const [pdfName, setPdfName] = useState('');
   const [pdfDoc, setPdfDoc] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
+  const [pageDraft, setPageDraft] = useState(null);
   const [pageWidth, setPageWidth] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [snipping, setSnipping] = useState(false);
@@ -81,37 +85,60 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
   const [pdfMemoryStatus, setPdfMemoryStatus] = useState('idle');
 
   zoomRef.current = zoom;
+  useEffect(() => { setPageDraft(null); }, [pageNumber, pdfDoc]);
+  const commitPageDraft = () => {
+    if (pageDraft !== null && pageDraft !== '' && pdfDoc) setPageNumber(clamp(Number(pageDraft) || 1, 1, pdfDoc.numPages));
+    setPageDraft(null);
+  };
   const nativeDragEnabled = window.matchMedia?.('(pointer: fine)').matches ?? true;
 
-  const constrainPan = (pan) => {
-    const viewport = hostRef.current?.getBoundingClientRect();
-    const stage = pageStageRef.current;
-    if (!viewport || !stage) return pan;
-    const rect = stage.getBoundingClientRect();
-    const current = pdfPanRef.current;
-    const edge = 36;
-    const baseLeft = rect.left - current.x;
-    const baseTop = rect.top - current.y;
-    // When the page is larger than the viewport, constrain translation so
-    // its edges can travel across the whole viewing area. The old bounds only
-    // required a sliver of the page to remain visible, which made zoomed pages
-    // feel as if vertical panning had hit an invisible limit.
-    const minX = rect.width > viewport.width
-      ? viewport.right - edge - baseLeft - rect.width
-      : viewport.left - edge - baseLeft;
-    const maxX = rect.width > viewport.width
-      ? viewport.left + edge - baseLeft
-      : viewport.right + edge - baseLeft - rect.width;
-    const minY = rect.height > viewport.height
-      ? viewport.bottom - edge - baseTop - rect.height
-      : viewport.top - edge - baseTop;
-    const maxY = rect.height > viewport.height
-      ? viewport.top + edge - baseTop
-      : viewport.bottom + edge - baseTop - rect.height;
+  // The page layer is positioned entirely by `view` = { x, y, s }: a translation
+  // plus a live scale relative to the currently rendered canvas bitmap.
+  const applyView = (view) => {
+    viewRef.current = view;
+    const layer = pagePositionRef.current;
+    if (layer) layer.style.transform = `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.s})`;
+  };
+
+  // Hard clamp (no elasticity): a page smaller than the viewport stays centered,
+  // a larger one can pan edge-to-edge and never further.
+  const clampView = (view) => {
+    const host = hostRef.current;
+    const canvas = pageCanvasRef.current;
+    if (!host || !canvas) return view;
+    const hostWidth = host.clientWidth;
+    const hostHeight = host.clientHeight;
+    const width = canvas.offsetWidth * view.s;
+    const height = canvas.offsetHeight * view.s;
     return {
-      x: clamp(pan.x, minX, maxX),
-      y: clamp(pan.y, minY, maxY),
+      x: width + VIEW_PAD * 2 <= hostWidth ? (hostWidth - width) / 2 : clamp(view.x, hostWidth - width - VIEW_PAD, VIEW_PAD),
+      y: height + VIEW_PAD * 2 <= hostHeight ? VIEW_PAD : clamp(view.y, hostHeight - height - VIEW_PAD, VIEW_PAD),
+      s: view.s,
     };
+  };
+
+  const zoomAbout = (nextZoom, anchorX, anchorY) => {
+    const target = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+    const view = viewRef.current;
+    const ratio = target / (renderedZoomRef.current * view.s);
+    applyView(clampView({ x: anchorX - (anchorX - view.x) * ratio, y: anchorY - (anchorY - view.y) * ratio, s: view.s * ratio }));
+    return target;
+  };
+
+  const stepZoom = (delta) => {
+    const host = hostRef.current;
+    if (!host) return;
+    const target = zoomAbout(zoomRef.current + delta, host.clientWidth / 2, host.clientHeight / 2);
+    zoomRef.current = target;
+    setZoom(target);
+  };
+
+  const toCanvasPoint = (clientX, clientY) => {
+    const canvas = pageCanvasRef.current;
+    const bounds = canvas.getBoundingClientRect();
+    const scaleX = canvas.offsetWidth / Math.max(bounds.width, 1);
+    const scaleY = canvas.offsetHeight / Math.max(bounds.height, 1);
+    return { x: clamp((clientX - bounds.left) * scaleX, 0, canvas.offsetWidth), y: clamp((clientY - bounds.top) * scaleY, 0, canvas.offsetHeight) };
   };
 
   useEffect(() => {
@@ -119,7 +146,12 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
     if (!host) return;
     const observer = new ResizeObserver(entries => {
       const nextWidth = Math.floor(entries[0].contentRect.width);
-      setPageWidth(previous => Math.abs(previous - nextWidth) >= 2 ? nextWidth : previous);
+      setPageWidth(previous => {
+        if (Math.abs(previous - nextWidth) < 2) return previous;
+        needsPlaceRef.current = true;
+        return nextWidth;
+      });
+      applyView(clampView(viewRef.current));
     });
     observer.observe(host);
     return () => observer.disconnect();
@@ -176,10 +208,9 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
   }, [pdfDoc, pageNumber, zoom]);
 
   useEffect(() => {
-    pdfPanRef.current = { x: 0, y: 0 };
+    needsPlaceRef.current = true;
+    viewRef.current = { x: 0, y: 0, s: 1 };
     pagePositionRef.current?.style.removeProperty('transform');
-    pageStageRef.current?.style.removeProperty('transform');
-    pageStageRef.current?.style.removeProperty('transform-origin');
   }, [pdfDoc, pageNumber]);
 
   useEffect(() => () => {
@@ -197,10 +228,6 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
     let canceled = false;
     const render = async () => {
       if (!pdfDoc || !pageCanvasRef.current || pageWidth < 80) return;
-      const previousPage = displayedPageRef.current;
-      const previousStageRect = previousPage?.pageNumber === pageNumber
-        ? pageStageRef.current?.getBoundingClientRect()
-        : null;
       renderTaskRef.current?.cancel();
       setRendering(true);
       try {
@@ -232,27 +259,16 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
         canvas.style.height = `${viewport.height}px`;
         canvas.getContext('2d', { alpha: false }).drawImage(buffer, 0, 0);
         displayedPageRef.current = { pageNumber, viewport };
-        pageStageRef.current?.style.removeProperty('transform');
-        pageStageRef.current?.style.removeProperty('transform-origin');
-        pageStageRef.current?.style.removeProperty('will-change');
-        pagePositionRef.current?.style.removeProperty('will-change');
-        if (previousStageRect && pageStageRef.current && pagePositionRef.current) {
-          // Native horizontal overflow can retain an old scroll offset after a
-          // zoom resize. Clear it before measuring so centering is based on the
-          // visible viewport, not the prior scroll position.
-          if (hostRef.current) hostRef.current.scrollLeft = 0;
-          const nextRect = pageStageRef.current.getBoundingClientRect();
-          const currentPan = pdfPanRef.current;
-          const constrainedY = constrainPan({ x: currentPan.x, y: currentPan.y + previousStageRect.top - nextRect.top }).y;
-          // Keep horizontal position in one system. Combining scrollLeft with
-          // translateX caused phantom overflow and one-sided green gutters.
-          const adjustedPan = { x: 0, y: constrainedY };
-          pdfPanRef.current = adjustedPan;
-          pagePositionRef.current.style.transform = `translate3d(${adjustedPan.x}px, ${adjustedPan.y}px, 0)`;
-          if (hostRef.current) {
-            const horizontalOverflow = Math.max(0, hostRef.current.scrollWidth - hostRef.current.clientWidth);
-            hostRef.current.scrollLeft = horizontalOverflow / 2;
-          }
+        // Swap the bitmap and the view in the same frame so the page never jumps.
+        // The live pinch scale (relative to the old bitmap) folds into the new one.
+        const previousZoom = renderedZoomRef.current;
+        renderedZoomRef.current = zoom;
+        if (needsPlaceRef.current) {
+          needsPlaceRef.current = false;
+          applyView(clampView({ x: ((hostRef.current?.clientWidth || 0) - canvas.offsetWidth) / 2, y: VIEW_PAD, s: 1 }));
+        } else {
+          const view = viewRef.current;
+          applyView(clampView({ ...view, s: view.s * previousZoom / zoom }));
         }
       } catch (err) {
         if (err?.name !== 'RenderingCancelledException' && !canceled) setError(`Could not render this page: ${err.message}`);
@@ -270,101 +286,138 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    if (!host) return undefined;
+    // One unified, JS-driven viewer: the host never scrolls natively, so iOS /
+    // iPadOS cannot rubber-band it. Every pan is hard-clamped to the page edges.
+    let pinch = null;
+    let pan = null;
+    let mouseDrag = null;
+    let wheelTimer = null;
+    let inertiaFrame = 0;
 
-    const previewZoom = (gesture, nextZoom) => {
-      gesture.nextZoom = clamp(nextZoom, .55, 2.2);
-      const stage = pageStageRef.current;
-      if (!stage) return;
-      stage.style.willChange = 'transform';
-      stage.style.transformOrigin = `${gesture.originX}px ${gesture.originY}px`;
-      stage.style.transform = `scale(${gesture.nextZoom / gesture.startZoom})`;
+    const stopInertia = () => { if (inertiaFrame) cancelAnimationFrame(inertiaFrame); inertiaFrame = 0; };
+    const hostPoint = (clientX, clientY) => {
+      const bounds = host.getBoundingClientRect();
+      return { x: clientX - bounds.left, y: clientY - bounds.top };
     };
-
     const commitZoom = () => {
-      const gesture = zoomGestureRef.current;
-      if (!gesture) return;
-      zoomGestureRef.current = null;
-      if (zoomCommitTimerRef.current) clearTimeout(zoomCommitTimerRef.current);
-      zoomCommitTimerRef.current = null;
-      if (Math.abs(gesture.nextZoom - gesture.startZoom) > .01) {
-        zoomRef.current = gesture.nextZoom;
-        setZoom(gesture.nextZoom);
-      } else {
-        pageStageRef.current?.style.removeProperty('transform');
-        pageStageRef.current?.style.removeProperty('transform-origin');
-        pageStageRef.current?.style.removeProperty('will-change');
-        pagePositionRef.current?.style.removeProperty('will-change');
-      }
+      const view = viewRef.current;
+      const target = clamp(renderedZoomRef.current * view.s, MIN_ZOOM, MAX_ZOOM);
+      if (Math.abs(target - zoomRef.current) > .005) { zoomRef.current = target; setZoom(target); }
+    };
+    const beginPan = (touch) => {
+      pan = { x: touch.clientX, y: touch.clientY, view: { ...viewRef.current }, samples: [{ t: performance.now(), x: touch.clientX, y: touch.clientY }] };
+    };
+    const startInertia = (samples) => {
+      const now = performance.now();
+      const recent = samples.filter(sample => now - sample.t < 110);
+      if (recent.length < 2) return;
+      const first = recent[0];
+      const last = recent[recent.length - 1];
+      const elapsed = Math.max(last.t - first.t, 1);
+      let vx = (last.x - first.x) / elapsed;
+      let vy = (last.y - first.y) / elapsed;
+      if (now - last.t > 70 || Math.hypot(vx, vy) < .12) return;
+      let previous = now;
+      const step = (time) => {
+        const dt = Math.min(48, time - previous);
+        previous = time;
+        const view = viewRef.current;
+        const wanted = { x: view.x + vx * dt, y: view.y + vy * dt, s: view.s };
+        const next = clampView(wanted);
+        if (next.x !== wanted.x) vx = 0;
+        if (next.y !== wanted.y) vy = 0;
+        applyView(next);
+        const friction = Math.exp(-dt / 240);
+        vx *= friction; vy *= friction;
+        inertiaFrame = Math.hypot(vx, vy) > .02 ? requestAnimationFrame(step) : 0;
+      };
+      inertiaFrame = requestAnimationFrame(step);
     };
 
     const onTouchStart = (event) => {
-      if (event.touches.length !== 2 || !pageStageRef.current) return;
-      const [first, second] = event.touches;
-      const stage = pageStageRef.current.getBoundingClientRect();
-      const midpointX = (first.clientX + second.clientX) / 2;
-      const midpointY = (first.clientY + second.clientY) / 2;
-      if (snipTouchStartRef.current) {
-        snipTouchStartRef.current = null;
-        setSnipStart(null);
-        setSelection(null);
+      stopInertia();
+      if (event.touches.length === 1 && snipping && event.target === pageCanvasRef.current) {
+        const touch = event.touches[0];
+        event.preventDefault();
+        const point = toCanvasPoint(touch.clientX, touch.clientY);
+        snipTouchStartRef.current = point;
+        setSnipStart(point);
+        setSelection({ ...point, width: 0, height: 0 });
+        return;
       }
-      zoomGestureRef.current = {
-        startZoom: zoomRef.current,
-        nextZoom: zoomRef.current,
-        startDistance: Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY),
-        startMidpointX: midpointX,
-        startMidpointY: midpointY,
-        startPan: { ...pdfPanRef.current },
-        originX: midpointX - stage.left,
-        originY: midpointY - stage.top,
-      };
-      pagePositionRef.current.style.willChange = 'transform';
-      if (zoomCommitTimerRef.current) clearTimeout(zoomCommitTimerRef.current);
-      zoomCommitTimerRef.current = null;
+      if (event.touches.length >= 2) {
+        const [first, second] = event.touches;
+        if (snipTouchStartRef.current) {
+          snipTouchStartRef.current = null;
+          setSnipStart(null);
+          setSelection(null);
+        }
+        pan = null;
+        const mid = hostPoint((first.clientX + second.clientX) / 2, (first.clientY + second.clientY) / 2);
+        pinch = {
+          distance: Math.max(1, Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY)),
+          mid,
+          view: { ...viewRef.current },
+          total: renderedZoomRef.current * viewRef.current.s,
+        };
+        return;
+      }
+      if (event.touches.length === 1 && !snipping) beginPan(event.touches[0]);
     };
 
     const onTouchMove = (event) => {
-      const gesture = zoomGestureRef.current;
       if (event.touches.length === 1 && snipTouchStartRef.current && snipping) {
         event.preventDefault();
         const touch = event.touches[0];
-        const bounds = pageCanvasRef.current?.getBoundingClientRect();
-        if (!bounds) return;
         const start = snipTouchStartRef.current;
-        const point = { x: clamp(touch.clientX - bounds.left, 0, bounds.width), y: clamp(touch.clientY - bounds.top, 0, bounds.height) };
+        const point = toCanvasPoint(touch.clientX, touch.clientY);
         setSelection({ x: Math.min(start.x, point.x), y: Math.min(start.y, point.y), width: Math.abs(point.x - start.x), height: Math.abs(point.y - start.y) });
         return;
       }
-      if (!gesture || event.touches.length !== 2) return;
-      event.preventDefault();
-      const [first, second] = event.touches;
-      const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
-      const midpointX = (first.clientX + second.clientX) / 2;
-      const midpointY = (first.clientY + second.clientY) / 2;
-      const pan = constrainPan({
-        x: gesture.startPan.x + midpointX - gesture.startMidpointX,
-        y: gesture.startPan.y + midpointY - gesture.startMidpointY,
-      });
-      if (pagePositionRef.current) pagePositionRef.current.style.willChange = 'transform';
-      pdfPanRef.current = pan;
-      if (pagePositionRef.current) pagePositionRef.current.style.transform = `translate3d(${pan.x}px, ${pan.y}px, 0)`;
-      previewZoom(gesture, gesture.startZoom * distance / Math.max(gesture.startDistance, 1));
+      if (pinch && event.touches.length >= 2) {
+        event.preventDefault();
+        const [first, second] = event.touches;
+        const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+        const mid = hostPoint((first.clientX + second.clientX) / 2, (first.clientY + second.clientY) / 2);
+        const total = clamp(pinch.total * distance / pinch.distance, MIN_ZOOM, MAX_ZOOM);
+        const s = total / renderedZoomRef.current;
+        const ratio = s / pinch.view.s;
+        applyView(clampView({
+          x: mid.x - (pinch.mid.x - pinch.view.x) * ratio,
+          y: mid.y - (pinch.mid.y - pinch.view.y) * ratio,
+          s,
+        }));
+        return;
+      }
+      if (pan && event.touches.length === 1) {
+        event.preventDefault();
+        const touch = event.touches[0];
+        applyView(clampView({ x: pan.view.x + touch.clientX - pan.x, y: pan.view.y + touch.clientY - pan.y, s: pan.view.s }));
+        pan.samples.push({ t: performance.now(), x: touch.clientX, y: touch.clientY });
+        if (pan.samples.length > 8) pan.samples.shift();
+      }
     };
 
     const onTouchEnd = (event) => {
-      if (zoomGestureRef.current && event.touches.length < 2) commitZoom();
+      if (pinch && event.touches.length < 2) {
+        pinch = null;
+        commitZoom();
+        if (event.touches.length === 1 && !snipping) beginPan(event.touches[0]);
+        return;
+      }
+      if (pan && event.touches.length === 0) {
+        const samples = pan.samples;
+        pan = null;
+        startInertia(samples);
+      }
       if (snipTouchStartRef.current && event.touches.length === 0 && event.changedTouches.length) {
         const start = snipTouchStartRef.current;
         const touch = event.changedTouches[0];
-        const bounds = pageCanvasRef.current?.getBoundingClientRect();
         snipTouchStartRef.current = null;
         setSnipStart(null);
         setSelection(null);
-        if (bounds) captureSnipRef.current?.(start, {
-          x: clamp(touch.clientX - bounds.left, 0, bounds.width),
-          y: clamp(touch.clientY - bounds.top, 0, bounds.height),
-        });
+        captureSnipRef.current?.(start, toCanvasPoint(touch.clientX, touch.clientY));
       }
     };
 
@@ -372,74 +425,74 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
       snipTouchStartRef.current = null;
       setSnipStart(null);
       setSelection(null);
-      if (zoomGestureRef.current) commitZoom();
+      pan = null;
+      if (pinch) { pinch = null; commitZoom(); }
     };
 
     const onWheel = (event) => {
       pdfInteractionActiveRef.current = true;
-      if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
-      const stage = pageStageRef.current;
-      if (!stage) return;
-      const bounds = stage.getBoundingClientRect();
-      let gesture = zoomGestureRef.current;
-      if (!gesture) {
-        gesture = {
-          startZoom: zoomRef.current,
-          nextZoom: zoomRef.current,
-          // Keep horizontal gutters balanced while trackpad zoom is in
-          // progress; anchoring to an off-center cursor leaves a one-sided
-          // green strip around pages that still fit the viewer.
-          originX: (host.getBoundingClientRect().left + host.clientLeft + host.clientWidth / 2) - bounds.left,
-          originY: event.clientY - bounds.top,
-        };
-        zoomGestureRef.current = gesture;
+      stopInertia();
+      const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? (host.clientHeight || 800) : 1;
+      const dx = event.deltaX * unit;
+      const dy = event.deltaY * unit;
+      if (event.ctrlKey || event.metaKey) {
+        const point = hostPoint(event.clientX, event.clientY);
+        const total = renderedZoomRef.current * viewRef.current.s;
+        zoomAbout(total * Math.exp(-dy * .0045), point.x, point.y);
+        if (wheelTimer) clearTimeout(wheelTimer);
+        wheelTimer = setTimeout(() => { wheelTimer = null; commitZoom(); }, 140);
+        return;
       }
-      // Trackpads report very small pixel deltas for pinch gestures. A slightly
-      // higher exponential sensitivity keeps the gesture fluid while making a
-      // typical pinch reach a useful zoom range in fewer finger movements.
-      const delta = event.deltaMode === WheelEvent.DOM_DELTA_LINE
-        ? event.deltaY * 16
-        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-          ? event.deltaY * (host.clientHeight || 800)
-          : event.deltaY;
-      previewZoom(gesture, gesture.nextZoom * Math.exp(-delta * .0045));
-      if (zoomCommitTimerRef.current) clearTimeout(zoomCommitTimerRef.current);
-      zoomCommitTimerRef.current = setTimeout(commitZoom, 140);
+      const view = viewRef.current;
+      applyView(clampView({ x: view.x - dx, y: view.y - dy, s: view.s }));
     };
 
-    const onTouchStartWithSnip = (event) => {
-      if (event.touches.length === 1 && snipping && !zoomGestureRef.current && event.target === pageCanvasRef.current) {
-        const touch = event.touches[0];
-        const bounds = pageCanvasRef.current?.getBoundingClientRect();
-        if (bounds) {
-          event.preventDefault();
-          const point = { x: clamp(touch.clientX - bounds.left, 0, bounds.width), y: clamp(touch.clientY - bounds.top, 0, bounds.height) };
-          snipTouchStartRef.current = point;
-          setSnipStart(point);
-          setSelection({ ...point, width: 0, height: 0 });
-          return;
-        }
-      }
-      onTouchStart(event);
+    const onPointerDown = (event) => {
+      if (snipping || event.pointerType === 'touch' || event.button !== 0) return;
+      stopInertia();
+      mouseDrag = { id: event.pointerId, x: event.clientX, y: event.clientY, view: { ...viewRef.current } };
+      host.setPointerCapture?.(event.pointerId);
+      host.classList.add('is-panning');
     };
+    const onPointerMove = (event) => {
+      if (!mouseDrag || event.pointerId !== mouseDrag.id) return;
+      applyView(clampView({ x: mouseDrag.view.x + event.clientX - mouseDrag.x, y: mouseDrag.view.y + event.clientY - mouseDrag.y, s: mouseDrag.view.s }));
+    };
+    const onPointerEnd = (event) => {
+      if (!mouseDrag || event.pointerId !== mouseDrag.id) return;
+      mouseDrag = null;
+      host.classList.remove('is-panning');
+    };
+    const blockGesture = (event) => event.preventDefault();
 
-    host.addEventListener('touchstart', onTouchStartWithSnip, { passive: false });
+    host.addEventListener('touchstart', onTouchStart, { passive: false });
     host.addEventListener('touchmove', onTouchMove, { passive: false });
     host.addEventListener('touchend', onTouchEnd, { passive: true });
     host.addEventListener('touchcancel', onTouchCancel, { passive: true });
     host.addEventListener('wheel', onWheel, { passive: false });
+    host.addEventListener('pointerdown', onPointerDown);
+    host.addEventListener('pointermove', onPointerMove);
+    host.addEventListener('pointerup', onPointerEnd);
+    host.addEventListener('pointercancel', onPointerEnd);
+    host.addEventListener('gesturestart', blockGesture);
+    host.addEventListener('gesturechange', blockGesture);
 
     return () => {
-      host.removeEventListener('touchstart', onTouchStartWithSnip);
+      host.removeEventListener('touchstart', onTouchStart);
       host.removeEventListener('touchmove', onTouchMove);
       host.removeEventListener('touchend', onTouchEnd);
       host.removeEventListener('touchcancel', onTouchCancel);
       host.removeEventListener('wheel', onWheel);
-      if (zoomCommitTimerRef.current) clearTimeout(zoomCommitTimerRef.current);
-      zoomGestureRef.current = null;
-      pagePositionRef.current?.style.removeProperty('will-change');
-      pageStageRef.current?.style.removeProperty('will-change');
+      host.removeEventListener('pointerdown', onPointerDown);
+      host.removeEventListener('pointermove', onPointerMove);
+      host.removeEventListener('pointerup', onPointerEnd);
+      host.removeEventListener('pointercancel', onPointerEnd);
+      host.removeEventListener('gesturestart', blockGesture);
+      host.removeEventListener('gesturechange', blockGesture);
+      host.classList.remove('is-panning');
+      if (wheelTimer) { clearTimeout(wheelTimer); commitZoom(); }
+      stopInertia();
     };
   }, [pdfDoc, snipping]);
 
@@ -508,7 +561,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
       const document = await activeTask.promise;
       if (loadTokenRef.current !== loadToken) { await document.destroy(); return; }
       const targetPage = clamp(Number(restorePage) || 1, 1, document.numPages);
-      const targetZoom = clamp(Number(restoreZoom) || 1, .55, 2.2);
+      const targetZoom = clamp(Number(restoreZoom) || 1, MIN_ZOOM, MAX_ZOOM);
       sourceFileRef.current = file;
       docRef.current = document; setPdfName(file.name); setPageNumber(targetPage); setZoom(targetZoom); setPdfDoc(document); setLoadProgress(100);
       if (fromRestore) {
@@ -573,10 +626,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
     setError('PDF loading canceled.');
   };
 
-  const pagePoint = ({ clientX, clientY }) => {
-    const bounds = pageCanvasRef.current.getBoundingClientRect();
-    return { x: clamp(clientX - bounds.left, 0, bounds.width), y: clamp(clientY - bounds.top, 0, bounds.height) };
-  };
+  const pagePoint = ({ clientX, clientY }) => toCanvasPoint(clientX, clientY);
   const onSnipPointerDown = (event) => {
     if (!snipping || event.pointerType === 'touch' || event.target !== pageCanvasRef.current) return;
     event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
@@ -758,15 +808,15 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
       </header>
 
       {pdfDoc && <div className="pdf-controls">
-        <div className="pdf-page-controls"><button className="pdf-icon-button" onClick={() => setPageNumber(page => Math.max(1, page - 1))} disabled={pageNumber <= 1 || captureLoading} title="Previous page"><ChevronLeft size={17} /></button><label><input aria-label="PDF page number" inputMode="numeric" value={pageNumber} disabled={captureLoading} onChange={event => setPageNumber(clamp(Number(event.target.value) || 1, 1, pdfDoc.numPages))} /> <span>/ {pdfDoc.numPages}</span></label><button className="pdf-icon-button" onClick={() => setPageNumber(page => Math.min(pdfDoc.numPages, page + 1))} disabled={pageNumber >= pdfDoc.numPages || captureLoading} title="Next page"><ChevronRight size={17} /></button></div>
-        <div className="pdf-zoom-controls"><button className="pdf-icon-button" onClick={() => setZoom(value => clamp(value - .15, .55, 2.2))} disabled={captureLoading} title="Zoom out"><Minus size={16} /></button><span>{Math.round(zoom * 100)}%</span><button className="pdf-icon-button" onClick={() => setZoom(value => clamp(value + .15, .55, 2.2))} disabled={captureLoading} title="Zoom in"><PlusCircle size={16} /></button></div>
+        <div className="pdf-page-controls"><button className="pdf-icon-button" onClick={() => setPageNumber(page => Math.max(1, page - 1))} disabled={pageNumber <= 1 || captureLoading} title="Previous page"><ChevronLeft size={17} /></button><label><input aria-label="PDF page number" inputMode="numeric" value={pageDraft ?? pageNumber} disabled={captureLoading} onFocus={event => event.target.select()} onChange={event => setPageDraft(event.target.value.replace(/\D/g, '').slice(0, 5))} onBlur={commitPageDraft} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commitPageDraft(); event.currentTarget.blur(); } }} /> <span>/ {pdfDoc.numPages}</span></label><button className="pdf-icon-button" onClick={() => setPageNumber(page => Math.min(pdfDoc.numPages, page + 1))} disabled={pageNumber >= pdfDoc.numPages || captureLoading} title="Next page"><ChevronRight size={17} /></button></div>
+        <div className="pdf-zoom-controls"><button className="pdf-icon-button" onClick={() => stepZoom(-.15)} disabled={captureLoading} title="Zoom out"><Minus size={16} /></button><span>{Math.round(zoom * 100)}%</span><button className="pdf-icon-button" onClick={() => stepZoom(.15)} disabled={captureLoading} title="Zoom in"><PlusCircle size={16} /></button></div>
         <button className={`snip-toggle ${snipping ? 'snip-active' : ''}`} title="Snip: S · Snip for image occlusion: Shift+S" onClick={() => { captureIntentRef.current = 'normal'; setSnipIntent('normal'); setSnipping(value => !value); setSelection(null); setSnipStart(null); }} disabled={!pdfDoc || rendering || captureLoading}>{captureLoading ? 'Preparing capture…' : snipping ? snipIntent === 'occlusion' ? 'Select an occlusion image…' : 'Select a region…' : <><Crop size={15} /> Snip region</>}</button>
       </div>}
 
       {error && <div className="pdf-error" role="alert"><span>{error}</span><button onClick={() => setError('')}><XCircle size={15} /></button></div>}
       {loading && <div className="pdf-loading-progress" role="status"><span>Reading PDF ranges… {loadProgress}%</span><div><i style={{width:`${loadProgress}%`}} /></div><button onClick={cancelLoading}>Cancel</button></div>}
       {!pdfDoc ? <div className="pdf-empty-state"><div className="pdf-empty-icon"><FileText size={23} /></div><h3>{loading ? 'Opening your PDF…' : 'Bring your source into view'}</h3><p>Open a PDF and snip a diagram, definition, or worked example. Your document stays in this browser.</p><button onClick={() => fileInputRef.current?.click()} disabled={loading}>{loading ? 'Loading…' : 'Choose a PDF'} <ChevronRight size={15} /></button></div> : <>
-        <div ref={hostRef} className={`pdf-page-viewport ${zoom > 1 ? 'is-zoomed' : ''} ${snipping ? 'is-snipping' : ''}`} onPointerDown={onSnipPointerDown} onPointerMove={onSnipPointerMove} onPointerUp={onSnipPointerUp} onPointerCancel={onSnipPointerUp}>
+        <div ref={hostRef} className={`pdf-page-viewport ${snipping ? 'is-snipping' : ''}`} onPointerDown={onSnipPointerDown} onPointerMove={onSnipPointerMove} onPointerUp={onSnipPointerUp} onPointerCancel={onSnipPointerUp}>
           <div ref={pagePositionRef} className="pdf-page-position"><div ref={pageStageRef} className="pdf-page-stage"><canvas ref={pageCanvasRef} aria-label={`PDF page ${pageNumber}`} />{(pageWidth < 80 || (rendering && displayedPageRef.current?.pageNumber !== pageNumber) || captureLoading) && <div className="pdf-page-rendering">{captureLoading ? 'Rendering high resolution capture…' : pageWidth < 80 ? 'Preparing page view…' : 'Rendering page…'}</div>}{selection && <div className="pdf-selection-box" style={{ left: selection.x, top: selection.y, width: selection.width, height: selection.height }} />}</div></div>
           {snipping && <div className="snip-instruction">{snipIntent === 'occlusion' ? 'Capture image for occlusion' : 'Drag to capture'} <kbd>Esc</kbd> to cancel</div>}
         </div>
