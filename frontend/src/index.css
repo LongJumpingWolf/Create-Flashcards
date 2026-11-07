@@ -1121,3 +1121,7 @@ body { background:#202124; }
 .editor-actions .export-button:disabled { border-color:#3b3d42; background:#303135; color:#80848b; opacity:1; cursor:not-allowed; }
 @media (min-width:701px) { .editor-panel > .editor-actions { border-radius:0 0 15px 15px; } }
 @media (max-width:700px) { .editor-actions { --bar-bg:#27282b; } }
+
+/* Search field: show focus once, on the rounded wrapper, not as a square box inside it. */
+.card-search-wrap input:focus, .card-search-wrap input:focus-visible { outline:none !important; box-shadow:none; }
+.card-search-wrap:focus-within { border-color:#5c9ae6; box-shadow:0 0 0 3px rgba(92,154,230,.18); }
