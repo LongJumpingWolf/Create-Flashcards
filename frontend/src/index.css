@@ -1108,3 +1108,6 @@ body { background:#202124; }
 .app-shell .empty-library p { color:#b0b5be !important; }
 .app-shell .card-type-pill { border-color:#4c6380 !important; background:#303a48 !important; color:#a8ceff !important; }
 .app-shell .tag-chip,.app-shell .card-tags span { border-color:#484a50 !important; background:#292a2e !important; color:#c1c6ce !important; }
+.pdf-zoom-readout { min-width:48px; min-height:30px; padding:0 6px; border:1px solid transparent; border-radius:7px; background:transparent; color:inherit; font:inherit; font-size:11px; font-variant-numeric:tabular-nums; cursor:pointer; }
+.pdf-zoom-readout:hover:not(:disabled) { border-color:rgba(128,150,135,.35); background:rgba(128,150,135,.12); }
+.pdf-zoom-readout:disabled { opacity:.5; cursor:default; }

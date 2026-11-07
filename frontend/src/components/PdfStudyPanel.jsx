@@ -55,6 +55,8 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
   const zoomRef = useRef(1);
   const viewRef = useRef({ x: 0, y: 0, s: 1 });
   const renderedZoomRef = useRef(1);
+  const zoomAnimRef = useRef(0);
+  const zoomTargetRef = useRef(1);
   const needsPlaceRef = useRef(true);
   const pdfInteractionActiveRef = useRef(false);
   const captureIntentRef = useRef('normal');
@@ -85,6 +87,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
   const [pdfMemoryStatus, setPdfMemoryStatus] = useState('idle');
 
   zoomRef.current = zoom;
+  if (!zoomAnimRef.current) zoomTargetRef.current = zoom;
   useEffect(() => { setPageDraft(null); }, [pageNumber, pdfDoc]);
   const commitPageDraft = () => {
     if (pageDraft !== null && pageDraft !== '' && pdfDoc) setPageNumber(clamp(Number(pageDraft) || 1, 1, pdfDoc.numPages));
@@ -125,12 +128,43 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
     return target;
   };
 
-  const stepZoom = (delta) => {
+  // Smooth, anchored zoom for buttons, shortcuts and double-click: the bitmap is
+  // scaled live around the anchor, then re-rendered sharp once it settles.
+  const animateZoom = (target, anchorX, anchorY) => {
+    const goal = clamp(target, MIN_ZOOM, MAX_ZOOM);
+    if (zoomAnimRef.current) cancelAnimationFrame(zoomAnimRef.current);
+    const start = renderedZoomRef.current * viewRef.current.s;
+    zoomTargetRef.current = goal;
+    zoomRef.current = goal;
+    if (Math.abs(goal - start) < .002) { zoomAnimRef.current = 0; setZoom(goal); return; }
+    const began = performance.now();
+    const duration = 170;
+    const step = (now) => {
+      const progress = Math.min(1, (now - began) / duration);
+      const eased = 1 - (1 - progress) ** 3;
+      zoomAbout(start * (goal / start) ** eased, anchorX, anchorY);
+      if (progress < 1) { zoomAnimRef.current = requestAnimationFrame(step); return; }
+      zoomAnimRef.current = 0;
+      setZoom(goal);
+    };
+    zoomAnimRef.current = requestAnimationFrame(step);
+  };
+
+  const stepZoom = (factor) => {
     const host = hostRef.current;
-    if (!host) return;
-    const target = zoomAbout(zoomRef.current + delta, host.clientWidth / 2, host.clientHeight / 2);
-    zoomRef.current = target;
-    setZoom(target);
+    if (host) animateZoom(zoomTargetRef.current * factor, host.clientWidth / 2, host.clientHeight / 2);
+  };
+
+  // Fit width is zoom 1; a second press fits the whole page in the viewer.
+  const fitZoom = () => {
+    const host = hostRef.current;
+    const canvas = pageCanvasRef.current;
+    if (!host || !canvas) return;
+    const total = renderedZoomRef.current * viewRef.current.s;
+    const pageHeightAtOne = canvas.offsetHeight / renderedZoomRef.current;
+    const fitPage = clamp((host.clientHeight - VIEW_PAD * 2) / Math.max(pageHeightAtOne, 1), MIN_ZOOM, 1);
+    const target = Math.abs(total - 1) < .03 && fitPage < .97 ? fitPage : 1;
+    animateZoom(target, host.clientWidth / 2, VIEW_PAD);
   };
 
   const toCanvasPoint = (clientX, clientY) => {
@@ -295,7 +329,13 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
     let wheelTimer = null;
     let inertiaFrame = 0;
 
-    const stopInertia = () => { if (inertiaFrame) cancelAnimationFrame(inertiaFrame); inertiaFrame = 0; };
+    let lastTap = null;
+    let lastMouseDown = null;
+    const stopInertia = () => {
+      if (inertiaFrame) cancelAnimationFrame(inertiaFrame);
+      inertiaFrame = 0;
+      if (zoomAnimRef.current) { cancelAnimationFrame(zoomAnimRef.current); zoomAnimRef.current = 0; commitZoom(); }
+    };
     const hostPoint = (clientX, clientY) => {
       const bounds = host.getBoundingClientRect();
       return { x: clientX - bounds.left, y: clientY - bounds.top };
@@ -306,7 +346,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
       if (Math.abs(target - zoomRef.current) > .005) { zoomRef.current = target; setZoom(target); }
     };
     const beginPan = (touch) => {
-      pan = { x: touch.clientX, y: touch.clientY, view: { ...viewRef.current }, samples: [{ t: performance.now(), x: touch.clientX, y: touch.clientY }] };
+      pan = { x: touch.clientX, y: touch.clientY, t0: performance.now(), moved: false, view: { ...viewRef.current }, samples: [{ t: performance.now(), x: touch.clientX, y: touch.clientY }] };
     };
     const startInertia = (samples) => {
       const now = performance.now();
@@ -394,6 +434,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
         event.preventDefault();
         const touch = event.touches[0];
         applyView(clampView({ x: pan.view.x + touch.clientX - pan.x, y: pan.view.y + touch.clientY - pan.y, s: pan.view.s }));
+        if (Math.hypot(touch.clientX - pan.x, touch.clientY - pan.y) > 8) pan.moved = true;
         pan.samples.push({ t: performance.now(), x: touch.clientX, y: touch.clientY });
         if (pan.samples.length > 8) pan.samples.shift();
       }
@@ -408,8 +449,22 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
       }
       if (pan && event.touches.length === 0) {
         const samples = pan.samples;
+        const wasTap = !pan.moved && performance.now() - pan.t0 < 280 && !snipping;
         pan = null;
         startInertia(samples);
+        if (wasTap && event.changedTouches.length) {
+          // Double-tap toggles between fit-width and 2x around the tapped point.
+          const touch = event.changedTouches[0];
+          const now = performance.now();
+          if (lastTap && now - lastTap.t < 320 && Math.hypot(touch.clientX - lastTap.x, touch.clientY - lastTap.y) < 36) {
+            lastTap = null;
+            const point = hostPoint(touch.clientX, touch.clientY);
+            const total = renderedZoomRef.current * viewRef.current.s;
+            animateZoom(total > 1.15 ? 1 : 2, point.x, point.y);
+          } else {
+            lastTap = { t: now, x: touch.clientX, y: touch.clientY };
+          }
+        }
       }
       if (snipTouchStartRef.current && event.touches.length === 0 && event.changedTouches.length) {
         const start = snipTouchStartRef.current;
@@ -439,7 +494,10 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
       if (event.ctrlKey || event.metaKey) {
         const point = hostPoint(event.clientX, event.clientY);
         const total = renderedZoomRef.current * viewRef.current.s;
-        zoomAbout(total * Math.exp(-dy * .0045), point.x, point.y);
+        // Trackpad pinch sends many tiny deltas; a mouse wheel sends big notches,
+        // so use a gentler curve for notches (about 15% per click).
+        const sensitivity = Math.abs(dy) >= 40 ? .0017 : .0045;
+        zoomAbout(total * Math.exp(-dy * sensitivity), point.x, point.y);
         if (wheelTimer) clearTimeout(wheelTimer);
         wheelTimer = setTimeout(() => { wheelTimer = null; commitZoom(); }, 140);
         return;
@@ -451,6 +509,17 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
     const onPointerDown = (event) => {
       if (snipping || event.pointerType === 'touch' || event.button !== 0) return;
       stopInertia();
+      // Double-click toggles fit-width and 2x around the cursor. Detected from
+      // pointer timing because pointer capture can swallow native dblclick events.
+      const downAt = performance.now();
+      if (lastMouseDown && downAt - lastMouseDown.t < 350 && Math.hypot(event.clientX - lastMouseDown.x, event.clientY - lastMouseDown.y) < 8) {
+        lastMouseDown = null;
+        const point = hostPoint(event.clientX, event.clientY);
+        const total = renderedZoomRef.current * viewRef.current.s;
+        animateZoom(total > 1.15 ? 1 : 2, point.x, point.y);
+        return;
+      }
+      lastMouseDown = { t: downAt, x: event.clientX, y: event.clientY };
       mouseDrag = { id: event.pointerId, x: event.clientX, y: event.clientY, view: { ...viewRef.current } };
       host.setPointerCapture?.(event.pointerId);
       host.classList.add('is-panning');
@@ -503,6 +572,46 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
     document.addEventListener('pointerdown', trackActivePanel, true);
     return () => document.removeEventListener('pointerdown', trackActivePanel, true);
   }, []);
+
+  useEffect(() => {
+    if (!pdfDoc) return undefined;
+    const onViewerKey = (event) => {
+      const target = event.target;
+      if (!pdfInteractionActiveRef.current || target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      // Space/Enter must keep activating a focused button.
+      if (target?.closest?.('button') && (event.key === ' ' || event.key === 'Enter')) return;
+      if (document.querySelector('.snip-modal-backdrop, .snip-editor, .io-editor-backdrop')) return;
+      const host = hostRef.current;
+      if (!host) return;
+      const mod = event.ctrlKey || event.metaKey;
+      const panBy = (dx, dy) => { const view = viewRef.current; applyView(clampView({ x: view.x + dx, y: view.y + dy, s: view.s })); };
+      const atEdge = (direction) => {
+        const view = viewRef.current;
+        const next = clampView({ x: view.x, y: view.y + direction * host.clientHeight * .9, s: view.s });
+        return Math.abs(next.y - view.y) < 2;
+      };
+      const flip = (delta) => { setPageNumber(page => clamp(page + delta, 1, pdfDoc.numPages)); };
+      if (mod && (event.key === '=' || event.key === '+')) { event.preventDefault(); stepZoom(1.25); return; }
+      if (mod && (event.key === '-' || event.key === '_')) { event.preventDefault(); stepZoom(.8); return; }
+      if (mod && event.key === '0') { event.preventDefault(); fitZoom(); return; }
+      if (mod || event.altKey) return;
+      const step = event.shiftKey ? 160 : 70;
+      if (event.key === 'ArrowDown') { event.preventDefault(); panBy(0, -step); }
+      else if (event.key === 'ArrowUp') { event.preventDefault(); panBy(0, step); }
+      else if (event.key === 'ArrowLeft') { event.preventDefault(); panBy(step, 0); }
+      else if (event.key === 'ArrowRight') { event.preventDefault(); panBy(-step, 0); }
+      else if (event.key === 'PageDown' || (event.key === ' ' && !event.shiftKey)) {
+        event.preventDefault();
+        if (atEdge(-1)) flip(1); else panBy(0, -host.clientHeight * .9);
+      } else if (event.key === 'PageUp' || (event.key === ' ' && event.shiftKey)) {
+        event.preventDefault();
+        if (atEdge(1)) flip(-1); else panBy(0, host.clientHeight * .9);
+      } else if (event.key === 'Home') { event.preventDefault(); flip(-1e6); }
+      else if (event.key === 'End') { event.preventDefault(); flip(1e6); }
+    };
+    window.addEventListener('keydown', onViewerKey);
+    return () => window.removeEventListener('keydown', onViewerKey);
+  }, [pdfDoc]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -809,7 +918,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
 
       {pdfDoc && <div className="pdf-controls">
         <div className="pdf-page-controls"><button className="pdf-icon-button" onClick={() => setPageNumber(page => Math.max(1, page - 1))} disabled={pageNumber <= 1 || captureLoading} title="Previous page"><ChevronLeft size={17} /></button><label><input aria-label="PDF page number" inputMode="numeric" value={pageDraft ?? pageNumber} disabled={captureLoading} onFocus={event => event.target.select()} onChange={event => setPageDraft(event.target.value.replace(/\D/g, '').slice(0, 5))} onBlur={commitPageDraft} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commitPageDraft(); event.currentTarget.blur(); } }} /> <span>/ {pdfDoc.numPages}</span></label><button className="pdf-icon-button" onClick={() => setPageNumber(page => Math.min(pdfDoc.numPages, page + 1))} disabled={pageNumber >= pdfDoc.numPages || captureLoading} title="Next page"><ChevronRight size={17} /></button></div>
-        <div className="pdf-zoom-controls"><button className="pdf-icon-button" onClick={() => stepZoom(-.15)} disabled={captureLoading} title="Zoom out"><Minus size={16} /></button><span>{Math.round(zoom * 100)}%</span><button className="pdf-icon-button" onClick={() => stepZoom(.15)} disabled={captureLoading} title="Zoom in"><PlusCircle size={16} /></button></div>
+        <div className="pdf-zoom-controls"><button className="pdf-icon-button" onClick={() => stepZoom(.8)} disabled={captureLoading} title="Zoom out (Ctrl −)"><Minus size={16} /></button><button className="pdf-zoom-readout" onClick={fitZoom} disabled={captureLoading} title="Fit width, then fit page (Ctrl 0) · double-click the page to zoom">{Math.round(zoom * 100)}%</button><button className="pdf-icon-button" onClick={() => stepZoom(1.25)} disabled={captureLoading} title="Zoom in (Ctrl +)"><PlusCircle size={16} /></button></div>
         <button className={`snip-toggle ${snipping ? 'snip-active' : ''}`} title="Snip: S · Snip for image occlusion: Shift+S" onClick={() => { captureIntentRef.current = 'normal'; setSnipIntent('normal'); setSnipping(value => !value); setSelection(null); setSnipStart(null); }} disabled={!pdfDoc || rendering || captureLoading}>{captureLoading ? 'Preparing capture…' : snipping ? snipIntent === 'occlusion' ? 'Select an occlusion image…' : 'Select a region…' : <><Crop size={15} /> Snip region</>}</button>
       </div>}
 
