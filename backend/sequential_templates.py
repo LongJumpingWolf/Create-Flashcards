@@ -1,15 +1,53 @@
 # Generated from frontend/src/sequentialTemplates.js by frontend/scripts/gen-python-templates.mjs. Do not edit by hand.
-SEQ_CLOZE_AFMT = r'''<div class="editable-content" id="sc-text">{{Text}}</div>
-<script>if (window.__sqKey) { document.removeEventListener('keydown', window.__sqKey); window.__sqKey = null; }</script>
-{{#Extra}}<hr id="answer"><div class="editable-content">{{Extra}}</div>{{/Extra}}'''
-SEQ_CLOZE_CSS_EXTRA = r'''
-.sc { font-weight: bold; color: #1f5fbf; }
-.sc-hidden { background: #d6e4ff; border-radius: 5px; padding: 0 5px; cursor: pointer; }
-.sc-active { background: #ffd9a8; color: #8a4b00; outline: 2px solid #f39c12; }
-.sc-shown { color: #1a7f37; }
-#sc-help { margin-top: 14px; font-size: 12px; color: #8a8f98; }
+ANKING_CARD_CSS = r'''
+/* ~~~ size: change this one number to scale every card (AnKing default 28px) ~~~ */
+html { font-size: 28px; }
+.mobile { font-size: 28px; }
+.card { font-family: "Arial Greek", Arial, sans-serif; font-size: 1rem; text-align: center; margin: 15px 15px 0; padding-bottom: 1em; }
+/* day mode */
+.card { color: black; background-color: #D1CFCE; }
+.cloze { font-weight: bold; color: blue; }
+#extra { font-style: italic; font-size: 1rem; color: navy; margin-top: 1rem; }
+/* night mode */
+.nightMode.card, .night_mode .card { color: #FFFAFA !important; background-color: #272828 !important; }
+.nightMode .cloze, .night_mode .cloze { color: #4297F9 !important; }
+.nightMode #extra, .night_mode #extra { color: magenta; }
+/* bold / underline / italic keep the text colour (they carry meaning, not colour) */
+b, u, i { color: inherit; }
+hr { opacity: .7; }
+img { max-width: 85%; max-height: 100%; }
+#extra img { max-width: 85%; min-width: 30%; }
+ul, ol { display: inline-block; max-width: 50%; padding-left: 40px; margin: auto; text-align: left; }
+.mobile ul, .mobile ol, .mobile img { max-width: 100%; }
+/* left-aligned block for mnemonic / list lines inside a centred card */
+.mnemonics { display: inline-block; text-align: left; }
+.centerbox { text-align: center; }
+a:not([href]), a[href^="javascript:"] { text-decoration: none; color: inherit; }
+table { border-collapse: collapse; margin: 8px auto; }
+td, th { border: 1px solid #888; padding: 4px 9px; text-align: left; vertical-align: top; }
+th { font-weight: bold; background: rgba(128, 128, 128, .18); }
+blockquote { margin: 6px auto; padding: 2px 12px; border-left: 3px solid #888; text-align: left; display: inline-block; }
+code { font-family: monospace; background: rgba(128, 128, 128, .2); padding: 0 4px; border-radius: 3px; }
 '''
-SEQ_CLOZE_QFMT = r'''<div class="editable-content" id="sc-text">{{Text}}</div>
+BASIC_AFMT = r'''<div id="text">{{Question}}</div>
+<hr id="answer">
+<div id="answer-text">{{Answer}}</div>'''
+BASIC_QFMT = r'''<div id="text">{{Question}}</div>'''
+CLOZE_AFMT = r'''<div id="text">{{cloze:Text}}</div>
+{{#Extra}}<hr id="answer"><div id="extra">{{Extra}}</div>{{/Extra}}'''
+CLOZE_QFMT = r'''<div id="text">{{cloze:Text}}</div>'''
+SEQ_CLOZE_AFMT = r'''<div id="sc-text">{{Text}}</div>
+<script>if (window.__sqKey) { document.removeEventListener('keydown', window.__sqKey); window.__sqKey = null; }</script>
+{{#Extra}}<hr id="answer"><div id="extra">{{Extra}}</div>{{/Extra}}'''
+SEQ_CLOZE_CSS_EXTRA = r'''
+.sc { font-weight: bold; color: blue; }
+.sc-hidden { cursor: pointer; }
+.sc-active { text-decoration: underline; outline: 2px solid #f39c12; outline-offset: 2px; border-radius: 4px; }
+.sc-shown { color: blue; }
+.nightMode .sc, .night_mode .sc, .nightMode .sc-shown, .night_mode .sc-shown { color: #4297F9 !important; }
+#sc-help { margin-top: 14px; font-size: .45rem; opacity: .6; }
+'''
+SEQ_CLOZE_QFMT = r'''<div id="sc-text">{{Text}}</div>
 <div id="sc-help">Click the highlighted cloze or press N to reveal the next one &middot; , reveals all</div>
 <script>
 (function () {
@@ -84,18 +122,47 @@ SEQ_IO_AFMT = r'''{{#Image}}
 {{#Extra}}<div id="sq-extra">{{Extra}}</div>{{/Extra}}
 {{/Image}}'''
 SEQ_IO_CSS = r'''
-.card { font-family: Arial, sans-serif; font-size: 20px; text-align: center; color: #202521; background: #fff; }
+/* ~~~ size: change this one number to scale every card (AnKing default 28px) ~~~ */
+html { font-size: 28px; }
+.mobile { font-size: 28px; }
+.card { font-family: "Arial Greek", Arial, sans-serif; font-size: 1rem; text-align: center; margin: 15px 15px 0; padding-bottom: 1em; }
+/* day mode */
+.card { color: black; background-color: #D1CFCE; }
+.cloze { font-weight: bold; color: blue; }
+#extra { font-style: italic; font-size: 1rem; color: navy; margin-top: 1rem; }
+/* night mode */
+.nightMode.card, .night_mode .card { color: #FFFAFA !important; background-color: #272828 !important; }
+.nightMode .cloze, .night_mode .cloze { color: #4297F9 !important; }
+.nightMode #extra, .night_mode #extra { color: magenta; }
+/* bold / underline / italic keep the text colour (they carry meaning, not colour) */
+b, u, i { color: inherit; }
+hr { opacity: .7; }
+img { max-width: 85%; max-height: 100%; }
+#extra img { max-width: 85%; min-width: 30%; }
+ul, ol { display: inline-block; max-width: 50%; padding-left: 40px; margin: auto; text-align: left; }
+.mobile ul, .mobile ol, .mobile img { max-width: 100%; }
+/* left-aligned block for mnemonic / list lines inside a centred card */
+.mnemonics { display: inline-block; text-align: left; }
+.centerbox { text-align: center; }
+a:not([href]), a[href^="javascript:"] { text-decoration: none; color: inherit; }
+table { border-collapse: collapse; margin: 8px auto; }
+td, th { border: 1px solid #888; padding: 4px 9px; text-align: left; vertical-align: top; }
+th { font-weight: bold; background: rgba(128, 128, 128, .18); }
+blockquote { margin: 6px auto; padding: 2px 12px; border-left: 3px solid #888; text-align: left; display: inline-block; }
+code { font-family: monospace; background: rgba(128, 128, 128, .2); padding: 0 4px; border-radius: 3px; }
+
 #io-header { margin: .5em auto; max-width: 90%; }
 #sq-wrap { position: relative; display: inline-block; max-width: 100%; margin: 0 auto; line-height: 0; }
 #sq-image img { display: block; max-width: 100%; height: auto; }
 #sq-masks { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
 #sq-masks svg { display: block; width: 100%; height: 100%; }
 .sq-m { cursor: pointer; }
-.sq-m rect, .sq-m ellipse, .sq-m polygon { fill: #FFEBA2; stroke: #2D2D2D; stroke-width: 2; }
-.sq-m[data-active] rect, .sq-m[data-active] ellipse, .sq-m[data-active] polygon { fill: #FF7E7E; stroke: #b02a2a; }
+.sq-m rect, .sq-m ellipse, .sq-m polygon { fill: moccasin; stroke: olive; stroke-width: 2; }
+.sq-m[data-active] rect, .sq-m[data-active] ellipse, .sq-m[data-active] polygon { fill: salmon; stroke: yellow; }
 .sq-m[data-gone] { display: none; }
-#sq-help { margin: 10px auto 0; max-width: 90%; font-size: 12px; line-height: 1.4; color: #8a8f98; }
-#sq-extra { width: min(80%, 42rem); margin: .8em auto; text-align: left; line-height: 1.5; }
+#sq-help { margin: 10px auto 0; max-width: 90%; font-size: .45rem; line-height: 1.4; opacity: .6; }
+#sq-extra { width: min(80%, 42rem); margin: .8em auto; text-align: left; line-height: 1.5; font-style: italic; color: navy; }
+.nightMode #sq-extra, .night_mode #sq-extra { color: magenta; }
 '''
 SEQ_IO_QFMT = r'''{{#Image}}
 <div id="io-header">{{Header}}</div>

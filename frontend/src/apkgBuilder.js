@@ -6,7 +6,7 @@
 // which keeps this module testable in Node and byte-for-byte comparable with the
 // backend output.
 import { zipSync } from 'fflate';
-import { SEQ_CLOZE_CSS_EXTRA, SEQ_CLOZE_QFMT, SEQ_CLOZE_AFMT, SEQ_IO_CSS, SEQ_IO_QFMT, SEQ_IO_AFMT } from './sequentialTemplates.js';
+import { ANKING_CARD_CSS, BASIC_QFMT, BASIC_AFMT, CLOZE_QFMT, CLOZE_AFMT, SEQ_CLOZE_CSS_EXTRA, SEQ_CLOZE_QFMT, SEQ_CLOZE_AFMT, SEQ_IO_CSS, SEQ_IO_QFMT, SEQ_IO_AFMT } from './sequentialTemplates.js';
 
 // Problems with the user's card content (as opposed to browser/runtime failures).
 export class CardError extends Error {}
@@ -14,56 +14,7 @@ export class CardError extends Error {}
 const FIELD_SEPARATOR = '\x1f';
 const MAX_DECK_NAME = 100;
 
-// --- Card models (identical to backend/app.py) ---------------------------------
-const DEFAULT_CARD_CSS = `
-.card {
-    font-family: arial;
-    font-size: 20px;
-    text-align: center; /* Main card content is centered on the card area */
-    color: black;
-    background-color: white;
-    /* Basic max-width for better readability */
-    max-width: 600px;
-    margin: 0 auto;
-}
-
-/* This is the key: Apply left-alignment to the *content* area itself,
-   while keeping the outer card centered. */
-.editable-content {
-    text-align: left;
-    /* display: inline-block allows the content div to shrink to content width
-       and be centered by the parent's text-align: center; */
-    display: inline-block;
-    padding: 0 10px;
-}
-
-.editable-content ul,
-.editable-content ol {
-    /* Ensures list content is aligned left *within* the list container */
-    text-align: left;
-    padding-left: 20px;
-    margin: 8px 0;
-}
-
-.editable-content table {
-    border-collapse: collapse;
-    margin: 8px auto;
-}
-
-.editable-content td,
-.editable-content th {
-    border: 1px solid #888;
-    padding: 4px 9px;
-    text-align: left;
-    vertical-align: top;
-}
-
-.editable-content th {
-    background: #eef0f2;
-    font-weight: bold;
-}
-`;
-
+// --- Card models (identical to backend/app.py; look + templates live in sequentialTemplates.js) ---
 const IOE_FIELDS = [
   'ID (hidden)', 'Header', 'Image', 'Question Mask', 'Footer', 'Remarks',
   'Sources', 'Extra 1', 'Extra 2', 'Answer Mask', 'Original Mask',
@@ -105,12 +56,8 @@ const MODELS = {
     name: 'Simple Basic Model',
     type: 0,
     fields: ['Question', 'Answer'],
-    templates: [{
-      name: 'Card 1',
-      qfmt: '<div class="editable-content">{{Question}}</div>',
-      afmt: '{{FrontSide}}<hr id="answer"><div class="editable-content">{{Answer}}</div>',
-    }],
-    css: DEFAULT_CARD_CSS,
+    templates: [{ name: 'Card 1', qfmt: BASIC_QFMT, afmt: BASIC_AFMT }],
+    css: ANKING_CARD_CSS,
     sortField: 0,
     req: [[0, 'all', [0]]],
   },
@@ -119,12 +66,8 @@ const MODELS = {
     name: 'Simple Cloze Model',
     type: 1,
     fields: ['Text', 'Extra'],
-    templates: [{
-      name: 'Cloze Card',
-      qfmt: '<div class="editable-content">{{cloze:Text}}</div>',
-      afmt: '{{cloze:Text}}<br><hr id="answer"><div class="editable-content">{{Extra}}</div>',
-    }],
-    css: `${DEFAULT_CARD_CSS}.cloze { font-weight: bold; }`,
+    templates: [{ name: 'Cloze Card', qfmt: CLOZE_QFMT, afmt: CLOZE_AFMT }],
+    css: ANKING_CARD_CSS,
     sortField: 0,
     req: [[0, 'all', [0, 1]]],
   },
@@ -134,7 +77,7 @@ const MODELS = {
     type: 0,
     fields: ['Text', 'Extra'],
     templates: [{ name: 'Sequential Cloze', qfmt: SEQ_CLOZE_QFMT, afmt: SEQ_CLOZE_AFMT }],
-    css: `${DEFAULT_CARD_CSS}${SEQ_CLOZE_CSS_EXTRA}`,
+    css: `${ANKING_CARD_CSS}${SEQ_CLOZE_CSS_EXTRA}`,
     sortField: 0,
     req: [[0, 'all', [0]]],
   },

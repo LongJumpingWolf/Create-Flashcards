@@ -6,7 +6,7 @@ import ImportCardsModal from './ImportCardsModal';
 import { hasSavedPdf } from '../pdfResumeStorage';
 import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView, TableGridPicker } from './editorTools';
 import { smartTyping, smartEnter, listTab, markdownToHtml, looksLikeMarkdown, isPlainHtml, tidyHtml, SMART_DEFAULTS } from './smartTyping';
-import { MATH_WRAPPERS, wrapSelection, audioHtml, fileToDataUrl, useAudioRecorder, MAX_AUDIO_BYTES, sanitizePastedHtml, plainTextToHtml, duplicateKey, buildTableHtml, findCell, tableAction, tableTab, placeCaretInCell } from './editorHelpers';
+import { MATH_WRAPPERS, wrapSelection, audioHtml, fileToDataUrl, useAudioRecorder, MAX_AUDIO_BYTES, sanitizePastedHtml, plainTextToHtml, duplicateKey, buildTableHtml, findCell, tableAction, tableTab, placeCaretInCell, renderClozePreview, clozeNumbers } from './editorHelpers';
 
 let pdfStudyPanelPromise;
 const preloadPdfStudyPanel = () => {
@@ -393,6 +393,7 @@ export default function FlashcardEditor() {
   const [tagInput, setTagInput] = useState("");
   const [currentTags, setCurrentTags] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [previewNight, setPreviewNight] = useState(true);
   const [previewAnswerSide, setPreviewAnswerSide] = useState(false);
   const [previewOcclusionIndex, setPreviewOcclusionIndex] = useState(0);
   const [cards, setCards] = useState([]);
@@ -2415,14 +2416,29 @@ export default function FlashcardEditor() {
                   </div>
                   {previewAnswerSide && back && <div className="io-reviewer-extra"><span>Back extra</span><div dangerouslySetInnerHTML={{ __html: back }} /></div>}
                 </> : <>
-                  <div>
-                    <h3 className="font-medium mb-2 text-neutral-400">{cardType === "Cloze" ? "Text" : "Front"}</h3>
-                    <div className="p-4 border border-neutral-700 rounded-lg text-xl bg-neutral-900 text-neutral-200">
-                      <div dangerouslySetInnerHTML={{ __html: cleanColorSpans(front) || "(empty)" }} />
-                    </div>
-                  </div>
-                  {cardType === "Basic" && <div><h3 className="font-medium mb-2 text-neutral-400">Back</h3><div className="p-4 border border-neutral-700 rounded-lg text-xl bg-neutral-900 text-neutral-200" dangerouslySetInnerHTML={{ __html: back || "(empty)" }} /></div>}
-                  {cardType === "Cloze" && back && <div><h3 className="font-medium mb-2 text-neutral-400">Extra</h3><div className="p-4 border border-neutral-700 rounded-lg text-xl bg-neutral-900 text-neutral-200" dangerouslySetInnerHTML={{ __html: back }} /></div>}
+                  {(() => {
+                    const numbers = cardType === 'Cloze' ? clozeNumbers(cleanColorSpans(front)) : [];
+                    const activeNumber = numbers[Math.min(previewOcclusionIndex, Math.max(0, numbers.length - 1))] || 1;
+                    const sequentialPreview = cardType === 'Cloze' && clozeSequential;
+                    const cardCount = sequentialPreview ? 1 : Math.max(1, numbers.length);
+                    const frontHtml = cardType === 'Cloze'
+                      ? renderClozePreview(cleanColorSpans(front) || '(empty)', activeNumber, previewAnswerSide, sequentialPreview)
+                      : (cleanColorSpans(front) || '(empty)');
+                    return <>
+                      <div className="io-reviewer-controls">
+                        {cardType === 'Cloze' && <><button type="button" aria-label="Previous cloze card" disabled={previewOcclusionIndex <= 0 || sequentialPreview} onClick={() => setPreviewOcclusionIndex(index => Math.max(0, index - 1))}>‹</button>
+                        <span>Card <strong>{Math.min(previewOcclusionIndex + 1, cardCount)}</strong> of {cardCount}{sequentialPreview ? ' · one by one' : ''}</span>
+                        <button type="button" aria-label="Next cloze card" disabled={previewOcclusionIndex >= cardCount - 1 || sequentialPreview} onClick={() => setPreviewOcclusionIndex(index => Math.min(cardCount - 1, index + 1))}>›</button></>}
+                        <div className="io-reviewer-flip"><button type="button" aria-pressed={!previewAnswerSide} onClick={() => setPreviewAnswerSide(false)}>Question</button><button type="button" aria-pressed={previewAnswerSide} onClick={() => setPreviewAnswerSide(true)}>Show answer</button></div>
+                        <div className="io-reviewer-flip"><button type="button" aria-pressed={previewNight} onClick={() => setPreviewNight(true)}>Night</button><button type="button" aria-pressed={!previewNight} onClick={() => setPreviewNight(false)}>Day</button></div>
+                      </div>
+                      <div className={`anki-card ${previewNight ? 'night' : 'day'}`}>
+                        <div dangerouslySetInnerHTML={{ __html: frontHtml }} />
+                        {previewAnswerSide && cardType === 'Basic' && <><hr /><div dangerouslySetInnerHTML={{ __html: back || '(empty)' }} /></>}
+                        {previewAnswerSide && cardType === 'Cloze' && back && <><hr /><div className="anki-extra" dangerouslySetInnerHTML={{ __html: back }} /></>}
+                      </div>
+                    </>;
+                  })()}
                 </>}
                 <div className="text-xs text-neutral-400 pt-4">Tags: {currentTags.map(formatTagForDisplay).join(", ") || "None"}</div>
               </div>

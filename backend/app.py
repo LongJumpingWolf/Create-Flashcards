@@ -17,98 +17,28 @@ import genanki
 from PIL import Image, ImageDraw
 
 from sequential_templates import (
+    ANKING_CARD_CSS, BASIC_QFMT, BASIC_AFMT, CLOZE_QFMT, CLOZE_AFMT,
     SEQ_CLOZE_CSS_EXTRA, SEQ_CLOZE_QFMT, SEQ_CLOZE_AFMT, SEQ_IO_CSS, SEQ_IO_QFMT, SEQ_IO_AFMT,
 )
 
 # --- Configuration ---
 # NEW: Define a robust CSS structure for centering non-list content and handling lists cleanly.
-DEFAULT_CARD_CSS = """
-.card {
-    font-family: arial;
-    font-size: 20px;
-    text-align: center; /* Main card content is centered on the card area */
-    color: black;
-    background-color: white;
-    /* Basic max-width for better readability */
-    max-width: 600px; 
-    margin: 0 auto;
-}
-
-/* This is the key: Apply left-alignment to the *content* area itself, 
-   while keeping the outer card centered. */
-.editable-content {
-    text-align: left; 
-    /* display: inline-block allows the content div to shrink to content width 
-       and be centered by the parent's text-align: center; */
-    display: inline-block;
-    padding: 0 10px;
-}
-
-.editable-content ul, 
-.editable-content ol {
-    /* Ensures list content is aligned left *within* the list container */
-    text-align: left; 
-    padding-left: 20px; 
-    margin: 8px 0;
-}
-
-.editable-content table {
-    border-collapse: collapse;
-    margin: 8px auto;
-}
-
-.editable-content td,
-.editable-content th {
-    border: 1px solid #888;
-    padding: 4px 9px;
-    text-align: left;
-    vertical-align: top;
-}
-
-.editable-content th {
-    background: #eef0f2;
-    font-weight: bold;
-}
-"""
-
-# Standard Anki Basic Model (for Basic cards)
+# Basic and Cloze share the AnKing look (see sequential_templates.py / frontend/src/sequentialTemplates.js)
 ANKI_BASIC_MODEL = genanki.Model(
     1607392319,
     'Simple Basic Model',
-    fields=[
-        {'name': 'Question'},
-        {'name': 'Answer'},
-    ],
-    templates=[
-        {
-            'name': 'Card 1',
-            # NEW: Wrap content in the .editable-content div for styling
-            'qfmt': '<div class="editable-content">{{Question}}</div>',
-            'afmt': '{{FrontSide}}<hr id="answer"><div class="editable-content">{{Answer}}</div>',
-        },
-    ],
-    css=DEFAULT_CARD_CSS,
+    fields=[{'name': 'Question'}, {'name': 'Answer'}],
+    templates=[{'name': 'Card 1', 'qfmt': BASIC_QFMT, 'afmt': BASIC_AFMT}],
+    css=ANKING_CARD_CSS,
 )
 
-# Standard Anki Cloze Model (for Cloze cards)
 ANKI_CLOZE_MODEL = genanki.Model(
     1607392320,
     'Simple Cloze Model',
     model_type=genanki.Model.CLOZE,
-    fields=[
-        {'name': 'Text'},
-        {'name': 'Extra'},
-    ],
-    templates=[
-        {
-            'name': 'Cloze Card',
-            # NEW: Wrap content in the .editable-content div for styling
-            'qfmt': '<div class="editable-content">{{cloze:Text}}</div>',
-            'afmt': '{{cloze:Text}}<br><hr id="answer"><div class="editable-content">{{Extra}}</div>',
-        },
-    ],
-    # Append cloze-specific style for bolding the cloze
-    css=DEFAULT_CARD_CSS + '.cloze { font-weight: bold; }', 
+    fields=[{'name': 'Text'}, {'name': 'Extra'}],
+    templates=[{'name': 'Cloze Card', 'qfmt': CLOZE_QFMT, 'afmt': CLOZE_AFMT}],
+    css=ANKING_CARD_CSS,
 )
 
 # AnKing-style "one by one" note types (templates are shared with the in-browser exporter).
@@ -117,7 +47,7 @@ ANKI_SEQ_CLOZE_MODEL = genanki.Model(
     'Sequential Cloze (one by one)',
     fields=[{'name': 'Text'}, {'name': 'Extra'}],
     templates=[{'name': 'Sequential Cloze', 'qfmt': SEQ_CLOZE_QFMT, 'afmt': SEQ_CLOZE_AFMT}],
-    css=DEFAULT_CARD_CSS + SEQ_CLOZE_CSS_EXTRA,
+    css=ANKING_CARD_CSS + SEQ_CLOZE_CSS_EXTRA,
 )
 ANKI_SEQ_IO_MODEL = genanki.Model(
     1607392325,

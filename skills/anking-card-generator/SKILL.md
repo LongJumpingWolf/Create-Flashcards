@@ -47,6 +47,8 @@ These numbers were measured on the real AnKing Step 1/2 v12 deck (28,522 notes, 
 | One-by-one (list reveal) | 1.4% of notes (401) | Lists / mnemonics / "causes of X" with ≥3 parallel items. |
 | Tag hierarchy | deep: `Deck::Resource::Chapter::Topic`, plus flags | Tag deeply and consistently (see §9). |
 
+**Look:** see §3.8 — colour/size live in the note type; the fields only carry `<b> <u> <i>` and cloze blanks.
+
 **The AnKing "feel":** each card is one retrievable fact; the stem gives *just enough* context to be unambiguous; the answer is a short term; the Extra gives the reasoning or memory hook; tags carry the organisation (decks are shallow, tags are deep).
 
 Observed real examples (style reference, paraphrased from the deck):
@@ -115,7 +117,7 @@ You target the user's app "Anki Studio" (and, via TSV, real Anki). Types:
 | Table (only in Extra, small) | `<table><tr><th>…</th></tr><tr><td>…</td></tr></table>` | |
 | Arrows/symbols (plain Unicode) | `↑ ↓ → ← ↔ ≥ ≤ ≠ ± °` | `↑ PT` |
 
-No other tags. No inline CSS, no colours, no `<font>`, no `<div>` nesting, no emoji, no Markdown in the JSON (use the HTML above).
+Allowed layout wrapper (nothing else): `<div class="mnemonics">…</div>` around acronym / aligned list lines (left-aligns them inside the centred card, exactly like AnKing). No other tags. No inline CSS, no colours, no `<font>`, no emoji, no Markdown in the JSON (use the HTML above).
 Escape `<` and `>` that are *text* as `&lt;` `&gt;` (e.g., `&lt;0.5 mg/dL`).
 
 ### 3.4 Stem rules
@@ -150,6 +152,38 @@ Never write a hint that contains the answer. Never use the same hint word as the
 - Two blanks that must be recalled **together** (a pair/trio) → same number.
 - A list for one-by-one → c1…cn in reading order (Anki Studio) or all c1 + `One by one` (AnKing note type).
 - If revealing c2's answer would hand away c1 (they imply each other), merge or rewrite.
+
+### 3.8 Appearance — how AnKing cards look, and how to stay faithful (measured from the real note type CSS)
+
+**Principle: colour and size come from the note type, never from the field.** In the real deck only ~2% of notes carry any inline colour, and almost all of those are paste junk (`color:#000000`, `rgb(255,255,255)`). Meaning is carried by `<b>`, `<u>`, `<i>` and cloze blanks; the note-type CSS paints them. Never write `style=`, `<font>`, `color`, `font-size`, or `background` into a field.
+
+What the cards look like (the Anki Studio exporter ships this exact look, so JSON from this skill renders correctly):
+
+| Element | Day mode | Night mode (default for most users) |
+|---|---|---|
+| Font / size | Arial (Arial Greek), base 28 px (one `html{font-size}` number scales everything) | same |
+| Card text | black on light grey `#D1CFCE`, centred | `#FFFAFA` on `#272828`, centred |
+| Cloze (hidden `[...]` and revealed answer) | **bold blue** | bold `#4297F9` |
+| Extra field (`answer`) | *italic navy*, separated by a horizontal rule, 1 rem above | *italic magenta* |
+| `<b>` `<u>` `<i>` | same colour as the text (colour is inherited, they only add weight / underline / slant) | same |
+| Lists | left-aligned block inside the centred card, max ~50 % width | same |
+| `<div class="mnemonics">` | left-aligned block for acronym / aligned lines | same |
+| Images | max 85 % width, in Extra only | same |
+| Tables | centred, thin grey borders, shaded bold header row | same |
+| Revealed hint (`::hint` shown as `[hint]`) | bold blue like the cloze | same |
+
+Consequences for how you write:
+1. **Emphasis hierarchy** — bold = the subject term you must recognise; underline = the category word being asked; italic = qualifier. Colour is never an emphasis tool.
+2. **Question first, blank on its own line:** Q-style cards put a blank line between the question and the cloze (`…?<br><br>{{c1::answer}}`) — in the real deck, where the cloze directly follows the question, the blank line is used 224 times vs 41 without it.
+3. **Mnemonic / aligned lines:** wrap them in `<div class="mnemonics">`, one item per line separated by `<br>`; each line `{{cN::<u><b>X</b></u>rest of word::X}}` — the first letter bold+underlined *inside* the cloze, the hint is that plain letter.
+4. **Extra voice:** write Extra as plain short sentences; the CSS makes it italic and coloured. Do not wrap it in `<i>` yourself except for a short inline phrase that must contrast (e.g., a Latin name). Do not start lines with "Extra:".
+5. **Photo credits** (when the user supplied an image that has one): `<span style="…">` is not allowed, so write `Photo credit: <author>, <licence>, via Wikimedia Commons` as a plain last line of the Extra, after the image.
+6. **Tables** go in Extra only, small (≤ 5 × 5), header row = `<th>`; never a table in the Text field.
+7. **No decorative symbols.** Arrows/≥/≠/° are fine; emoji, checkmarks, bullets drawn with symbols are not (use a real `<ul>`/`<ol>` only inside Extra, or the `mnemonics` block in Text).
+8. **Do not centre/align with spaces or `&nbsp;`.** Spacing comes from `<br>` and the CSS.
+9. **Dark-mode safe:** because nothing in the field has a colour, the same card is readable in day and night mode. If a field ever contains an inline colour, strip it.
+
+If the user pastes cards into a real **AnKing note type**, the same markup renders with *their* CSS (same look); if they use Anki Studio's exporter the look above is built in. Either way the field HTML stays identical.
 
 ---
 

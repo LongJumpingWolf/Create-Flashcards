@@ -113,6 +113,8 @@ export function useAudioRecorder(onFinished, onError) {
 // --- Paste handling ----------------------------------------------------------------
 const PASTE_TAGS = new Set(['A', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'SUB', 'SUP', 'SPAN', 'FONT', 'BR', 'P', 'DIV', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'IMG', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TD', 'TH', 'BLOCKQUOTE', 'CODE', 'PRE', 'HR', 'MARK', 'AUDIO']);
 const DROP_WITH_CONTENT = new Set(['SCRIPT', 'STYLE', 'META', 'LINK', 'IFRAME', 'OBJECT', 'EMBED', 'NOSCRIPT', 'TEMPLATE', 'FORM', 'INPUT', 'BUTTON', 'SVG', 'CANVAS']);
+// Layout classes defined by the card CSS (AnKing: left-aligned mnemonic block, centred block).
+const KEEP_CLASSES = new Set(['mnemonics', 'centerbox']);
 const KEEP_STYLES = ['color', 'background-color', 'font-weight', 'font-style', 'text-decoration', 'text-align', 'vertical-align'];
 
 // Keeps meaningful formatting from a web page / Word / PDF paste but drops the junk
@@ -134,12 +136,14 @@ export function sanitizePastedHtml(html) {
       if (tag === 'AUDIO') { const src = child.getAttribute('src') || ''; if (/^data:audio\//i.test(src)) { keep.src = src; keep.controls = ''; } else { child.remove(); return; } }
       const style = child.style;
       const styles = KEEP_STYLES.map(prop => [prop, style.getPropertyValue(prop)]).filter(([prop, value]) => value && !(prop === 'font-weight' && (value === '400' || value === 'normal')) && !(prop === 'font-style' && value === 'normal') && !(prop === 'background-color' && /transparent|rgba\(0, 0, 0, 0\)|rgb\(255, 255, 255\)|white/i.test(value)));
+      const keptClasses = (child.getAttribute('class') || '').split(/\s+/).filter(name => KEEP_CLASSES.has(name));
       [...child.attributes].forEach(attribute => child.removeAttribute(attribute.name));
+      if (keptClasses.length && (tag === 'DIV' || tag === 'SPAN')) child.setAttribute('class', keptClasses.join(' '));
       Object.entries(keep).forEach(([name, value]) => child.setAttribute(name, value));
       if (styles.length && tag !== 'IMG') child.setAttribute('style', styles.map(([prop, value]) => `${prop}:${value}`).join(';'));
       if (tag === 'A') { child.setAttribute('target', '_blank'); child.setAttribute('rel', 'noopener noreferrer'); }
       // Unstyled wrapper spans carry no information.
-      if ((tag === 'SPAN' || tag === 'FONT') && !child.getAttribute('style')) child.replaceWith(...child.childNodes);
+      if ((tag === 'SPAN' || tag === 'FONT') && !child.getAttribute('style') && !child.getAttribute('class')) child.replaceWith(...child.childNodes);
     });
   };
   walk(doc.body);
@@ -281,4 +285,22 @@ export function tableTab(editor, backwards) {
   if (index === cells.length - 1) { tableAction(editor, 'row-below'); return true; }
   placeCaretInCell(cells[index + 1]);
   return true;
+}
+
+// --- Anki-style preview (the card as it renders in Anki with the AnKing look) ----------
+const PREVIEW_CLOZE = /\{\{c(\d+)::((?:(?!\}\}).)*?)(?:::((?:(?!\}\}).)*?))?\}\}/gs;
+
+export const clozeNumbers = (html) => [...new Set([...String(html || '').matchAll(/\{\{c(\d+)::/g)].map(match => Number(match[1])))].sort((a, b) => a - b);
+
+/**
+ * Renders cloze markup like Anki: the active number is hidden as [hint] (question side) or shown in
+ * the cloze colour (answer side); other numbers are plain text. `all` hides every cloze (one by one).
+ */
+export function renderClozePreview(html, activeNumber, showAnswer, all = false) {
+  return String(html || '').replace(PREVIEW_CLOZE, (_match, number, answer, hint) => {
+    const hidden = all || Number(number) === activeNumber;
+    if (!hidden) return answer;
+    const label = showAnswer ? answer : `[${(hint || '...').replace(/<[^>]*>/g, '')}]`;
+    return `<span class="cloze">${label}</span>`;
+  });
 }

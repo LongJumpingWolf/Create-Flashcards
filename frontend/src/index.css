@@ -1249,3 +1249,24 @@ body { background:#202124; }
 .import-problems { border-color:#7a3a40; background:#3a2427; color:#ffcdd1; }
 .import-warnings { border-color:#7a5a24; background:#3a2f1c; color:#f2d9a6; }
 .import-footer { display:flex; justify-content:flex-end; gap:8px; position:sticky; bottom:-20px; padding:10px 0 2px; background:linear-gradient(to bottom, transparent, #26272a 30%); }
+
+/* In-app preview: the card as Anki renders it with the AnKing look */
+.anki-card { font-family:"Arial Greek", Arial, sans-serif; font-size:19px; line-height:1.5; text-align:center; padding:24px 22px; border-radius:12px; }
+.anki-card.night { color:#FFFAFA; background:#272828; }
+.anki-card.day { color:#000; background:#D1CFCE; }
+.anki-card .cloze { font-weight:bold; }
+.anki-card.night .cloze { color:#4297F9; }
+.anki-card.day .cloze { color:blue; }
+.anki-card .anki-extra { font-style:italic; margin-top:1rem; }
+.anki-card.night .anki-extra { color:magenta; }
+.anki-card.day .anki-extra { color:navy; }
+.anki-card hr { opacity:.7; margin:14px 0; }
+.anki-card img { max-width:85%; }
+.anki-card ul, .anki-card ol { display:inline-block; max-width:80%; padding-left:40px; text-align:left; }
+.anki-card .mnemonics { display:inline-block; text-align:left; }
+.anki-card table { border-collapse:collapse; margin:8px auto; }
+.anki-card td, .anki-card th { border:1px solid #888; padding:4px 9px; text-align:left; }
+.preview-content > .anki-card > div { border:0 !important; background:transparent !important; color:inherit !important; padding:0 !important; }
+.preview-content > .anki-card.night > .anki-extra { color:magenta !important; }
+.preview-content > .anki-card.day > .anki-extra { color:navy !important; }
+.io-reviewer-controls strong { color:#f3f5f7; }
