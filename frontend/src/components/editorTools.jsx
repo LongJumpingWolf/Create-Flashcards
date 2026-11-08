@@ -7,7 +7,7 @@ import { ChevronDown, Code, Eye, EyeOff, Pin } from './Icons';
 import { HIGHLIGHT_COLORS } from './editorHelpers';
 
 // --- Toolbar popover ---------------------------------------------------------------
-export function ToolbarMenu({ icon, title, children, disabled = false, active = false, className = '' }) {
+export function ToolbarMenu({ icon, title, children, disabled = false, active = false, className = '', onOpen }) {
   const [position, setPosition] = useState(null);
   const buttonRef = useRef(null);
   const close = useCallback(() => setPosition(null), []);
@@ -31,6 +31,7 @@ export function ToolbarMenu({ icon, title, children, disabled = false, active = 
 
   const toggle = () => {
     if (position) { close(); return; }
+    onOpen?.();
     const rect = buttonRef.current.getBoundingClientRect();
     setPosition({ left: Math.max(8, Math.min(rect.left, window.innerWidth - 232)), top: rect.bottom + 6 });
   };
@@ -79,5 +80,23 @@ export function FieldHeader({ title, collapsed, onCollapse, htmlOpen, onHtml, pi
 export function HtmlView({ field, value, onChange, label }) {
   return (
     <textarea className="field-html-view" data-html-field={field} spellCheck={false} aria-label={label} value={value} onChange={event => onChange(event.target.value)} rows={Math.min(14, Math.max(5, value.split('\n').length + 1))} />
+  );
+}
+
+// Hover grid for choosing a table size (like Word / Docs).
+export function TableGridPicker({ onPick, max = 6 }) {
+  const [hover, setHover] = useState({ rows: 0, cols: 0 });
+  return (
+    <div className="table-picker">
+      <div className="table-picker-grid" onMouseLeave={() => setHover({ rows: 0, cols: 0 })}>
+        {Array.from({ length: max * max }, (_, index) => {
+          const row = Math.floor(index / max) + 1;
+          const col = (index % max) + 1;
+          const on = row <= hover.rows && col <= hover.cols;
+          return <button key={index} type="button" className={`table-picker-cell ${on ? 'is-on' : ''}`} aria-label={`${row} rows by ${col} columns`} onMouseEnter={() => setHover({ rows: row, cols: col })} onFocus={() => setHover({ rows: row, cols: col })} onClick={() => onPick(row, col)} />;
+        })}
+      </div>
+      <div className="table-picker-label">{hover.rows ? `${hover.rows} × ${hover.cols} table` : 'Choose a size'}</div>
+    </div>
   );
 }

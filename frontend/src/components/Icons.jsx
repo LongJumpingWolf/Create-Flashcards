@@ -63,6 +63,7 @@ const iconPaths = {
   sigma: ["M18 6H6l6 6-6 6h12"],
   strike: ["M5 12h14", "M16 6.5c-.6-1.4-2.2-2.5-4.1-2.5-2.4 0-4 1.3-4 3.2 0 1.2.6 2.1 1.7 2.8", "M8 17.5c.7 1.5 2.3 2.5 4.3 2.5 2.5 0 4.2-1.4 4.2-3.3 0-.8-.3-1.5-.8-2"],
   highlight: ["m4 20 4-1 10-10-3-3L5 16l-1 4Z", "m14 5 5 5", "M13 21h8"],
+  table: ["M4 5h16v14H4z", "M4 10h16", "M4 15h16", "M10 5v14", "M15 5v14"],
   copy: ["M9 9h11v11H9z", "M5 15V4h11"],
   ungroup: ["M4 4h10v10H4z", "m14 14 6 6", "m20 14-6 6"],
 };
@@ -144,3 +145,4 @@ export const Sigma = icon('sigma');
 export const Strikethrough = icon('strike');
 export const Highlight = icon('highlight');
 export const Copy = icon('copy');
+export const Table = icon('table');

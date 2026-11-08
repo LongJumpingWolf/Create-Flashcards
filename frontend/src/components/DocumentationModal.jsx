@@ -57,7 +57,7 @@ export default function DocumentationModal({ isVisible, onClose }) {
             </GuideSection>
 
             <GuideSection number="02" title="Format in place" description="Click where you want to type. Select text to style it with the single formatting bar." icon={<Pen size={17} />}>
-              <p>Paste images directly into a card. Use the Extra field for a hint, explanation, or source. Pin a field (pin icon) to keep it after adding, collapse it (eye icon), or edit its raw HTML (&lt;/&gt;). Add MathJax, audio, highlights, sub/superscript and lists from the toolbar.</p>
+              <p>Paste images directly into a card. Use the Extra field for a hint, explanation, or source. Pin a field (pin icon) to keep it after adding, collapse it (eye icon), or edit its raw HTML (&lt;/&gt;). Add tables, MathJax, audio, highlights, sub/superscript and lists from the toolbar.</p>
             </GuideSection>
 
             <GuideSection number="03" title="Study from a PDF" description="Open a PDF beside the editor and capture a region at any zoom level." icon={<Crop size={17} />}>
@@ -88,6 +88,8 @@ export default function DocumentationModal({ isVisible, onClose }) {
               <Shortcut keys={['Ctrl', 'M', 'M']}>Inline MathJax</Shortcut>
               <Shortcut keys={['Ctrl', 'M', 'E']}>Display MathJax</Shortcut>
               <Shortcut keys={['Ctrl', 'Shift', 'V']}>Paste as plain text</Shortcut>
+              <Shortcut keys={['Tab']}>Next table cell (adds a row at the end)</Shortcut>
+              <Shortcut keys={['Shift', 'Tab']}>Previous table cell</Shortcut>
               <Shortcut keys={['F3']}>Attach audio</Shortcut>
               <Shortcut keys={['F5']}>Record audio</Shortcut>
             </div>

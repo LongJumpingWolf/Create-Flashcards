@@ -130,6 +130,7 @@ export function sanitizePastedHtml(html) {
       const keep = {};
       if (tag === 'A') { const href = child.getAttribute('href') || ''; if (/^(https?:|mailto:)/i.test(href)) keep.href = href; }
       if (tag === 'IMG') { const src = child.getAttribute('src') || ''; if (/^(https?:|data:image\/)/i.test(src)) keep.src = src; keep.alt = child.getAttribute('alt') || ''; }
+      if (tag === 'TD' || tag === 'TH') { ['colspan', 'rowspan'].forEach(name => { const value = child.getAttribute(name); if (/^\d{1,2}$/.test(value || '')) keep[name] = value; }); }
       if (tag === 'AUDIO') { const src = child.getAttribute('src') || ''; if (/^data:audio\//i.test(src)) { keep.src = src; keep.controls = ''; } else { child.remove(); return; } }
       const style = child.style;
       const styles = KEEP_STYLES.map(prop => [prop, style.getPropertyValue(prop)]).filter(([prop, value]) => value && !(prop === 'font-weight' && (value === '400' || value === 'normal')) && !(prop === 'font-style' && value === 'normal') && !(prop === 'background-color' && /transparent|rgba\(0, 0, 0, 0\)|rgb\(255, 255, 255\)|white/i.test(value)));
@@ -173,4 +174,111 @@ export function findDuplicates(frontHtml, cards, ignoreIndex = null) {
     if (duplicateKey(card.question) === key) matches.push(index);
   });
   return matches;
+}
+
+// --- Tables ------------------------------------------------------------------------
+// Anki has no table button (people hand-write HTML or use add-ons), so the editor
+// builds standard <table> markup that exports unchanged and is styled by the card CSS.
+export const buildTableHtml = (rows, cols, header = true) => {
+  const cell = (tag) => `<${tag}><br></${tag}>`;
+  const row = (tag) => `<tr>${Array.from({ length: cols }, () => cell(tag)).join('')}</tr>`;
+  const body = Array.from({ length: rows }, (_, index) => row(header && index === 0 ? 'th' : 'td')).join('');
+  return `<table data-new-table="1"><tbody>${body}</tbody></table>`;
+};
+
+export const findCell = (editor) => {
+  const selection = window.getSelection();
+  if (!editor || !selection || selection.rangeCount === 0) return null;
+  const node = selection.anchorNode;
+  const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+  const cell = element?.closest?.('td, th');
+  return cell && editor.contains(cell) ? cell : null;
+};
+
+export const placeCaretInCell = (cell, atEnd = false) => {
+  if (!cell) return;
+  const range = document.createRange();
+  range.selectNodeContents(cell);
+  range.collapse(!atEnd);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+
+const makeCell = (tag) => { const cell = document.createElement(tag); cell.innerHTML = '<br>'; return cell; };
+
+const retag = (cell, tag) => {
+  if (cell.tagName.toLowerCase() === tag) return cell;
+  const next = document.createElement(tag);
+  [...cell.attributes].forEach(attribute => next.setAttribute(attribute.name, attribute.value));
+  next.innerHTML = cell.innerHTML;
+  cell.replaceWith(next);
+  return next;
+};
+
+// Edits the table around the caret. Returns true when something changed.
+export function tableAction(editor, action) {
+  const cell = findCell(editor);
+  const table = cell?.closest('table');
+  if (!cell || !table) return false;
+  const row = cell.parentElement;
+  const column = cell.cellIndex;
+  const rows = [...table.rows];
+  const rowIndex = rows.indexOf(row);
+  const columnCount = Math.max(...rows.map(item => item.cells.length));
+  const tagFor = (target) => (target.cells[0]?.tagName.toLowerCase() === 'th' && target === rows[0] ? 'th' : 'td');
+
+  if (action === 'row-above' || action === 'row-below') {
+    const fresh = document.createElement('tr');
+    const tag = action === 'row-above' && rowIndex === 0 ? tagFor(row) : 'td';
+    for (let index = 0; index < columnCount; index += 1) fresh.appendChild(makeCell(tag));
+    row.parentElement.insertBefore(fresh, action === 'row-above' ? row : row.nextSibling);
+    placeCaretInCell(fresh.cells[Math.min(column, fresh.cells.length - 1)]);
+    return true;
+  }
+  if (action === 'col-left' || action === 'col-right') {
+    rows.forEach(item => {
+      const reference = item.cells[Math.min(column, item.cells.length - 1)];
+      const tag = reference?.tagName.toLowerCase() === 'th' ? 'th' : 'td';
+      const fresh = makeCell(tag);
+      if (!reference) item.appendChild(fresh);
+      else item.insertBefore(fresh, action === 'col-left' ? reference : reference.nextSibling);
+    });
+    placeCaretInCell(row.cells[action === 'col-left' ? column : column + 1]);
+    return true;
+  }
+  if (action === 'del-row') {
+    if (rows.length === 1) { table.remove(); return true; }
+    const target = rows[rowIndex + 1] || rows[rowIndex - 1];
+    row.remove();
+    placeCaretInCell(target.cells[Math.min(column, target.cells.length - 1)]);
+    return true;
+  }
+  if (action === 'del-col') {
+    if (columnCount === 1) { table.remove(); return true; }
+    rows.forEach(item => item.cells[Math.min(column, item.cells.length - 1)]?.remove());
+    placeCaretInCell(row.cells[Math.min(column, row.cells.length - 1)]);
+    return true;
+  }
+  if (action === 'toggle-header') {
+    const makeHeader = rows[0].cells[0]?.tagName.toLowerCase() !== 'th';
+    [...rows[0].cells].forEach(item => retag(item, makeHeader ? 'th' : 'td'));
+    placeCaretInCell(rows[rowIndex].cells[Math.min(column, rows[rowIndex].cells.length - 1)]);
+    return true;
+  }
+  if (action === 'del-table') { table.remove(); return true; }
+  return false;
+}
+
+// Tab / Shift+Tab inside a table: move between cells, adding a row after the last one.
+export function tableTab(editor, backwards) {
+  const cell = findCell(editor);
+  if (!cell) return false;
+  const table = cell.closest('table');
+  const cells = [...table.querySelectorAll('td, th')];
+  const index = cells.indexOf(cell);
+  if (backwards) { placeCaretInCell(cells[Math.max(0, index - 1)], true); return true; }
+  if (index === cells.length - 1) { tableAction(editor, 'row-below'); return true; }
+  placeCaretInCell(cells[index + 1]);
+  return true;
 }

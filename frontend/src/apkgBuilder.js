@@ -43,6 +43,24 @@ const DEFAULT_CARD_CSS = `
     padding-left: 20px;
     margin: 8px 0;
 }
+
+.editable-content table {
+    border-collapse: collapse;
+    margin: 8px auto;
+}
+
+.editable-content td,
+.editable-content th {
+    border: 1px solid #888;
+    padding: 4px 9px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.editable-content th {
+    background: #eef0f2;
+    font-weight: bold;
+}
 `;
 
 const IOE_FIELDS = [

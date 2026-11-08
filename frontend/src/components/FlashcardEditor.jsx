@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom';
 // NEW: Import the modal component
 import DocumentationModal from './DocumentationModal';
 import { hasSavedPdf } from '../pdfResumeStorage';
-import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView } from './editorTools';
-import { MATH_WRAPPERS, wrapSelection, audioHtml, fileToDataUrl, useAudioRecorder, MAX_AUDIO_BYTES, sanitizePastedHtml, plainTextToHtml, duplicateKey } from './editorHelpers';
+import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView, TableGridPicker } from './editorTools';
+import { MATH_WRAPPERS, wrapSelection, audioHtml, fileToDataUrl, useAudioRecorder, MAX_AUDIO_BYTES, sanitizePastedHtml, plainTextToHtml, duplicateKey, buildTableHtml, findCell, tableAction, tableTab, placeCaretInCell } from './editorHelpers';
 
 let pdfStudyPanelPromise;
 const preloadPdfStudyPanel = () => {
@@ -25,7 +25,7 @@ class PdfPanelErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
-import { Trash2, FileText, Download, PlusCircle, Tag, Settings, XCircle, Palette, Ban, HelpCircle, Edit, ChevronRight, ChevronDown, Link, Upload, ArrowUp, ArrowDown, AlignCenter, Layers3, Search, Check, LoaderCircle, Eye, BookOpen, Sparkles, Crop, Code, Pin, EyeOff, Mic, StopSquare, Paperclip, Superscript, Subscript, ListOrdered, ListBullets, AlignLeft, AlignRight, AlignJustify, Indent, Outdent, Sigma, Strikethrough, Highlight, Eraser } from './Icons';
+import { Trash2, FileText, Download, PlusCircle, Tag, Settings, XCircle, Palette, Ban, HelpCircle, Edit, ChevronRight, ChevronDown, Link, Upload, ArrowUp, ArrowDown, AlignCenter, Layers3, Search, Check, LoaderCircle, Eye, BookOpen, Sparkles, Crop, Code, Pin, EyeOff, Mic, StopSquare, Paperclip, Superscript, Subscript, ListOrdered, ListBullets, AlignLeft, AlignRight, AlignJustify, Indent, Outdent, Sigma, Strikethrough, Highlight, Eraser, Table } from './Icons';
 
 const initialDecks = ["Default Deck"];
 const baseInputStyle = "px-3 py-2 rounded-lg border border-neutral-700 bg-neutral-800 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500";
@@ -75,7 +75,7 @@ const makeId = () => (typeof crypto !== 'undefined' && typeof crypto.randomUUID 
   : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
 
 // contentEditable leaves things like "<br>" behind when emptied; treat those as blank.
-const isBlankHtml = (html) => !html || (!/<(img|audio)\b/i.test(html) && html.replace(/<[^>]*>/g, '').replace(/&nbsp;|\s/gi, '').length === 0);
+const isBlankHtml = (html) => !html || (!/<(img|audio|table)\b/i.test(html) && html.replace(/<[^>]*>/g, '').replace(/&nbsp;|\s/gi, '').length === 0);
 const normalizeHtml = (html) => (isBlankHtml(html) ? '' : html.trim());
 const escapeHtmlAttr = (text) => String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -454,6 +454,7 @@ export default function FlashcardEditor() {
   const [htmlOpen, setHtmlOpen] = useState({ front: false, back: false });
   const [htmlDraft, setHtmlDraft] = useState({ front: '', back: '' });
   const audioInputRef = useRef(null);
+  const [inTable, setInTable] = useState(false);
   const pasteModeRef = useRef('rich');
   const toolsRef = useRef({});
   const chordRef = useRef({ key: null, at: 0 });
@@ -972,6 +973,12 @@ export default function FlashcardEditor() {
       const ref = field === 'front' ? frontRef : backRef;
       if (mod && event.shiftKey && key === 'x') { event.preventDefault(); api.toggleHtmlView(field); return; }
       if (htmlField) return;
+      if (event.key === 'Tab' && !mod && !event.altKey && toolsRef.current.table.findCell(ref.current)) {
+        event.preventDefault();
+        toolsRef.current.table.tableTab(ref.current, event.shiftKey);
+        api.syncAfterEdit(ref);
+        return;
+      }
       const exec = (command) => { event.preventDefault(); document.execCommand(command, false, null); api.syncAfterEdit(ref); };
       const chord = chordRef.current;
       if (chord.key === 'm' && Date.now() - chord.at < 1500) {
@@ -1938,6 +1945,21 @@ export default function FlashcardEditor() {
     scheduleEditorSave(field);
   };
 
+  const insertTable = (rows, cols, targetRef = toolbarTargetRef) => {
+    const editor = targetRef.current;
+    if (!editor) return;
+    restoreSavedSelection(targetRef);
+    document.execCommand('insertHTML', false, buildTableHtml(rows, cols, true) + '<br>');
+    const created = editor.querySelector('table[data-new-table]');
+    if (created) { created.removeAttribute('data-new-table'); placeCaretInCell(created.querySelector('th, td')); }
+    syncAfterEdit(targetRef);
+  };
+
+  const runTableAction = (action, targetRef = toolbarTargetRef) => {
+    restoreSavedSelection(targetRef);
+    if (tableAction(targetRef.current, action)) syncAfterEdit(targetRef);
+  };
+
   const toggleFieldPref = (kind, field) => setFieldPrefs(prefs => ({ ...prefs, [kind]: { ...prefs[kind], [field]: !prefs[kind][field] } }));
 
   const cardKeys = useMemo(() => cards.map(card => (card.type === 'Image Occlusion' ? null : duplicateKey(card.question))), [cards]);
@@ -1953,6 +1975,7 @@ export default function FlashcardEditor() {
   // Latest tool handlers for the keyboard-shortcut effect (declared earlier in the component).
   toolsRef.current.insertAudio = insertAudio;
   toolsRef.current.api = { insertMath, insertCloze, toggleHtmlView, openAudioPicker, toggleRecording, syncAfterEdit, cardType };
+  toolsRef.current.table = { tableTab, findCell };
 
   const openImagePicker = (targetRef = toolbarTargetRef) => {
     uploadTargetRef.current = targetRef;
@@ -2075,6 +2098,18 @@ export default function FlashcardEditor() {
                 <MenuItem icon="[ƒ]" onClick={() => insertMath('latex')}>LaTeX</MenuItem>
                 <MenuItem icon="[$]" onClick={() => insertMath('latex-math')}>LaTeX math</MenuItem>
                 <MenuItem icon="[$$]" onClick={() => insertMath('latex-equation')}>LaTeX equation</MenuItem>
+              </ToolbarMenu>
+              <ToolbarMenu title="Table" icon={<Table size={16} />} onOpen={() => setInTable(Boolean(findCell(toolbarTargetRef.current)))}>
+                <TableGridPicker onPick={(rows, cols) => insertTable(rows, cols)} />
+                <div className="toolbar-menu-divider" role="separator" />
+                <MenuItem disabled={!inTable} onClick={() => runTableAction('row-above')}>Insert row above</MenuItem>
+                <MenuItem disabled={!inTable} onClick={() => runTableAction('row-below')} hint="Tab">Insert row below</MenuItem>
+                <MenuItem disabled={!inTable} onClick={() => runTableAction('col-left')}>Insert column left</MenuItem>
+                <MenuItem disabled={!inTable} onClick={() => runTableAction('col-right')}>Insert column right</MenuItem>
+                <MenuItem disabled={!inTable} onClick={() => runTableAction('toggle-header')}>Toggle header row</MenuItem>
+                <MenuItem disabled={!inTable} onClick={() => runTableAction('del-row')}>Delete row</MenuItem>
+                <MenuItem disabled={!inTable} onClick={() => runTableAction('del-col')}>Delete column</MenuItem>
+                <MenuItem disabled={!inTable} onClick={() => runTableAction('del-table')}>Delete table</MenuItem>
               </ToolbarMenu>
               <button onClick={() => openAudioPicker()} title="Attach audio (F3)" className="toolbar-button"><Paperclip size={16} /></button>
               <button onClick={() => toggleRecording()} title={audioRecorder.recording ? 'Stop recording (F5)' : 'Record audio (F5)'} aria-pressed={audioRecorder.recording} className={`toolbar-button ${audioRecorder.recording ? 'is-recording' : ''}`}>{audioRecorder.recording ? <><StopSquare size={14} /><span className="font-mono text-[11px]">{Math.floor(audioRecorder.seconds / 60)}:{String(audioRecorder.seconds % 60).padStart(2, '0')}</span></> : <Mic size={16} />}</button>

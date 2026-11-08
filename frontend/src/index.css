@@ -1191,3 +1191,16 @@ body { background:#202124; }
 .field-warning button:hover { background:#6d5427; }
 .editable-content audio { display:inline-block; max-width:100%; height:34px; vertical-align:middle; }
 .editable-content [style*="background-color"]:not([style*="transparent"]) { color:#1b1b1b; }
+
+/* Tables inside card fields and the table picker */
+.editable-content table { border-collapse:collapse; margin:8px 0; max-width:100%; }
+.editable-content td, .editable-content th { min-width:36px; padding:5px 9px; border:1px solid #6a6d75; vertical-align:top; text-align:left; }
+.editable-content th { background:rgba(255,255,255,.08); font-weight:700; }
+.editable-content td:focus-within, .editable-content th:focus-within { outline:1px dashed #5c9ae6; outline-offset:-2px; }
+.toolbar-menu-divider { height:1px; margin:5px 4px; background:#44464c; }
+.toolbar-menu-item:disabled { opacity:.4; cursor:not-allowed; }
+.table-picker { padding:7px 7px 3px; }
+.table-picker-grid { display:grid; grid-template-columns:repeat(6,24px); gap:3px; }
+.table-picker-cell { width:24px; height:24px; border:1px solid #565961; border-radius:4px; background:#34363b; cursor:pointer; }
+.table-picker-cell.is-on { border-color:#5c9ae6; background:#2f6dbd; }
+.table-picker-label { margin-top:6px; color:#c3c8d0; font-size:11px; text-align:center; }
