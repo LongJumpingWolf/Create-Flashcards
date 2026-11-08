@@ -325,6 +325,9 @@ export function cleanTags(tags) {
 
 // --- Embedded <img src="data:..."> extraction ----------------------------------
 const EMBEDDED_IMAGE = /<img[^>]+src="data:(image\/[^;]+);base64,([^"]+)"[^>]*>/gi;
+// <audio src="data:audio/mp4;codecs=...;base64,..."> from the editor's attach / record tools.
+const EMBEDDED_AUDIO = /<audio\b[^>]*?\ssrc="data:(audio\/[^;"]+)[^",]*;base64,([^"]+)"[^>]*>(?:\s*<\/audio>)?/gi;
+const AUDIO_EXT = { mpeg: 'mp3', mp3: 'mp3', mp4: 'm4a', 'x-m4a': 'm4a', m4a: 'm4a', aac: 'aac', wav: 'wav', 'x-wav': 'wav', webm: 'webm', ogg: 'ogg', opus: 'opus', flac: 'flac' };
 const EXTENSIONS = { jpeg: 'jpg', 'svg+xml': 'svg' };
 
 function extensionFor(mime) {
@@ -335,6 +338,23 @@ function extensionFor(mime) {
 
 async function extractMedia(html, ctx) {
   if (!html) return html;
+  // Audio first: Anki references sound files as [sound:file.mp3] inside the field text.
+  if (/<audio\b/i.test(html)) {
+    const audio = [...html.matchAll(EMBEDDED_AUDIO)];
+    let converted = '';
+    let position = 0;
+    for (const match of audio) {
+      converted += html.slice(position, match.index);
+      position = match.index + match[0].length;
+      try {
+        const subtype = match[1].split('/')[1].toLowerCase();
+        converted += `[sound:${ctx.addAudio(match[2], AUDIO_EXT[subtype] || 'mp3')}]`;
+      } catch (error) {
+        ctx.warn(`Skipped an audio clip: ${error.message}`);
+      }
+    }
+    html = converted + html.slice(position);
+  }
   const matches = [...html.matchAll(EMBEDDED_IMAGE)];
   if (!matches.length) return html;
   let result = '';
@@ -434,6 +454,11 @@ async function planNotes(payload, { prepareImage, warn, onProgress }) {
     const tags = cleanTags(card.tags);
     const ctx = {
       warn,
+      addAudio(base64, ext) {
+        const name = `media_${randomInt(1000, 9999)}_${randomHex(4)}.${ext}`;
+        media.set(name, base64ToBytes(base64));
+        return name;
+      },
       async addImage(base64, mime, forOcclusion) {
         const cacheKey = `${forOcclusion ? 'o' : 'n'}:${mime}:${base64.length}:${base64.slice(0, 64)}:${base64.slice(-64)}`;
         let entry = imageCache.get(cacheKey);
@@ -473,6 +498,7 @@ async function planNotes(payload, { prepareImage, warn, onProgress }) {
       const originalMaskName = `${sessionId}-${mode}-O.svg`;
       media.set(originalMaskName, utf8(ioeMaskSvg(image.width, image.height, groups, mode, null, 'O', sessionId)));
       const imageWidth = Number.isFinite(card.image_width) ? Math.min(1800, Math.max(180, Math.round(card.image_width))) : 720;
+      const ioAnswer = await extractMedia(card.answer || '', ctx);
       groups.forEach((_, targetIndex) => {
         const noteId = `${sessionId}-${mode}-${targetIndex + 1}`;
         const questionMaskName = `${noteId}-Q.svg`;
@@ -487,7 +513,7 @@ async function planNotes(payload, { prepareImage, warn, onProgress }) {
             `<img src="${imageName}" style="width:${imageWidth}px;max-width:100%;height:auto">`,
             `<img src="${questionMaskName}" ${maskStyle}>`,
             '', '', '',
-            card.answer || '',
+            ioAnswer,
             '',
             `<img src="${answerMaskName}" ${maskStyle}>`,
             `<img src="${originalMaskName}">`,

@@ -57,7 +57,7 @@ export default function DocumentationModal({ isVisible, onClose }) {
             </GuideSection>
 
             <GuideSection number="02" title="Format in place" description="Click where you want to type. Select text to style it with the single formatting bar." icon={<Pen size={17} />}>
-              <p>Paste images directly into a card. Use the Extra field for a hint, explanation, or source. Add tags to keep related cards easy to find.</p>
+              <p>Paste images directly into a card. Use the Extra field for a hint, explanation, or source. Pin a field (pin icon) to keep it after adding, collapse it (eye icon), or edit its raw HTML (&lt;/&gt;). Add MathJax, audio, highlights, sub/superscript and lists from the toolbar.</p>
             </GuideSection>
 
             <GuideSection number="03" title="Study from a PDF" description="Open a PDF beside the editor and capture a region at any zoom level." icon={<Crop size={17} />}>
@@ -76,6 +76,20 @@ export default function DocumentationModal({ isVisible, onClose }) {
               <Shortcut keys={['Ctrl', 'S']}>Add card</Shortcut>
               <Shortcut keys={['Ctrl', 'E']}>Export deck</Shortcut>
               <Shortcut keys={['/']}>Search cards</Shortcut>
+            </div>
+            <div className="guide-shortcuts">
+              <p className="section-eyebrow">WHILE EDITING A FIELD</p>
+              <Shortcut keys={['Ctrl', 'Shift', 'X']}>Edit field HTML</Shortcut>
+              <Shortcut keys={['Ctrl', 'R']}>Clear formatting</Shortcut>
+              <Shortcut keys={['Ctrl', '=']}>Subscript</Shortcut>
+              <Shortcut keys={['Ctrl', 'Shift', '=']}>Superscript</Shortcut>
+              <Shortcut keys={['Ctrl', 'Shift', 'C']}>New cloze</Shortcut>
+              <Shortcut keys={['Ctrl', 'Alt', 'Shift', 'C']}>Same-number cloze</Shortcut>
+              <Shortcut keys={['Ctrl', 'M', 'M']}>Inline MathJax</Shortcut>
+              <Shortcut keys={['Ctrl', 'M', 'E']}>Display MathJax</Shortcut>
+              <Shortcut keys={['Ctrl', 'Shift', 'V']}>Paste as plain text</Shortcut>
+              <Shortcut keys={['F3']}>Attach audio</Shortcut>
+              <Shortcut keys={['F5']}>Record audio</Shortcut>
             </div>
             <div className="guide-shortcuts guide-snip-shortcuts">
               <p className="section-eyebrow">WHILE ANNOTATING</p>

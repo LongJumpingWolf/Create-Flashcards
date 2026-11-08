@@ -1160,3 +1160,34 @@ body { background:#202124; }
 .primary-button:hover:not(:disabled), .app-shell .primary-button:hover:not(:disabled) { background:#3774c4; }
 .snip-toggle, .app-shell .snip-toggle, .app-shell .snip-save-button, .app-shell .guide-footer button, .app-shell .pdf-empty-state button, .app-shell .pdf-load-error button { border-color:#4a82c9 !important; background:#2f6dbd !important; color:#fff !important; }
 .snip-toggle:hover:not(:disabled), .app-shell .snip-toggle:hover:not(:disabled), .app-shell .snip-save-button:hover, .app-shell .guide-footer button:hover, .app-shell .pdf-empty-state button:hover:not(:disabled), .app-shell .pdf-load-error button:hover { background:#3774c4 !important; }
+
+/* Anki-style editor tools: toolbar popovers, field header controls, HTML view, warnings. */
+.toolbar-menu-trigger { gap:2px; padding-right:5px; }
+.toolbar-menu-trigger.is-active, .toolbar-button.is-recording { background:#5a2a2e; color:#ffd5d8; border-color:#8a3d44; }
+.toolbar-button.is-recording { display:inline-flex; align-items:center; gap:5px; animation:rec-pulse 1.2s ease-in-out infinite; }
+@keyframes rec-pulse { 50% { box-shadow:0 0 0 3px rgba(224,86,98,.28); } }
+.toolbar-menu { position:fixed; z-index:200; min-width:210px; padding:5px; border:1px solid #4a4c52; border-radius:11px; background:#2c2d31; box-shadow:0 14px 40px rgba(0,0,0,.5); }
+.toolbar-menu-item { width:100%; display:flex; align-items:center; gap:10px; padding:7px 9px; border-radius:7px; background:transparent; color:#e2e5e9; font-size:12px; text-align:left; cursor:pointer; }
+.toolbar-menu-item:hover:not(:disabled) { background:#3a3c42; color:#fff; }
+.toolbar-menu-icon { width:22px; display:inline-flex; justify-content:center; color:#aab0b9; font:600 11px ui-monospace,monospace; }
+.toolbar-menu-label { flex:1; }
+.toolbar-menu-item kbd { padding:1px 5px; border:1px solid #565961; border-radius:4px; background:#3c3e43; color:#cfd3d9; font:10px ui-monospace,monospace; }
+.toolbar-swatches { display:flex; flex-wrap:wrap; gap:7px; padding:7px; max-width:210px; }
+.toolbar-swatch { width:24px; height:24px; border:1px solid rgba(255,255,255,.28); border-radius:50%; cursor:pointer; }
+.toolbar-swatch:hover { box-shadow:0 0 0 2px #fff; }
+.toolbar-swatch-clear { display:grid; place-items:center; background:#3a3c42; color:#e2e5e9; font-size:15px; line-height:1; }
+.field-header { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px; }
+.field-header-tools { display:flex; align-items:center; gap:2px; }
+.field-tool { width:28px; height:26px; display:grid; place-items:center; border-radius:7px; background:transparent; color:#9ba1ab; cursor:pointer; transition:background .15s,color .15s; }
+.field-tool:hover { background:#383a40; color:#e6e9ee; }
+.field-tool.is-on { background:#2f4a3a; color:#b4e3c4; }
+.field-pin.is-on svg { fill:currentColor; }
+.field-collapsed-preview { width:100%; padding:8px 11px; border:1px dashed #4a4c52; border-radius:9px; background:#27282b; color:#a3a9b2; font-size:12px; text-align:left; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.field-collapsed-preview:hover { color:#e2e5e9; border-color:#6a6d75; }
+.field-html-view { width:100%; min-height:120px; padding:10px 12px; border:1px solid #4a4c52; border-radius:9px; background:#1f2023; color:#d6e3d9; font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; resize:vertical; tab-size:2; }
+.field-html-view:focus { outline:none; border-color:#5c9ae6; box-shadow:0 0 0 3px rgba(92,154,230,.18); }
+.field-warning { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:6px; padding:7px 11px; border:1px solid #7a5a24; border-radius:9px; background:#3a2f1c; color:#f2d9a6; font-size:12px; }
+.field-warning button { padding:3px 10px; border-radius:6px; background:#5a4620; color:#ffe9bd; font-size:11px; font-weight:600; cursor:pointer; }
+.field-warning button:hover { background:#6d5427; }
+.editable-content audio { display:inline-block; max-width:100%; height:34px; vertical-align:middle; }
+.editable-content [style*="background-color"]:not([style*="transparent"]) { color:#1b1b1b; }

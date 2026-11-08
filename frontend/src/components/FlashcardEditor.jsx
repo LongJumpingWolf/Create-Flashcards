@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 // NEW: Import the modal component
 import DocumentationModal from './DocumentationModal';
 import { hasSavedPdf } from '../pdfResumeStorage';
+import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView } from './editorTools';
+import { MATH_WRAPPERS, wrapSelection, audioHtml, fileToDataUrl, useAudioRecorder, MAX_AUDIO_BYTES, sanitizePastedHtml, plainTextToHtml, duplicateKey } from './editorHelpers';
 
 let pdfStudyPanelPromise;
 const preloadPdfStudyPanel = () => {
@@ -23,7 +25,7 @@ class PdfPanelErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
-import { Trash2, FileText, Download, PlusCircle, Tag, Settings, XCircle, Palette, Ban, HelpCircle, Edit, ChevronRight, ChevronDown, Link, Upload, ArrowUp, ArrowDown, AlignCenter, Layers3, Search, Check, LoaderCircle, Eye, BookOpen, Sparkles, Crop } from './Icons';
+import { Trash2, FileText, Download, PlusCircle, Tag, Settings, XCircle, Palette, Ban, HelpCircle, Edit, ChevronRight, ChevronDown, Link, Upload, ArrowUp, ArrowDown, AlignCenter, Layers3, Search, Check, LoaderCircle, Eye, BookOpen, Sparkles, Crop, Code, Pin, EyeOff, Mic, StopSquare, Paperclip, Superscript, Subscript, ListOrdered, ListBullets, AlignLeft, AlignRight, AlignJustify, Indent, Outdent, Sigma, Strikethrough, Highlight, Eraser } from './Icons';
 
 const initialDecks = ["Default Deck"];
 const baseInputStyle = "px-3 py-2 rounded-lg border border-neutral-700 bg-neutral-800 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500";
@@ -73,7 +75,7 @@ const makeId = () => (typeof crypto !== 'undefined' && typeof crypto.randomUUID 
   : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
 
 // contentEditable leaves things like "<br>" behind when emptied; treat those as blank.
-const isBlankHtml = (html) => !html || (!/<img\b/i.test(html) && html.replace(/<[^>]*>/g, '').replace(/&nbsp;|\s/gi, '').length === 0);
+const isBlankHtml = (html) => !html || (!/<(img|audio)\b/i.test(html) && html.replace(/<[^>]*>/g, '').replace(/&nbsp;|\s/gi, '').length === 0);
 const normalizeHtml = (html) => (isBlankHtml(html) ? '' : html.trim());
 const escapeHtmlAttr = (text) => String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -198,7 +200,7 @@ const getCardPreview = (content) => {
     if (/<img[^>]*>/i.test(content)) {
         return "[IMAGE] " + content.replace(/<img[^>]*>/gi, '').substring(0, 50).trim() + '...';
     }
-    const cleanText = content.replace(/<[^>]*>/g, '');
+    const cleanText = content.replace(/<audio\b[^>]*>(<\/audio>)?/gi, '[audio] ').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
     return cleanText.substring(0, 100) + (cleanText.length > 100 ? '...' : '');
 };
 
@@ -444,6 +446,22 @@ export default function FlashcardEditor() {
   const uploadTargetRef = useRef(null);
   const [activeEditor, setActiveEditor] = useState('front');
   const [selectionContext, setSelectionContext] = useState(null);
+  // Anki-style field controls: collapse, pin (sticky) and raw HTML view.
+  const [fieldPrefs, setFieldPrefs] = useState(() => {
+    const fresh = { collapsed: { front: false, back: false }, pinned: { front: false, back: false } };
+    try { const saved = JSON.parse(localStorage.getItem('ankiEditorFieldPrefs') || '{}'); return { collapsed: { ...fresh.collapsed, ...saved.collapsed }, pinned: { ...fresh.pinned, ...saved.pinned } }; } catch { return fresh; }
+  });
+  const [htmlOpen, setHtmlOpen] = useState({ front: false, back: false });
+  const [htmlDraft, setHtmlDraft] = useState({ front: '', back: '' });
+  const audioInputRef = useRef(null);
+  const pasteModeRef = useRef('rich');
+  const toolsRef = useRef({});
+  const chordRef = useRef({ key: null, at: 0 });
+  useEffect(() => { try { localStorage.setItem('ankiEditorFieldPrefs', JSON.stringify(fieldPrefs)); } catch { /* storage unavailable */ } }, [fieldPrefs]);
+  const audioRecorder = useAudioRecorder(
+    (dataUrl) => toolsRef.current.insertAudio?.(dataUrl, toolsRef.current.recordTarget),
+    (message) => setFormMessage(message),
+  );
   const savedRangeRef = useRef(null);
 
   const [allAvailableTags, setAllAvailableTags] = useState(new Set([
@@ -637,11 +655,11 @@ export default function FlashcardEditor() {
       setCards(prev => [ioCard, ...prev]);
       window.clearTimeout(frontSaveTimerRef.current); window.clearTimeout(backSaveTimerRef.current);
       setFormMessage('');
-      setBack(''); setFront(''); setCurrentTags([]);
+      if (!fieldPrefs.pinned.back) { setBack(''); if (backRef.current) backRef.current.innerHTML = ''; }
+      setFront(''); setCurrentTags([]);
       setCardType(previousCardTypeRef.current);
       setOcclusionImage(null); setOcclusionMasks([]);
       if (frontRef.current) frontRef.current.innerHTML = '';
-      if (backRef.current) backRef.current.innerHTML = '';
       return;
     }
 
@@ -678,15 +696,14 @@ export default function FlashcardEditor() {
     setCards(prev => [newCard, ...prev]);
 
     window.clearTimeout(frontSaveTimerRef.current); window.clearTimeout(backSaveTimerRef.current);
-    setFront("");
-    setBack("");
+    // Pinned fields keep their content (Anki's "sticky" fields), e.g. a shared source or hint.
+    if (!fieldPrefs.pinned.front) { setFront(""); if (frontRef.current) frontRef.current.innerHTML = ''; }
+    if (!fieldPrefs.pinned.back) { setBack(""); if (backRef.current) backRef.current.innerHTML = ''; }
     setCurrentTags([]);
     setClozeNumber(1);
     setActiveClozeId(null);
-    if (frontRef.current) frontRef.current.innerHTML = '';
-    if (backRef.current) backRef.current.innerHTML = '';
 
-  }, [cardType, front, back, currentTags, editingIndex, updateCard, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode]);
+  }, [cardType, front, back, currentTags, editingIndex, updateCard, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode, fieldPrefs.pinned]);
 
 
   const exportDeck = useCallback(async () => {
@@ -928,6 +945,50 @@ export default function FlashcardEditor() {
     window.addEventListener('keydown', onEscape);
     return () => window.removeEventListener('keydown', onEscape);
   }, [occlusionEditorOpen, showPreview, showCardBrowser, showLinkModal, showColorPicker]);
+
+  useEffect(() => { setHtmlOpen({ front: false, back: false }); }, [editingIndex, cardType]);
+  useEffect(() => {
+    // Clearing a field (after Add) must also clear an open HTML view.
+    setHtmlDraft(draft => ({ front: !front && htmlOpen.front ? '' : draft.front, back: !back && htmlOpen.back ? '' : draft.back }));
+  }, [front, back, htmlOpen.front, htmlOpen.back]);
+
+  // Anki editor shortcuts, active only while a card field has focus.
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (!event.key) return;
+      const mod = event.ctrlKey || event.metaKey;
+      const key = event.key.toLowerCase();
+      const active = document.activeElement;
+      const api = toolsRef.current.api;
+      if (!api) return;
+      if (mod && event.shiftKey && key === 'v') {
+        pasteModeRef.current = 'plain';
+        window.setTimeout(() => { pasteModeRef.current = 'rich'; }, 800);
+        return;
+      }
+      const htmlField = active?.dataset?.htmlField;
+      const field = htmlField || (active === frontRef.current ? 'front' : active === backRef.current ? 'back' : null);
+      if (!field) return;
+      const ref = field === 'front' ? frontRef : backRef;
+      if (mod && event.shiftKey && key === 'x') { event.preventDefault(); api.toggleHtmlView(field); return; }
+      if (htmlField) return;
+      const exec = (command) => { event.preventDefault(); document.execCommand(command, false, null); api.syncAfterEdit(ref); };
+      const chord = chordRef.current;
+      if (chord.key === 'm' && Date.now() - chord.at < 1500) {
+        chordRef.current = { key: null, at: 0 };
+        if (key === 'm' || key === 'e') { event.preventDefault(); api.insertMath(key === 'm' ? 'mathjax-inline' : 'mathjax-block', ref, true); return; }
+      }
+      if (mod && !event.shiftKey && !event.altKey && key === 'm') { event.preventDefault(); chordRef.current = { key: 'm', at: Date.now() }; return; }
+      if (mod && !event.altKey && key === 'r' && !event.shiftKey) { exec('removeFormat'); return; }
+      if (mod && !event.altKey && event.key === '=') { exec('subscript'); return; }
+      if (mod && !event.altKey && event.key === '+') { exec('superscript'); return; }
+      if (mod && event.shiftKey && key === 'c' && api.cardType === 'Cloze' && field === 'front') { event.preventDefault(); api.insertCloze(ref, event.altKey); return; }
+      if (event.key === 'F3') { event.preventDefault(); api.openAudioPicker(ref); return; }
+      if (event.key === 'F5') { event.preventDefault(); api.toggleRecording(ref); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1193,6 +1254,16 @@ export default function FlashcardEditor() {
     const clipboardData = e.clipboardData || window.clipboardData;
     const file = getClipboardImage(clipboardData);
     if (!file) {
+      const pastedHtml = clipboardData?.getData('text/html') || '';
+      const pastedText = clipboardData?.getData('text/plain') || '';
+      const plainRequested = pasteModeRef.current === 'plain';
+      pasteModeRef.current = 'rich';
+      if (plainRequested || pastedHtml) {
+        // Strip page chrome (classes, fonts, scripts) but keep real formatting; Ctrl+Shift+V pastes plain text.
+        e.preventDefault();
+        const cleaned = plainRequested ? '' : sanitizePastedHtml(pastedHtml);
+        document.execCommand('insertHTML', false, cleaned || plainTextToHtml(pastedText));
+      }
       setTimeout(() => {
         if (!targetRef.current) return;
         if (targetRef === frontRef) syncFrontContent(targetRef.current.innerHTML);
@@ -1514,7 +1585,7 @@ export default function FlashcardEditor() {
   };
 
 
-  const insertCloze = (targetRef) => {
+  const insertCloze = (targetRef, sameNumber = false) => {
     if (cardType !== "Cloze" || targetRef !== frontRef || !targetRef.current) return;
 
     restoreSavedSelection(targetRef);
@@ -1537,7 +1608,9 @@ export default function FlashcardEditor() {
       range.deleteContents();
     }
   
-    const currentClozeNum = getHighestClozeNumber(frontRef.current.innerHTML) + 1;
+    const highestCloze = getHighestClozeNumber(frontRef.current.innerHTML);
+    // Anki: Ctrl+Shift+C starts a new number, Ctrl+Alt+Shift+C reuses the current one.
+    const currentClozeNum = Math.max(1, highestCloze + (sameNumber ? 0 : 1));
   
     const span = document.createElement('span');
     span.style.color = clozeColor;
@@ -1813,6 +1886,74 @@ export default function FlashcardEditor() {
 
   const toolbarTargetRef = activeEditor === 'back' ? backRef : frontRef;
 
+  const syncAfterEdit = (targetRef) => setTimeout(() => {
+    if (!targetRef.current) return;
+    if (targetRef === frontRef) syncFrontContent(targetRef.current.innerHTML);
+    else syncBackContent(targetRef.current.innerHTML);
+  }, 10);
+
+  // Wraps the selection in MathJax / LaTeX delimiters (Anki's fx menu).
+  const insertMath = (kind, targetRef = toolbarTargetRef, live = false) => {
+    const [before, after] = MATH_WRAPPERS[kind];
+    if (!live) restoreSavedSelection(targetRef);
+    targetRef.current?.focus();
+    wrapSelection(targetRef.current, before, after);
+    syncAfterEdit(targetRef);
+  };
+
+  const insertAudio = (dataUrl, targetRef = toolbarTargetRef) => {
+    if (!targetRef?.current) return;
+    restoreSavedSelection(targetRef);
+    document.execCommand('insertHTML', false, audioHtml(dataUrl));
+    syncAfterEdit(targetRef);
+  };
+
+  const handleAudioFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('audio/')) { setFormMessage('Choose an audio file (MP3, M4A, WAV, OGG…).'); return; }
+    if (file.size > MAX_AUDIO_BYTES) { setFormMessage('That audio file is over 6 MB. Trim it first so your deck stays fast and saves in this browser.'); return; }
+    try { insertAudio(await fileToDataUrl(file), toolsRef.current.audioTarget || toolbarTargetRef); } catch { setFormMessage('Could not read that audio file.'); }
+  };
+
+  const openAudioPicker = (targetRef = toolbarTargetRef) => { toolsRef.current.audioTarget = targetRef; audioInputRef.current?.click(); };
+
+  const toggleRecording = (targetRef = toolbarTargetRef) => {
+    if (audioRecorder.recording) { audioRecorder.stop(); return; }
+    toolsRef.current.recordTarget = targetRef;
+    audioRecorder.start();
+  };
+
+  const toggleHtmlView = (field) => {
+    const ref = field === 'front' ? frontRef : backRef;
+    if (!htmlOpen[field]) setHtmlDraft(draft => ({ ...draft, [field]: ref.current?.innerHTML || '' }));
+    setHtmlOpen(open => ({ ...open, [field]: !open[field] }));
+  };
+
+  const changeHtmlView = (field, value) => {
+    const ref = field === 'front' ? frontRef : backRef;
+    setHtmlDraft(draft => ({ ...draft, [field]: value }));
+    if (ref.current) ref.current.innerHTML = value;
+    scheduleEditorSave(field);
+  };
+
+  const toggleFieldPref = (kind, field) => setFieldPrefs(prefs => ({ ...prefs, [kind]: { ...prefs[kind], [field]: !prefs[kind][field] } }));
+
+  const cardKeys = useMemo(() => cards.map(card => (card.type === 'Image Occlusion' ? null : duplicateKey(card.question))), [cards]);
+  const duplicateMatches = useMemo(() => {
+    if (cardType === 'Image Occlusion') return [];
+    const key = duplicateKey(front);
+    if (key.length < 2 || key === '[img]') return [];
+    const matches = [];
+    cardKeys.forEach((cardKey, index) => { if (cardKey === key && index !== editingIndex) matches.push(index); });
+    return matches;
+  }, [front, cardKeys, cardType, editingIndex]);
+
+  // Latest tool handlers for the keyboard-shortcut effect (declared earlier in the component).
+  toolsRef.current.insertAudio = insertAudio;
+  toolsRef.current.api = { insertMath, insertCloze, toggleHtmlView, openAudioPicker, toggleRecording, syncAfterEdit, cardType };
+
   const openImagePicker = (targetRef = toolbarTargetRef) => {
     uploadTargetRef.current = targetRef;
     fileInputRef.current?.click();
@@ -1895,13 +2036,30 @@ export default function FlashcardEditor() {
               {cardType === 'Basic' ? basicColorPresets.map((color, index) => (
                 <button key={`toolbar-color-${index}`} onClick={() => applyFormat('foreColor', toolbarTargetRef, color)} onContextMenu={(e) => { e.preventDefault(); setColorPickerTarget(`basic-${index}`); setCustomHex(color); setShowColorPicker(true); }} title={`Apply color ${color}; right-click to edit`} className="h-5 w-5 rounded-full border border-neutral-500 hover:ring-2 hover:ring-white" style={{ backgroundColor: color }} />
               )) : <button onClick={() => { setColorPickerTarget('cloze'); setShowColorPicker(true); }} title="Change cloze color" className="h-6 w-6 rounded-full border border-neutral-500" style={{ backgroundColor: clozeColor }} />}
-              {cardType === 'Basic' && <button onClick={() => applyFormat('removeFormat', toolbarTargetRef)} title="Clear formatting" className="toolbar-button"><Ban size={16} /></button>}
+              <button onClick={() => applyFormat('removeFormat', toolbarTargetRef)} title="Clear formatting (Ctrl+R)" className="toolbar-button"><Eraser size={16} /></button>
               <span aria-hidden="true" className="mx-1 h-5 border-l border-neutral-700" />
-              <button onClick={() => applyFormat('bold', toolbarTargetRef)} title="Bold" className="toolbar-button font-bold">B</button>
-              <button onClick={() => applyFormat('italic', toolbarTargetRef)} title="Italic" className="toolbar-button italic">I</button>
-              <button onClick={() => applyFormat('underline', toolbarTargetRef)} title="Underline" className="toolbar-button underline">U</button>
-              <button onClick={() => applyFormat('insertUnorderedList', toolbarTargetRef)} title="Bullet list" className="toolbar-button">☷</button>
-              <button onClick={() => applyFormat('justifyCenter', toolbarTargetRef)} title="Center align" className="toolbar-button"><AlignCenter size={16} /></button>
+              <button onClick={() => applyFormat('bold', toolbarTargetRef)} title="Bold (Ctrl+B)" className="toolbar-button font-bold">B</button>
+              <button onClick={() => applyFormat('italic', toolbarTargetRef)} title="Italic (Ctrl+I)" className="toolbar-button italic">I</button>
+              <button onClick={() => applyFormat('underline', toolbarTargetRef)} title="Underline (Ctrl+U)" className="toolbar-button underline">U</button>
+              <button onClick={() => applyFormat('strikeThrough', toolbarTargetRef)} title="Strikethrough" className="toolbar-button"><Strikethrough size={16} /></button>
+              <button onClick={() => applyFormat('superscript', toolbarTargetRef)} title="Superscript (Ctrl+Shift+=)" className="toolbar-button"><Superscript size={16} /></button>
+              <button onClick={() => applyFormat('subscript', toolbarTargetRef)} title="Subscript (Ctrl+=)" className="toolbar-button"><Subscript size={16} /></button>
+              <ToolbarMenu title="Highlight color" icon={<Highlight size={16} />}>
+                <HighlightSwatches onPick={(color) => applyFormat('hiliteColor', toolbarTargetRef, color)} onClear={() => applyFormat('hiliteColor', toolbarTargetRef, 'transparent')} />
+              </ToolbarMenu>
+              <span aria-hidden="true" className="mx-1 h-5 border-l border-neutral-700" />
+              <ToolbarMenu title="Lists and indent" icon={<ListBullets size={16} />}>
+                <MenuItem icon={<ListBullets size={15} />} onClick={() => applyFormat('insertUnorderedList', toolbarTargetRef)}>Bulleted list</MenuItem>
+                <MenuItem icon={<ListOrdered size={15} />} onClick={() => applyFormat('insertOrderedList', toolbarTargetRef)}>Numbered list</MenuItem>
+                <MenuItem icon={<Indent size={15} />} onClick={() => applyFormat('indent', toolbarTargetRef)}>Increase indent</MenuItem>
+                <MenuItem icon={<Outdent size={15} />} onClick={() => applyFormat('outdent', toolbarTargetRef)}>Decrease indent</MenuItem>
+              </ToolbarMenu>
+              <ToolbarMenu title="Text alignment" icon={<AlignCenter size={16} />}>
+                <MenuItem icon={<AlignLeft size={15} />} onClick={() => applyFormat('justifyLeft', toolbarTargetRef)}>Align left</MenuItem>
+                <MenuItem icon={<AlignCenter size={15} />} onClick={() => applyFormat('justifyCenter', toolbarTargetRef)}>Center</MenuItem>
+                <MenuItem icon={<AlignRight size={15} />} onClick={() => applyFormat('justifyRight', toolbarTargetRef)}>Align right</MenuItem>
+                <MenuItem icon={<AlignJustify size={15} />} onClick={() => applyFormat('justifyFull', toolbarTargetRef)}>Justify</MenuItem>
+              </ToolbarMenu>
               <button onClick={() => resizeContent(-1)} title="Decrease selected text or image size" disabled={!selectionContext || selectionContext.editorRef !== toolbarTargetRef} className="toolbar-button"><ArrowDown size={16} /></button>
               <span className="w-10 text-center font-mono text-[11px] text-neutral-400" aria-live="polite">{selectionContext?.editorRef === toolbarTargetRef ? (selectionContext.type === 'image' ? `${selectionContext.size}%` : `${selectionContext.size}px`) : '--'}</span>
               <button onClick={() => resizeContent(1)} title="Increase selected text or image size" disabled={!selectionContext || selectionContext.editorRef !== toolbarTargetRef} className="toolbar-button"><ArrowUp size={16} /></button>
@@ -1909,6 +2067,18 @@ export default function FlashcardEditor() {
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, uploadTargetRef.current || toolbarTargetRef)} />
               {activeEditor === 'back' && <button onClick={() => insertHyperlink(toolbarTargetRef)} title="Insert hyperlink" className="toolbar-button"><Link size={16} /></button>}
               {cardType === 'Cloze' && activeEditor === 'front' && <button onClick={() => insertCloze(toolbarTargetRef)} title={`Insert cloze c${clozeNumber}`} className="toolbar-button font-mono text-xs">{'{ }'}</button>}
+              {cardType === 'Cloze' && activeEditor === 'front' && <button onClick={() => insertCloze(toolbarTargetRef, true)} title="Cloze, same number (Ctrl+Alt+Shift+C)" className="toolbar-button font-mono text-xs">{'{=}'}</button>}
+              <span aria-hidden="true" className="mx-1 h-5 border-l border-neutral-700" />
+              <ToolbarMenu title="Math and LaTeX" icon={<Sigma size={16} />}>
+                <MenuItem icon={'\\( \\)'} hint="Ctrl+M, M" onClick={() => insertMath('mathjax-inline')}>Inline MathJax</MenuItem>
+                <MenuItem icon={'\\[ \\]'} hint="Ctrl+M, E" onClick={() => insertMath('mathjax-block')}>Display MathJax</MenuItem>
+                <MenuItem icon="[ƒ]" onClick={() => insertMath('latex')}>LaTeX</MenuItem>
+                <MenuItem icon="[$]" onClick={() => insertMath('latex-math')}>LaTeX math</MenuItem>
+                <MenuItem icon="[$$]" onClick={() => insertMath('latex-equation')}>LaTeX equation</MenuItem>
+              </ToolbarMenu>
+              <button onClick={() => openAudioPicker()} title="Attach audio (F3)" className="toolbar-button"><Paperclip size={16} /></button>
+              <button onClick={() => toggleRecording()} title={audioRecorder.recording ? 'Stop recording (F5)' : 'Record audio (F5)'} aria-pressed={audioRecorder.recording} className={`toolbar-button ${audioRecorder.recording ? 'is-recording' : ''}`}>{audioRecorder.recording ? <><StopSquare size={14} /><span className="font-mono text-[11px]">{Math.floor(audioRecorder.seconds / 60)}:{String(audioRecorder.seconds % 60).padStart(2, '0')}</span></> : <Mic size={16} />}</button>
+              <input type="file" ref={audioInputRef} className="hidden" accept="audio/*" onChange={handleAudioFile} />
               </div>
             </div>}
 
@@ -1923,9 +2093,8 @@ export default function FlashcardEditor() {
             {cardType === 'Image Occlusion' && occlusionImage && occlusionEditorOpen && createPortal(<div className="io-editor-backdrop" role="dialog" aria-modal="true" aria-label="Image occlusion editor" onPointerDown={e => { if (e.target === e.currentTarget) setOcclusionEditorOpen(false); }}><section className="io-editor-dialog"><header className="io-editor-header"><div><span className="section-eyebrow">IMAGE OCCLUSION</span><h2>Arrange masks</h2></div><div className="io-editor-actions"><label>Image size <input aria-label="Image width" type="range" min="180" max="1800" step="10" value={occlusionImageWidth} onChange={e => setOcclusionImageWidth(Number(e.target.value))}/><span>{occlusionImageWidth}px</span></label><button type="button" className="quiet-button" onClick={() => setOcclusionEditorOpen(false)}>Done</button></div></header><div className="io-editor-stage"><div className="io-editor-resize-frame" style={{width:`min(${occlusionImageWidth}px, calc(100vw - 64px))`}}><div className="io-mask-draw-area io-editor-mask-area" onPointerDown={e => { if (e.target.closest('.manual-mask-remove,.io-resize-handle')) return; e.currentTarget.setPointerCapture(e.pointerId); manualMaskStartRef.current = manualMaskPoint(e); setManualMaskPreview({ x: manualMaskStartRef.current.x, y: manualMaskStartRef.current.y, width: 0, height: 0 }); }} onPointerMove={e => { if (!manualMaskStartRef.current) return; const p = manualMaskPoint(e), s = manualMaskStartRef.current; setManualMaskPreview({ x: Math.min(s.x,p.x), y: Math.min(s.y,p.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }} onPointerUp={finishManualMask} onPointerCancel={cancelManualMask}><img src={occlusionImage} alt="Image occlusion source" draggable="false"/>{occlusionMasks.map((mask,index) => <button type="button" className="manual-mask-remove" key={mask.id} title={`Remove region ${index+1}`} onPointerDown={e => e.stopPropagation()} onClick={() => setOcclusionMasks(prev => prev.filter(m => m.id !== mask.id))} style={{left:`${mask.x*100}%`,top:`${mask.y*100}%`,width:`${mask.width*100}%`,height:`${mask.height*100}%`,borderRadius:mask.shape === 'ellipse' ? '50%' : 0}}>{index+1} ×</button>)}{manualMaskPreview && <span className="manual-mask-draft" style={{left:`${manualMaskPreview.x*100}%`,top:`${manualMaskPreview.y*100}%`,width:`${manualMaskPreview.width*100}%`,height:`${manualMaskPreview.height*100}%`}}/>}</div>{['n','ne','e','se','s','sw','w','nw'].map(direction => <button type="button" key={direction} aria-label={`Resize image ${direction}`} className={`io-resize-handle ${direction}`} onPointerDown={e => beginImageResize(e,direction)} onPointerMove={moveImageResize} onPointerUp={endImageResize} onPointerCancel={endImageResize}/>)}</div></div><footer className="io-editor-footer"><span>{occlusionMasks.length} hidden region{occlusionMasks.length === 1 ? '' : 's'} · Drag to add a mask, select a mask to remove it. Resize handles keep the image proportions.</span><button type="button" className="primary-button" onClick={() => setOcclusionEditorOpen(false)}>Done</button></footer></section></div>, document.body)}
 
             {cardType !== 'Image Occlusion' && <section className="space-y-2 mb-4">
-              <h3 className="text-sm font-medium block mb-1">
-                {cardType === "Cloze" ? "Text (Ctrl+select for cloze)" : "Front"}
-              </h3>
+              <FieldHeader title={cardType === "Cloze" ? "Text (Ctrl+select for cloze)" : "Front"} collapsed={fieldPrefs.collapsed.front} onCollapse={() => toggleFieldPref('collapsed', 'front')} htmlOpen={htmlOpen.front} onHtml={() => toggleHtmlView('front')} pinned={fieldPrefs.pinned.front} onPin={() => toggleFieldPref('pinned', 'front')} />
+              {fieldPrefs.collapsed.front && <button type="button" className="field-collapsed-preview" onClick={() => toggleFieldPref('collapsed', 'front')}>{duplicateKey(front).slice(0, 90) || 'Empty field: click to expand'}</button>}
               <div
                 ref={frontRef}
                 data-editor-drop-target="front"
@@ -1944,13 +2113,16 @@ export default function FlashcardEditor() {
                 onMouseUp={(e) => { handleMouseUpForCloze(e, frontRef); handleSelectionChange(e); }}
                 onKeyUp={handleSelectionChange}
                 className={`${baseInputStyle} min-h-[110px] p-3 editable-content inline-block min-w-full align-top focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20`}
-                style={{whiteSpace: 'pre-wrap'}}
+                style={{whiteSpace: 'pre-wrap', ...((fieldPrefs.collapsed.front || htmlOpen.front) && { display: 'none' })}}
                 {...(!contentInitialized && { dangerouslySetInnerHTML: { __html: front } })}
               />
+              {htmlOpen.front && !fieldPrefs.collapsed.front && <HtmlView field="front" label="Front HTML" value={htmlDraft.front} onChange={(value) => changeHtmlView('front', value)} />}
+              {duplicateMatches.length > 0 && <div className="field-warning" role="status"><span>This front already exists in your deck ({duplicateMatches.length} card{duplicateMatches.length > 1 ? 's' : ''}).</span><button type="button" onClick={() => { setBrowserSearch(''); setBrowserSelectedIndex(duplicateMatches[0]); setShowCardBrowser(true); }}>Show</button></div>}
             </section>}
 
             <section className="space-y-2 mb-4">
-              <h3 className="text-sm font-medium block mb-1">{cardType === "Cloze" || cardType === 'Image Occlusion' ? "Extra (Optional)" : "Back"}</h3>
+              <FieldHeader title={cardType === "Cloze" || cardType === 'Image Occlusion' ? "Extra (Optional)" : "Back"} collapsed={fieldPrefs.collapsed.back} onCollapse={() => toggleFieldPref('collapsed', 'back')} htmlOpen={htmlOpen.back} onHtml={() => toggleHtmlView('back')} pinned={fieldPrefs.pinned.back} onPin={() => toggleFieldPref('pinned', 'back')} />
+              {fieldPrefs.collapsed.back && <button type="button" className="field-collapsed-preview" onClick={() => toggleFieldPref('collapsed', 'back')}>{duplicateKey(back).slice(0, 90) || 'Empty field: click to expand'}</button>}
               <div
                 ref={backRef}
                 data-editor-drop-target="back"
@@ -1969,9 +2141,10 @@ export default function FlashcardEditor() {
                 onMouseUp={handleSelectionChange}
                 onKeyUp={handleSelectionChange}
                 className={`${baseInputStyle} min-h-[110px] p-3 editable-content inline-block min-w-full align-top focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20`}
-                style={{whiteSpace: 'pre-wrap'}}
+                style={{whiteSpace: 'pre-wrap', ...((fieldPrefs.collapsed.back || htmlOpen.back) && { display: 'none' })}}
                 {...(!contentInitialized && { dangerouslySetInnerHTML: { __html: back } })}
               />
+              {htmlOpen.back && !fieldPrefs.collapsed.back && <HtmlView field="back" label="Back HTML" value={htmlDraft.back} onChange={(value) => changeHtmlView('back', value)} />}
             </section>
 
             <section className="space-y-2 mb-6 relative">

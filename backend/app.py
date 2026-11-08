@@ -179,7 +179,19 @@ def extract_media_from_html(html_content: str) -> tuple[str, Dict[str, bytes]]:
     and returns the modified HTML and a dictionary of filename: raw_bytes.
     """
     media_files = {}
-    
+
+    # Audio attached/recorded in the editor becomes Anki's [sound:file] syntax.
+    audio_pattern = r'<audio\b[^>]*?\ssrc="data:(audio/[^;"]+)[^",]*;base64,([^"]+)"[^>]*>(?:\s*</audio>)?'
+    audio_ext = {'mpeg': 'mp3', 'mp3': 'mp3', 'mp4': 'm4a', 'x-m4a': 'm4a', 'm4a': 'm4a', 'aac': 'aac', 'wav': 'wav', 'x-wav': 'wav', 'webm': 'webm', 'ogg': 'ogg', 'opus': 'opus', 'flac': 'flac'}
+    for match in reversed(list(re.finditer(audio_pattern, html_content, re.IGNORECASE))):
+        try:
+            ext = audio_ext.get(match.group(1).split('/')[1].lower(), 'mp3')
+            audio_name = f"media_{random.randint(1000, 9999)}_{os.urandom(4).hex()}.{ext}"
+            media_files[audio_name] = b64decode(match.group(2))
+            html_content = html_content[:match.start()] + f"[sound:{audio_name}]" + html_content[match.end():]
+        except Exception as e:
+            logger.warning("Error processing embedded audio: %s", e)
+
     # Regex to find base64 images: <img src="data:image/png;base64,...">
     pattern = r'<img[^>]+src="data:(image/[^;]+);base64,([^"]+)"[^>]*>'
     matches = list(re.finditer(pattern, html_content, re.IGNORECASE))

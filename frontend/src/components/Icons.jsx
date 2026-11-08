@@ -45,6 +45,25 @@ const iconPaths = {
   maskEllipse: ["M12 4c5.1 0 9 3.4 9 8s-3.9 8-9 8-9-3.4-9-8 3.9-8 9-8Z", "M9 9h6v6H9z"],
   polygon: ["m12 3 8 6-3 11H7L4 9z"],
   group: ["M4 4h10v10H4z", "M10 10h10v10H10z"],
+  code: ["m8 7-5 5 5 5", "m16 7 5 5-5 5", "m14 4-4 16"],
+  pin: ["M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6Z", "M12 14v7"],
+  eyeOff: ["M2.5 12s3.4-6 9.5-6c1.5 0 2.8.4 4 .9", "M21.5 12s-3.4 6-9.5 6c-1.5 0-2.8-.4-4-.9", "M9.9 9.9a3 3 0 0 0 4.2 4.2", "m3 3 18 18"],
+  mic: ["M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z", "M5 11a7 7 0 0 0 14 0", "M12 18v3"],
+  stop: ["M7 7h10v10H7z"],
+  paperclip: ["m20 11.5-8.2 8.2a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"],
+  superscript: ["m4 18 8-9", "m12 18-8-9", "M16 7c0-1 .8-1.8 1.9-1.8s1.9.7 1.9 1.6c0 1.6-3.8 2.6-3.8 4.2h3.9"],
+  subscript: ["m4 6 8 9", "m12 6-8 9", "M16 17c0-1 .8-1.8 1.9-1.8s1.9.7 1.9 1.6c0 1.6-3.8 2.6-3.8 4.2h3.9"],
+  listOrdered: ["M10 6h11", "M10 12h11", "M10 18h11", "M4 5.5 5.5 5v4", "M4 14h2.5l-2.5 3h2.5"],
+  listBullets: ["M10 6h11", "M10 12h11", "M10 18h11", "M4.5 6h.01", "M4.5 12h.01", "M4.5 18h.01"],
+  alignLeft: ["M4 6h16", "M4 10h10", "M4 14h16", "M4 18h10"],
+  alignRight: ["M4 6h16", "M10 10h10", "M4 14h16", "M10 18h10"],
+  alignJustify: ["M4 6h16", "M4 10h16", "M4 14h16", "M4 18h16"],
+  indent: ["M4 6h16", "M11 10h9", "M11 14h9", "M4 18h16", "m4 9 3 3-3 3"],
+  outdent: ["M4 6h16", "M11 10h9", "M11 14h9", "M4 18h16", "m7 9-3 3 3 3"],
+  sigma: ["M18 6H6l6 6-6 6h12"],
+  strike: ["M5 12h14", "M16 6.5c-.6-1.4-2.2-2.5-4.1-2.5-2.4 0-4 1.3-4 3.2 0 1.2.6 2.1 1.7 2.8", "M8 17.5c.7 1.5 2.3 2.5 4.3 2.5 2.5 0 4.2-1.4 4.2-3.3 0-.8-.3-1.5-.8-2"],
+  highlight: ["m4 20 4-1 10-10-3-3L5 16l-1 4Z", "m14 5 5 5", "M13 21h8"],
+  copy: ["M9 9h11v11H9z", "M5 15V4h11"],
   ungroup: ["M4 4h10v10H4z", "m14 14 6 6", "m20 14-6 6"],
 };
 
@@ -106,3 +125,22 @@ export const MaskEllipse = icon('maskEllipse');
 export const Polygon = icon('polygon');
 export const Group = icon('group');
 export const Ungroup = icon('ungroup');
+export const Code = icon('code');
+export const Pin = icon('pin');
+export const EyeOff = icon('eyeOff');
+export const Mic = icon('mic');
+export const StopSquare = icon('stop');
+export const Paperclip = icon('paperclip');
+export const Superscript = icon('superscript');
+export const Subscript = icon('subscript');
+export const ListOrdered = icon('listOrdered');
+export const ListBullets = icon('listBullets');
+export const AlignLeft = icon('alignLeft');
+export const AlignRight = icon('alignRight');
+export const AlignJustify = icon('alignJustify');
+export const Indent = icon('indent');
+export const Outdent = icon('outdent');
+export const Sigma = icon('sigma');
+export const Strikethrough = icon('strike');
+export const Highlight = icon('highlight');
+export const Copy = icon('copy');
