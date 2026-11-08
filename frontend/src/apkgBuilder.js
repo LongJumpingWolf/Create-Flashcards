@@ -410,6 +410,12 @@ export function clozeToSequentialHtml(html) {
   return { html: converted, count };
 }
 
+const escHeader = (text) => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function ioHeader(cardHeader, group = []) {
+  const hint = group.find(mask => mask.hint)?.hint;
+  return [cardHeader, hint].filter(part => part && String(part).trim()).map(part => escHeader(String(part).trim())).join('<br>');
+}
+
 function normalizeMasks(masks) {
   const normalized = [];
   const groups = new Map();
@@ -500,7 +506,7 @@ async function planNotes(payload, { prepareImage, warn, onProgress }) {
         const answerHtml = await extractMedia(card.answer || '', ctx);
         notes.push({
           model: MODELS['Image Occlusion One by One'],
-          fields: ['', `<img src="${imageName}" style="width:${widthSetting}px;max-width:100%;height:auto">`, sequentialMasksSvg(image.width, image.height, groups), answerHtml, card.occlusion_mode],
+          fields: [ioHeader(card.header), `<img src="${imageName}" style="width:${widthSetting}px;max-width:100%;height:auto">`, sequentialMasksSvg(image.width, image.height, groups), answerHtml, card.occlusion_mode],
           tags,
           cards: [0],
         });
@@ -521,7 +527,7 @@ async function planNotes(payload, { prepareImage, warn, onProgress }) {
         notes.push({
           model: MODELS['Image Occlusion'],
           fields: [
-            noteId, '',
+            noteId, ioHeader(card.header, groups[targetIndex]),
             `<img src="${imageName}" style="width:${imageWidth}px;max-width:100%;height:auto">`,
             `<img src="${questionMaskName}" ${maskStyle}>`,
             '', '', '',

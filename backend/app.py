@@ -115,6 +115,7 @@ class CardPayload(BaseModel):
     image_width: int = Field(default=720, ge=180, le=1800)
     masks: List[dict] = Field(default_factory=list, max_length=300)
     occlusion_mode: Literal["hide-all", "hide-one", "sequential", "random"] = "hide-all"
+    header: str = Field(default="", max_length=500)  # Image Occlusion: text shown above the picture
     sequential: bool = False  # Cloze cards: reveal the clozes one by one on a single card
 
     @field_validator("tags")
@@ -238,6 +239,12 @@ def _ioe_mask_svg(image_width: int, image_height: int, mask_groups: list[list[di
     )
 
 
+def _io_header(card_header: str, group: list) -> str:
+    """Header line(s) of an occlusion note: the card's header plus the hint of the hidden group (what to answer)."""
+    hint = next((str(m.get('hint')) for m in group if m.get('hint')), '')
+    return '<br>'.join(html_escape(part.strip()) for part in (card_header, hint) if part and part.strip())
+
+
 def _sequential_masks_svg(image_width: int, image_height: int, mask_groups: list[list[dict]]) -> str:
     """Inline SVG for the one-by-one occlusion card: one <g class="sq-m"> per revealable region."""
     body = ''.join(
@@ -322,7 +329,7 @@ def create_anki_deck(deck_payload: DeckPayload) -> bytes:
                 deck.add_note(genanki.Note(
                     model=ANKI_SEQ_IO_MODEL,
                     fields=[
-                        '',
+                        _io_header(card_data.header, []),
                         f'<img src="{image_name}" style="width:{card_data.image_width}px;max-width:100%;height:auto">',
                         _sequential_masks_svg(image.width, image.height, mask_groups),
                         answer_html,
@@ -352,7 +359,7 @@ def create_anki_deck(deck_payload: DeckPayload) -> bytes:
                 mask_tag_style = 'style="display:block;width:100%;height:100%"'
                 fields = [
                     note_id,
-                    '',
+                    _io_header(card_data.header, mask_groups[target_index]),
                     image_tag,
                     f'<img src="{question_mask_name}" {mask_tag_style}>',
                     '',

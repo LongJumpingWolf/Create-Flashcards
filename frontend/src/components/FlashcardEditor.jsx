@@ -759,7 +759,7 @@ export default function FlashcardEditor() {
         answer: c.answer,
         tags: c.tags,
         ...(c.type === 'Cloze' ? { sequential: Boolean(c.sequential) } : {}),
-        ...(c.type === 'Image Occlusion' ? { image_data: c.imageData, image_width: c.imageWidth, masks: c.masks, occlusion_mode: c.occlusionMode } : {}),
+        ...(c.type === 'Image Occlusion' ? { image_data: c.imageData, image_width: c.imageWidth, masks: c.masks, occlusion_mode: c.occlusionMode, header: c.header || '' } : {}),
       }))
     };
 

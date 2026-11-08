@@ -63,6 +63,7 @@ function normalizeMasks(rawMasks) {
     const box = ['x', 'y', 'width', 'height'].map(key => Number(mask[key]));
     if (box.some(value => !Number.isFinite(value) || value < 0 || value > 1)) return { error: `mask ${index + 1}: x, y, width, height must be numbers between 0 and 1` };
     const normalized = { id: String(mask.id || `mask-${index + 1}`), shape, x: box[0], y: box[1], width: box[2], height: box[3], label: String(mask.label || '') };
+    if (mask.hint) normalized.hint = String(mask.hint).slice(0, 200);
     if (mask.group) normalized.group = String(mask.group);
     if (shape === 'polygon') {
       const points = (mask.points || []).map(point => ({ x: Number(point?.x), y: Number(point?.y) }));
@@ -107,7 +108,7 @@ export function validateImportedCard(raw, index) {
     return { plan: { label, image_ref: raw.image_ref || '(no image)', mode, masks: raw.masks, answer, tags }, problems: [`${label}: Image Occlusion needs "image_data" (a data URL). Attach the picture in the app and draw the masks; the labels are kept as a plan.`], warnings };
   }
   if (maskResult.error) return { problems: [`${label}: ${maskResult.error}`], warnings };
-  return { card: { type, question: '', answer, tags, imageData: raw.image_data, imageWidth: Math.min(1800, Math.max(180, Math.round(Number(raw.image_width) || 720))), masks: maskResult.masks, occlusionMode: mode }, problems, warnings };
+  return { card: { type, question: '', answer, tags, header: String(raw.header || '').slice(0, 500), imageData: raw.image_data, imageWidth: Math.min(1800, Math.max(180, Math.round(Number(raw.image_width) || 720))), masks: maskResult.masks, occlusionMode: mode }, problems, warnings };
 }
 
 /**

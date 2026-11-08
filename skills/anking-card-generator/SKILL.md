@@ -438,7 +438,10 @@ Never type pixel coordinates yourself - vision guesses drift by several percent 
 5. `python io_tools.py check io.json OUT/chk` - renders each card with its masks; LOOK at it. Merge `io.json` cards into the deck JSON (same `cards` array).
 6. Photos / histology with arrows have no text to measure: attach the picture in Extra of a cloze card instead (e.g. "Fig. 6.9 hairy cell leukemia") and say in the report that arrow-target occlusion needs the app's mask editor.
 7. Skip junk labels (connector glyphs are already filtered), keep only learning targets, and never occlude the figure caption.
-8. Source images/cards derived from a user's book stay local (copyright); only this script and the skill go to the public repo.
+8. **Occlusion must be meaningful, never forced.** Occlude a label only if recalling it is a real learning target and cannot be deduced from visible neighbours. Skip trivial or obvious labels (a top-of-tree title, a product that just repeats its precursor). A small diagram usually deserves 4-8 notes, not one per label; photos/histology without text deserve none. Prefer anatomy/pathway-heavy sources for occlusion; for text-heavy subjects (most pathology) cloze is better and a figure belongs in Extra.
+9. **Every occlusion note needs a hint** telling the learner what is expected in the hidden box, because in pre-made decks users often cannot tell ("a name? how many? which category?"). Use `"hints"` (one per group, shown in the note's Header) such as `Which stem cell? (parent of the B and T lymphoblasts)`, `Name the 3 granulocytes`, `Which enzyme?`, plus a `"header"` for the whole card. Hints state the category/count/role, never the answer.
+10. **Pick the mode by the structure of the figure:** `hide-one` for independent labels, `hide-all` when context labels would not help, `sequential` for a chain with a true order (a lineage, a pathway, steps), `random` for an unordered set of equals (the six blast cells). Do not add sequential/random cards that merely repeat what the hide-one cards already test.
+11. Source images/cards derived from a user's book stay local (copyright); only this script and the skill go to the public repo.
 
 
 ## 8. Permutation matrix — input × content × action

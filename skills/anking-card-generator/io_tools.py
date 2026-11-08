@@ -15,11 +15,15 @@ The AI decides WHAT to hide; this script measures WHERE it is (exact text-layer 
   python io_tools.py build    spec.json  OUT.json
         spec = {"pdf": "...", "page": 1, "rect": [x0,y0,x1,y1], "candidates": "OUT_DIR/candidates.json",
                 "tags": [...], "extra": "<Book> Fig. 6.1 - Hematopoiesis",
-                "cards": [{"mode": "hide-one", "hide": [3, 7, 9], "extra": "optional per-card Extra"}]}
+                "header": "Hematopoiesis",
+                "cards": [{"mode": "hide-one", "hide": [3, 7, [9, 10]], "hints": ["Which stem cell?", "Which blast?", "The 2 mature T-cell types"]},
+                          {"mode": "sequential", "hide": [3, 8, 14, 17], "header": "Name the B-cell lineage in order"}]}
         "hide" = candidate numbers from the overlay. mode: hide-all | hide-one | sequential | random.
         One card object per spec card; the app makes one note per hidden group (hide-one / hide-all) or one
         reveal-in-order / random note (sequential / random).
-        A group can join several numbers: "hide": [[3, 4], 7].  Output is the app's Import JSON (normalised 0-1 masks).
+        A group can join several numbers: "hide": [[3, 4], 7].  "hints" (optional, one per group) is shown above the
+        picture on that note - ALWAYS give one: it tells the learner WHAT is expected in the hidden area (a name? how many?
+        which category?) without giving the answer.  "header" = text above the picture for the whole card.  Output is the app's Import JSON (normalised 0-1 masks).
 
   python io_tools.py check    OUT.json  OUT_DIR
         Renders every IO card with its masks drawn so you can LOOK at the result before delivering.
@@ -137,21 +141,22 @@ def cmd_build(spec_path, out_path):
     im, data = _jpeg(pix, quality=86, max_w=1100)
     image_data = 'data:image/jpeg;base64,' + base64.b64encode(data).decode()
 
-    def mask(n, mid, group):
+    def mask(n, mid, group, hint=''):
         b = cands[n]['box']; pad = 1.2
         bx0, by0, bx1, by1 = max(b[0] - pad, x0), max(b[1] - pad, y0), min(b[2] + pad, x1), min(b[3] + pad, y1)
-        return {'id': mid, 'shape': 'rect', 'x': round((bx0 - x0) / W, 5), 'y': round((by0 - y0) / H, 5), 'width': round((bx1 - bx0) / W, 5), 'height': round((by1 - by0) / H, 5), 'label': cands[n]['text'], 'group': group}
+        return {'id': mid, 'shape': 'rect', 'x': round((bx0 - x0) / W, 5), 'y': round((by0 - y0) / H, 5), 'width': round((bx1 - bx0) / W, 5), 'height': round((by1 - by0) / H, 5), 'label': cands[n]['text'], 'group': group, **({'hint': hint} if hint else {})}
 
     cards = []
     for spec_card in spec['cards']:
         groups = [g if isinstance(g, list) else [g] for g in spec_card['hide']]
+        hints = spec_card.get('hints', [])
         masks = []
         for gi, g in enumerate(groups, 1):
             for n in g:
-                masks.append(mask(n, f'm{gi}-{n}', f'g{gi}'))
+                masks.append(mask(n, f'm{gi}-{n}', f'g{gi}', hints[gi - 1] if gi - 1 < len(hints) else ''))
         extra = spec_card.get('extra', spec.get('extra', ''))
         mode = spec_card.get('mode', 'hide-one')
-        base = {'type': 'Image Occlusion', 'answer': extra, 'tags': spec_card.get('tags', spec.get('tags', [])), 'image_data': image_data, 'image_width': 720, 'occlusion_mode': mode}
+        base = {'type': 'Image Occlusion', 'answer': extra, 'tags': spec_card.get('tags', spec.get('tags', [])), 'image_data': image_data, 'image_width': 720, 'occlusion_mode': mode, 'header': spec_card.get('header', spec.get('header', ''))}
         # ONE card object with all masks: the app/exporter turns each mask group into its own note
         # (hide-all / hide-one) or into one reveal-in-order / random note (sequential / random).
         cards.append(dict(base, masks=masks))
