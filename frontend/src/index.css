@@ -1166,7 +1166,7 @@ body { background:#202124; }
 .toolbar-menu-trigger.is-active, .toolbar-button.is-recording { background:#5a2a2e; color:#ffd5d8; border-color:#8a3d44; }
 .toolbar-button.is-recording { display:inline-flex; align-items:center; gap:5px; animation:rec-pulse 1.2s ease-in-out infinite; }
 @keyframes rec-pulse { 50% { box-shadow:0 0 0 3px rgba(224,86,98,.28); } }
-.toolbar-menu { position:fixed; z-index:200; min-width:210px; padding:5px; border:1px solid #4a4c52; border-radius:11px; background:#2c2d31; box-shadow:0 14px 40px rgba(0,0,0,.5); }
+.toolbar-menu { position:fixed; z-index:2000; min-width:210px; padding:5px; border:1px solid #4a4c52; border-radius:11px; background:#2c2d31; box-shadow:0 14px 40px rgba(0,0,0,.5); }
 .toolbar-menu-item { width:100%; display:flex; align-items:center; gap:10px; padding:7px 9px; border-radius:7px; background:transparent; color:#e2e5e9; font-size:12px; text-align:left; cursor:pointer; }
 .toolbar-menu-item:hover:not(:disabled) { background:#3a3c42; color:#fff; }
 .toolbar-menu-icon { width:22px; display:inline-flex; justify-content:center; color:#aab0b9; font:600 11px ui-monospace,monospace; }
@@ -1204,3 +1204,14 @@ body { background:#202124; }
 .table-picker-cell { width:24px; height:24px; border:1px solid #565961; border-radius:4px; background:#34363b; cursor:pointer; }
 .table-picker-cell.is-on { border-color:#5c9ae6; background:#2f6dbd; }
 .table-picker-label { margin-top:6px; color:#c3c8d0; font-size:11px; text-align:center; }
+
+/* Compact, window-safe popovers */
+.toolbar-menu { overflow-y:auto; overscroll-behavior:contain; }
+.toolbar-menu-grid { display:grid; grid-template-columns:repeat(2, minmax(118px, 1fr)); gap:2px; min-width:250px; }
+.toolbar-menu-grid .toolbar-menu-item { padding:6px 9px; font-size:11.5px; }
+.toolbar-menu-grid .toolbar-menu-label { white-space:nowrap; }
+.toolbar-menu-item.is-danger:not(:disabled) { color:#ffb3b8; }
+.toolbar-menu-item.is-danger:hover:not(:disabled) { background:#4a2b2f; color:#ffd5d8; }
+.table-picker-grid { grid-template-columns:repeat(6,22px); gap:3px; }
+.table-picker-cell { width:22px; height:22px; }
+.table-picker-grid { justify-content:center; }

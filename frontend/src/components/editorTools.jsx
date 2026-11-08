@@ -2,7 +2,8 @@
 // controls (collapse / HTML view / pin), math + LaTeX helpers, audio capture,
 // paste sanitising and duplicate detection. Kept out of FlashcardEditor.jsx so the
 // logic stays testable and the editor file stays readable.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Code, Eye, EyeOff, Pin } from './Icons';
 import { HIGHLIGHT_COLORS } from './editorHelpers';
 
@@ -10,6 +11,7 @@ import { HIGHLIGHT_COLORS } from './editorHelpers';
 export function ToolbarMenu({ icon, title, children, disabled = false, active = false, className = '', onOpen }) {
   const [position, setPosition] = useState(null);
   const buttonRef = useRef(null);
+  const menuRef = useRef(null);
   const close = useCallback(() => setPosition(null), []);
 
   useEffect(() => {
@@ -29,11 +31,25 @@ export function ToolbarMenu({ icon, title, children, disabled = false, active = 
     };
   }, [position, close]);
 
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!position || !menu) return;
+    const { width, height } = menu.getBoundingClientRect();
+    const margin = 8;
+    const below = window.innerHeight - position.anchorBottom - margin;
+    const above = position.anchorTop - margin;
+    let top = position.anchorBottom + 6;
+    let maxHeight = Math.max(160, below - 6);
+    if (height > below && above > below) { maxHeight = Math.max(160, above - 6); top = Math.max(margin, position.anchorTop - 6 - Math.min(height, maxHeight)); }
+    const left = Math.max(margin, Math.min(position.left, window.innerWidth - width - margin));
+    if (top !== position.top || left !== position.left || maxHeight !== position.maxHeight) setPosition(current => (current ? { ...current, top, left, maxHeight } : current));
+  }, [position]);
+
   const toggle = () => {
     if (position) { close(); return; }
     onOpen?.();
     const rect = buttonRef.current.getBoundingClientRect();
-    setPosition({ left: Math.max(8, Math.min(rect.left, window.innerWidth - 232)), top: rect.bottom + 6 });
+    setPosition({ left: rect.left, top: rect.bottom + 6, anchorTop: rect.top, anchorBottom: rect.bottom, maxHeight: window.innerHeight - rect.bottom - 14 });
   };
 
   return (
@@ -42,13 +58,13 @@ export function ToolbarMenu({ icon, title, children, disabled = false, active = 
         className={`toolbar-button toolbar-menu-trigger ${active ? 'is-active' : ''} ${className}`}>
         {icon}<ChevronDown size={11} />
       </button>
-      {position && <div data-toolbar-menu role="menu" className="toolbar-menu" style={{ left: position.left, top: position.top }} onClick={close}>{children}</div>}
+      {position && createPortal(<div ref={menuRef} data-toolbar-menu role="menu" className="toolbar-menu" style={{ left: position.left, top: position.top, maxHeight: position.maxHeight }} onClick={close}>{children}</div>, document.body)}
     </>
   );
 }
 
-export const MenuItem = ({ icon, children, hint, onClick, disabled }) => (
-  <button type="button" role="menuitem" className="toolbar-menu-item" onClick={onClick} disabled={disabled}>
+export const MenuItem = ({ icon, children, hint, onClick, disabled, danger = false }) => (
+  <button type="button" role="menuitem" className={`toolbar-menu-item ${danger ? 'is-danger' : ''}`} onClick={onClick} disabled={disabled}>
     <span className="toolbar-menu-icon">{icon}</span><span className="toolbar-menu-label">{children}</span>{hint && <kbd>{hint}</kbd>}
   </button>
 );

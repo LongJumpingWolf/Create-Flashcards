@@ -2102,14 +2102,16 @@ export default function FlashcardEditor() {
               <ToolbarMenu title="Table" icon={<Table size={16} />} onOpen={() => setInTable(Boolean(findCell(toolbarTargetRef.current)))}>
                 <TableGridPicker onPick={(rows, cols) => insertTable(rows, cols)} />
                 <div className="toolbar-menu-divider" role="separator" />
-                <MenuItem disabled={!inTable} onClick={() => runTableAction('row-above')}>Insert row above</MenuItem>
-                <MenuItem disabled={!inTable} onClick={() => runTableAction('row-below')} hint="Tab">Insert row below</MenuItem>
-                <MenuItem disabled={!inTable} onClick={() => runTableAction('col-left')}>Insert column left</MenuItem>
-                <MenuItem disabled={!inTable} onClick={() => runTableAction('col-right')}>Insert column right</MenuItem>
-                <MenuItem disabled={!inTable} onClick={() => runTableAction('toggle-header')}>Toggle header row</MenuItem>
-                <MenuItem disabled={!inTable} onClick={() => runTableAction('del-row')}>Delete row</MenuItem>
-                <MenuItem disabled={!inTable} onClick={() => runTableAction('del-col')}>Delete column</MenuItem>
-                <MenuItem disabled={!inTable} onClick={() => runTableAction('del-table')}>Delete table</MenuItem>
+                <div className="toolbar-menu-grid">
+                  <MenuItem disabled={!inTable} onClick={() => runTableAction('row-above')}>Row above</MenuItem>
+                  <MenuItem disabled={!inTable} onClick={() => runTableAction('row-below')} hint="Tab">Row below</MenuItem>
+                  <MenuItem disabled={!inTable} onClick={() => runTableAction('col-left')}>Column left</MenuItem>
+                  <MenuItem disabled={!inTable} onClick={() => runTableAction('col-right')}>Column right</MenuItem>
+                  <MenuItem disabled={!inTable} onClick={() => runTableAction('toggle-header')}>Header row</MenuItem>
+                  <MenuItem disabled={!inTable} danger onClick={() => runTableAction('del-table')}>Delete table</MenuItem>
+                  <MenuItem disabled={!inTable} danger onClick={() => runTableAction('del-row')}>Delete row</MenuItem>
+                  <MenuItem disabled={!inTable} danger onClick={() => runTableAction('del-col')}>Delete column</MenuItem>
+                </div>
               </ToolbarMenu>
               <button onClick={() => openAudioPicker()} title="Attach audio (F3)" className="toolbar-button"><Paperclip size={16} /></button>
               <button onClick={() => toggleRecording()} title={audioRecorder.recording ? 'Stop recording (F5)' : 'Record audio (F5)'} aria-pressed={audioRecorder.recording} className={`toolbar-button ${audioRecorder.recording ? 'is-recording' : ''}`}>{audioRecorder.recording ? <><StopSquare size={14} /><span className="font-mono text-[11px]">{Math.floor(audioRecorder.seconds / 60)}:{String(audioRecorder.seconds % 60).padStart(2, '0')}</span></> : <Mic size={16} />}</button>
