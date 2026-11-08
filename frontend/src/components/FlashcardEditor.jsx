@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useState, useEffect, useRef, useCallback, useMem
 import { createPortal } from 'react-dom';
 // NEW: Import the modal component
 import DocumentationModal from './DocumentationModal';
+import ImportCardsModal from './ImportCardsModal';
 import { hasSavedPdf } from '../pdfResumeStorage';
 import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView, TableGridPicker } from './editorTools';
 import { smartTyping, smartEnter, listTab, markdownToHtml, looksLikeMarkdown, isPlainHtml, tidyHtml, SMART_DEFAULTS } from './smartTyping';
@@ -467,6 +468,7 @@ export default function FlashcardEditor() {
   const [linkTargetRef, setLinkTargetRef] = useState(null);
 
   const [showDocumentationModal, setShowDocumentationModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   
   const fileInputRef = useRef(null);
   const uploadTargetRef = useRef(null);
@@ -2026,6 +2028,15 @@ export default function FlashcardEditor() {
     if (tableAction(targetRef.current, action)) syncAfterEdit(targetRef);
   };
 
+  // Cards produced by the AnKing card-generator skill (validated by cardImport.js).
+  const importCards = (imported, importedDeckName) => {
+    if (!imported.length) return;
+    const stamp = new Date().toLocaleTimeString();
+    setCards(prev => [...imported.map(card => ({ ...card, created: stamp })), ...prev]);
+    if (importedDeckName && (!deckName.trim() || initialDecks.includes(deckName))) setDeckName(importedDeckName);
+    setExportMessage(`Imported ${imported.length} card${imported.length === 1 ? '' : 's'}. Review them in the card library, then export.`);
+  };
+
   const toggleFieldPref = (kind, field) => setFieldPrefs(prefs => ({ ...prefs, [kind]: { ...prefs[kind], [field]: !prefs[kind][field] } }));
 
   const cardKeys = useMemo(() => cards.map(card => (card.type === 'Image Occlusion' ? null : duplicateKey(card.question))), [cards]);
@@ -2074,6 +2085,7 @@ export default function FlashcardEditor() {
         </div>
         <div className="header-status"><span className={`save-dot ${saveStatus === 'Storage full' ? 'save-error' : ''}`} /><span>{saveStatus === 'Saved' ? 'All changes saved' : saveStatus}</span><span className="status-divider" /><span>{cards.length} {cards.length === 1 ? 'card' : 'cards'}</span></div>
         <div className="header-actions">
+          <button onClick={() => setShowImportModal(true)} title="Import cards from JSON (AI-generated)" className="icon-button"><Upload size={18} /><span>Import</span></button>
           <button onClick={() => setShowDocumentationModal(true)} title="Help and keyboard shortcuts" className="icon-button"><HelpCircle size={18} /><span>Help</span></button>
           {pdfOpen && <button onClick={() => { const opening = !(showLibrary && mobileView === 'cards'); setShowLibrary(opening); setMobileView(opening ? 'cards' : 'pdf'); }} aria-pressed={showLibrary && mobileView === 'cards'} title={showLibrary && mobileView === 'cards' ? 'Return to PDF' : 'Open card library'} className={`icon-button library-toggle ${showLibrary && mobileView === 'cards' ? 'active' : ''}`}><BookOpen size={17} /><span>Cards {cards.length}</span></button>}
           <button onPointerEnter={() => { if (!pdfOpen) preloadPdfStudyPanel().catch(() => {}); }} onFocus={() => { if (!pdfOpen) preloadPdfStudyPanel().catch(() => {}); }} onTouchStart={() => { if (!pdfOpen) preloadPdfStudyPanel().catch(() => {}); }} onClick={() => pdfOpen ? closePdfWorkspace() : openPdfWorkspace()} className="quiet-button"><FileText size={16} /><span>{pdfOpen ? 'Close PDF' : 'Open PDF'}</span></button>
@@ -2574,6 +2586,7 @@ export default function FlashcardEditor() {
         </div >
       )}
 
+      <ImportCardsModal isOpen={showImportModal} onClose={() => setShowImportModal(false)} existingCards={cards} onImport={importCards} />
       <DocumentationModal 
           isVisible={showDocumentationModal} 
           onClose={() => setShowDocumentationModal(false)} 

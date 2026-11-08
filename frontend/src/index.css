@@ -1230,3 +1230,22 @@ body { background:#202124; }
 .editable-content ul, .editable-content ol { margin:4px 0; padding-left:22px; }
 .editable-content pre { margin:6px 0; padding:8px 10px; border-radius:6px; background:#1f2023; overflow:auto; }
 .editable-content hr { margin:10px 0; border:0; border-top:1px solid #6a6d75; }
+
+/* Import cards modal */
+.import-backdrop { position:fixed; z-index:1100; inset:0; display:grid; place-items:center; padding:clamp(10px,3vw,28px); background:rgba(8,9,11,.66); backdrop-filter:blur(6px); }
+.import-modal { width:min(760px,100%); max-height:min(88dvh,820px); display:flex; flex-direction:column; gap:12px; padding:20px 22px; overflow:auto; border:1px solid #45474d; border-radius:16px; background:#26272a; color:#e2e5e9; box-shadow:0 24px 80px rgba(0,0,0,.55); }
+.import-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.import-header h2 { margin-top:4px; font-family:Georgia,serif; font-size:22px; color:#f3f5f7; }
+.import-hint { color:#b4bac3; font-size:12px; line-height:1.5; }
+.import-text { width:100%; min-height:180px; padding:11px 13px; border:1px solid #4a4c52; border-radius:10px; background:#1f2023; color:#d6e3d9; font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; resize:vertical; }
+.import-text:focus { outline:none; border-color:#5c9ae6; box-shadow:0 0 0 3px rgba(92,154,230,.18); }
+.import-tools { display:flex; gap:8px; flex-wrap:wrap; }
+.import-summary { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; }
+.import-chip { padding:2px 9px; border:1px solid #4a4c52; border-radius:999px; background:#323439; font-size:11px; color:#d0d4db; }
+.import-result { display:flex; flex-direction:column; gap:8px; }
+.import-box { padding:9px 12px; border:1px solid #4a4c52; border-radius:10px; background:#2d2e32; font-size:12px; line-height:1.5; color:#d0d4db; }
+.import-box ul { margin:5px 0 0; padding-left:18px; }
+.import-box small { display:block; margin-top:5px; color:#9aa1ab; }
+.import-problems { border-color:#7a3a40; background:#3a2427; color:#ffcdd1; }
+.import-warnings { border-color:#7a5a24; background:#3a2f1c; color:#f2d9a6; }
+.import-footer { display:flex; justify-content:flex-end; gap:8px; position:sticky; bottom:-20px; padding:10px 0 2px; background:linear-gradient(to bottom, transparent, #26272a 30%); }
