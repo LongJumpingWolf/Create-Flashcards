@@ -93,6 +93,17 @@ export default function DocumentationModal({ isVisible, onClose }) {
               <Shortcut keys={['F3']}>Attach audio</Shortcut>
               <Shortcut keys={['F5']}>Record audio</Shortcut>
             </div>
+            <div className="guide-shortcuts">
+              <p className="section-eyebrow">SMART TYPING</p>
+              <Shortcut keys={['-', 'Space']}>Bulleted list</Shortcut>
+              <Shortcut keys={['1.', 'Space']}>Numbered list</Shortcut>
+              <Shortcut keys={['Tab']}>Indent list item (Shift+Tab: outdent)</Shortcut>
+              <Shortcut keys={['> ', 'Space']}>Quote</Shortcut>
+              <Shortcut keys={['# ', 'Space']}>Heading</Shortcut>
+              <Shortcut keys={['**text**']}>Bold (also *italic*, ==mark==, ~~strike~~, `code`)</Shortcut>
+              <Shortcut keys={['---', 'Enter']}>Divider line</Shortcut>
+              <Shortcut keys={['->', '=>', '!=', '>=']}>Become → ⇒ ≠ ≥ (Backspace undoes)</Shortcut>
+            </div>
             <div className="guide-shortcuts guide-snip-shortcuts">
               <p className="section-eyebrow">WHILE ANNOTATING</p>
               <Shortcut keys={['1–9']}>Switch tools from Select</Shortcut>

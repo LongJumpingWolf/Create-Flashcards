@@ -1222,3 +1222,11 @@ body { background:#202124; }
 .seq-toggle strong { display:block; font-size:12.5px; color:#f1f3f5; }
 .seq-toggle small { display:block; margin-top:2px; font-size:11px; line-height:1.45; color:#b4bac3; }
 .seq-toggle:has(input:checked) { border-color:#4a82c9; background:#27323f; }
+
+/* Smart typing */
+.toolbar-menu-label .menu-sub { display:block; margin-top:1px; font-size:10px; color:#9aa1ab; }
+.editable-content blockquote { margin:6px 0; padding:2px 12px; border-left:3px solid #6a6d75; color:#c3c8d0; }
+.editable-content h2, .editable-content h3, .editable-content h4 { margin:8px 0 4px; line-height:1.25; }
+.editable-content ul, .editable-content ol { margin:4px 0; padding-left:22px; }
+.editable-content pre { margin:6px 0; padding:8px 10px; border-radius:6px; background:#1f2023; overflow:auto; }
+.editable-content hr { margin:10px 0; border:0; border-top:1px solid #6a6d75; }

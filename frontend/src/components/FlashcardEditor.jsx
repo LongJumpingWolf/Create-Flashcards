@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import DocumentationModal from './DocumentationModal';
 import { hasSavedPdf } from '../pdfResumeStorage';
 import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView, TableGridPicker } from './editorTools';
+import { smartTyping, smartEnter, listTab, markdownToHtml, looksLikeMarkdown, isPlainHtml, tidyHtml, SMART_DEFAULTS } from './smartTyping';
 import { MATH_WRAPPERS, wrapSelection, audioHtml, fileToDataUrl, useAudioRecorder, MAX_AUDIO_BYTES, sanitizePastedHtml, plainTextToHtml, duplicateKey, buildTableHtml, findCell, tableAction, tableTab, placeCaretInCell } from './editorHelpers';
 
 let pdfStudyPanelPromise;
@@ -76,7 +77,7 @@ const makeId = () => (typeof crypto !== 'undefined' && typeof crypto.randomUUID 
 
 // contentEditable leaves things like "<br>" behind when emptied; treat those as blank.
 const isBlankHtml = (html) => !html || (!/<(img|audio|table)\b/i.test(html) && html.replace(/<[^>]*>/g, '').replace(/&nbsp;|\s/gi, '').length === 0);
-const normalizeHtml = (html) => (isBlankHtml(html) ? '' : html.trim());
+const normalizeHtml = (html) => (isBlankHtml(html) ? '' : tidyHtml(html.trim()));
 const escapeHtmlAttr = (text) => String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 function OcclusionPreview({ image, masks, imageWidth = 720, mode = 'hide-all', cardIndex = 0, answerSide = false }) {
@@ -484,6 +485,11 @@ export default function FlashcardEditor() {
   const toolsRef = useRef({});
   const chordRef = useRef({ key: null, at: 0 });
   useEffect(() => { try { localStorage.setItem('ankiEditorFieldPrefs', JSON.stringify(fieldPrefs)); } catch { /* storage unavailable */ } }, [fieldPrefs]);
+  // Smart typing: markdown shortcuts, symbol replacement and markdown paste (each can be switched off).
+  const [smartPrefs, setSmartPrefs] = useState(() => { try { return { ...SMART_DEFAULTS, ...JSON.parse(localStorage.getItem('ankiSmartTyping') || '{}') }; } catch { return SMART_DEFAULTS; } });
+  const lastSmartRef = useRef(null);
+  const smartBusyRef = useRef(false);
+  useEffect(() => { try { localStorage.setItem('ankiSmartTyping', JSON.stringify(smartPrefs)); } catch { /* storage unavailable */ } }, [smartPrefs]);
   const audioRecorder = useAudioRecorder(
     (dataUrl) => toolsRef.current.insertAudio?.(dataUrl, toolsRef.current.recordTarget),
     (message) => setFormMessage(message),
@@ -1008,6 +1014,21 @@ export default function FlashcardEditor() {
         api.syncAfterEdit(ref);
         return;
       }
+      const smart = toolsRef.current.smart;
+      if (smart && !mod) {
+        const editor = ref.current;
+        const last = smart.lastSmartRef.current;
+        if (event.key === 'Backspace' && last && last.editor === editor && last.html === editor.innerHTML) {
+          // Backspace right after an automatic conversion puts back what you typed.
+          event.preventDefault();
+          smart.lastSmartRef.current = null;
+          if (last.revert) last.revert(); else document.execCommand('undo');
+          api.syncAfterEdit(ref);
+          return;
+        }
+        if (event.key === 'Enter' && !event.shiftKey && smart.prefs.markdown && smart.smartEnter(editor)) { event.preventDefault(); api.syncAfterEdit(ref); return; }
+        if (event.key === 'Tab' && !event.altKey && smart.prefs.markdown && smart.listTab(editor, event.shiftKey)) { event.preventDefault(); api.syncAfterEdit(ref); return; }
+      }
       const exec = (command) => { event.preventDefault(); document.execCommand(command, false, null); api.syncAfterEdit(ref); };
       const chord = chordRef.current;
       if (chord.key === 'm' && Date.now() - chord.at < 1500) {
@@ -1294,10 +1315,12 @@ export default function FlashcardEditor() {
       const pastedText = clipboardData?.getData('text/plain') || '';
       const plainRequested = pasteModeRef.current === 'plain';
       pasteModeRef.current = 'rich';
-      if (plainRequested || pastedHtml) {
+      // Plain text that is really markdown (notes from ChatGPT, Notion, GitHub...) becomes real formatting.
+      const smartMarkdown = smartPrefs.paste && !plainRequested && isPlainHtml(pastedHtml) && looksLikeMarkdown(pastedText);
+      if (plainRequested || pastedHtml || smartMarkdown) {
         // Strip page chrome (classes, fonts, scripts) but keep real formatting; Ctrl+Shift+V pastes plain text.
         e.preventDefault();
-        const cleaned = plainRequested ? '' : sanitizePastedHtml(pastedHtml);
+        const cleaned = plainRequested ? '' : smartMarkdown ? markdownToHtml(pastedText) : sanitizePastedHtml(pastedHtml);
         document.execCommand('insertHTML', false, cleaned || plainTextToHtml(pastedText));
       }
       setTimeout(() => {
@@ -1925,6 +1948,17 @@ export default function FlashcardEditor() {
   const oneByOneOcclusion = occlusionMode === 'sequential' || occlusionMode === 'random';
   const occlusionCardCount = oneByOneOcclusion ? 1 : new Set(occlusionMasks.map((mask, index) => mask.group || mask.id || `mask-${index + 1}`)).size;
 
+  const handleSmartInput = (event, targetRef) => {
+    if (smartBusyRef.current || (!smartPrefs.markdown && !smartPrefs.typography) || !targetRef.current) return;
+    smartBusyRef.current = true;
+    try {
+      const applied = smartTyping(event.nativeEvent, targetRef.current, smartPrefs);
+      lastSmartRef.current = applied ? { editor: targetRef.current, html: targetRef.current.innerHTML, revert: applied.revert } : null;
+    } finally {
+      smartBusyRef.current = false;
+    }
+  };
+
   const syncAfterEdit = (targetRef) => setTimeout(() => {
     if (!targetRef.current) return;
     if (targetRef === frontRef) syncFrontContent(targetRef.current.innerHTML);
@@ -2008,6 +2042,7 @@ export default function FlashcardEditor() {
   toolsRef.current.insertAudio = insertAudio;
   toolsRef.current.api = { insertMath, insertCloze, toggleHtmlView, openAudioPicker, toggleRecording, syncAfterEdit, cardType };
   toolsRef.current.table = { tableTab, findCell };
+  toolsRef.current.smart = { prefs: smartPrefs, lastSmartRef, smartEnter, listTab };
 
   const openImagePicker = (targetRef = toolbarTargetRef) => {
     uploadTargetRef.current = targetRef;
@@ -2150,6 +2185,11 @@ export default function FlashcardEditor() {
               <button onClick={() => openAudioPicker()} title="Attach audio (F3)" className="toolbar-button"><Paperclip size={16} /></button>
               <button onClick={() => toggleRecording()} title={audioRecorder.recording ? 'Stop recording (F5)' : 'Record audio (F5)'} aria-pressed={audioRecorder.recording} className={`toolbar-button ${audioRecorder.recording ? 'is-recording' : ''}`}>{audioRecorder.recording ? <><StopSquare size={14} /><span className="font-mono text-[11px]">{Math.floor(audioRecorder.seconds / 60)}:{String(audioRecorder.seconds % 60).padStart(2, '0')}</span></> : <Mic size={16} />}</button>
               <input type="file" ref={audioInputRef} className="hidden" accept="audio/*" onChange={handleAudioFile} />
+              <ToolbarMenu title="Smart typing" icon={<Sparkles size={16} />}>
+                <MenuItem icon={smartPrefs.markdown ? '✓' : ''} onClick={() => setSmartPrefs(prefs => ({ ...prefs, markdown: !prefs.markdown }))}>Markdown shortcuts<small className="menu-sub">- or 1. then Space, **bold**, ==mark==, ---</small></MenuItem>
+                <MenuItem icon={smartPrefs.typography ? '✓' : ''} onClick={() => setSmartPrefs(prefs => ({ ...prefs, typography: !prefs.typography }))}>Symbols<small className="menu-sub">-&gt; =&gt; != &gt;= &lt;= +- ...</small></MenuItem>
+                <MenuItem icon={smartPrefs.paste ? '✓' : ''} onClick={() => setSmartPrefs(prefs => ({ ...prefs, paste: !prefs.paste }))}>Convert pasted markdown<small className="menu-sub">lists, tables, headings, bold</small></MenuItem>
+              </ToolbarMenu>
               </div>
             </div>}
 
@@ -2177,7 +2217,7 @@ export default function FlashcardEditor() {
                 aria-multiline="true"
                 data-placeholder={cardType === 'Cloze' ? 'Write a prompt, then select key text while holding Ctrl or Command to hide it.' : 'Write a clear question or prompt...'}
                 onFocus={() => setActiveEditor('front')}
-                onInput={() => scheduleEditorSave('front')}
+                onInput={(event) => { handleSmartInput(event, frontRef); scheduleEditorSave('front'); }}
                 onBlur={(e) => commitEditorSave('front', e.target.innerHTML)}
                 onPaste={(e) => handleContentPaste(e, frontRef)}
                 onClick={handleSelectionChange}
@@ -2205,7 +2245,7 @@ export default function FlashcardEditor() {
                 aria-multiline="true"
                 data-placeholder={cardType === 'Cloze' || cardType === 'Image Occlusion' ? 'Add a hint, explanation, or source (optional)...' : 'Add the answer, explanation, or supporting detail...'}
                 onFocus={() => setActiveEditor('back')}
-                onInput={() => scheduleEditorSave('back')}
+                onInput={(event) => { handleSmartInput(event, backRef); scheduleEditorSave('back'); }}
                 onBlur={(e) => commitEditorSave('back', e.target.innerHTML)}
                 onPaste={(e) => handleContentPaste(e, backRef)}
                 onClick={handleSelectionChange}
