@@ -612,6 +612,13 @@ Do not output cards inside Markdown tables; do not output prose between cards; d
 - **Units:** keep the source's (mg/dL vs mmol/L); never convert unless asked.
 - **Long answers** (e.g., "complications of X: 8 items"): reveal-one-by-one list + individual cards only for the top 2–3 high-yield items.
 - **Images in Extra:** only if the user supplied the image file to the app; otherwise write `[Figure: <caption>]` and tag `#Img`.
+- **Attaching the source's own figures / tables (do this whenever you can open the source file, e.g. a PDF in Claude Code):**
+  1. Locate every printed figure/table (search the page text for `Fig.`/`Table`) and crop only the picture band (not the caption) at ~3x zoom with PyMuPDF; shrink to <= 1000 px wide, JPEG q~82 (~40 KB each). Look at a contact sheet of all crops before using them.
+  2. Put the crop in the card's `answer` (Extra) as `<img src="data:image/jpeg;base64,...">` (the app/exporter turns it into a media file), then a plain caption line: `<Book> Fig. N - caption (Courtesy ...)` - keep the source's credit line.
+  3. Attach the image to at most the two best cards per figure; other cards on the same figure get only the text reference `<Book> Fig. N`. A multi-panel figure (A/B/C) is attached whole.
+  4. Tables: one crop of the whole table on the 3-4 most representative row cards; every row still gets its own text cards.
+  5. Add 1 short source-grounded Extra (mechanism, association, "also seen with") to as many cards as the source supports - aim for >= 40% of cards, never invent.
+  6. Copyright: images/cards derived from a user's book stay in the user's files. Never commit them to a public repo.
 - **Language:** English output; keep Latin/Greek/eponym spellings as in the source.
 
 ---
