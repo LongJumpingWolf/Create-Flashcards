@@ -59,18 +59,19 @@ def cmd_figures(pdf, out):
         caps = [w for w in words if w[4] == 'Fig.' or (w[4].startswith('Fig.') and len(w[4]) > 4)]
         # group images into rows (a row = one picture band); one band often holds several figures side by side
         rows = []
-        for r in sorted(imgs, key=lambda r: r.y0):
+        for r in sorted(imgs, key=lambda r: r.y1):
             for row in rows:
-                if abs(row['y0'] - r.y0) < 18:
+                if abs(row['y1'] - r.y1) < 8:  # picture bands are bottom-aligned
                     row['y0'] = min(row['y0'], r.y0); row['y1'] = max(row['y1'], r.y1); row['x0'] = min(row['x0'], r.x0); row['x1'] = max(row['x1'], r.x1); break
             else:
                 rows.append({'y0': r.y0, 'y1': r.y1, 'x0': r.x0, 'x1': r.x1})
         regions = []
         for row in rows:
-            rc = sorted([w for w in caps if 0 <= w[1] - row['y1'] < 40 and row['x0'] - 15 <= w[0] <= row['x1'] + 5], key=lambda w: w[0])
+            rc = sorted([w for w in caps if 0 <= w[1] - row['y1'] < 40 and w[0] >= row['x0'] - 175 and w[0] <= row['x1'] + 5], key=lambda w: w[0])
             for i, c in enumerate(rc):
-                x1 = rc[i + 1][0] - 3 if i + 1 < len(rc) else row['x1']
-                regions.append((pm.Rect(max(c[0] - 2, row['x0'] - 2) if i else row['x0'], row['y0'], x1, row['y1']), c, x1))
+                left = min(row['x0'], c[0] - 3) if i == 0 else c[0] - 3
+                x1 = rc[i + 1][0] - 3 if i + 1 < len(rc) else max(row['x1'], min(W - 20, c[0] + 168))
+                regions.append((pm.Rect(left, row['y0'], x1, row['y1']), c, x1))
         for r, c, x1 in regions:
             cap = page.get_text('text', clip=pm.Rect(c[0] - 2, c[1] - 2, x1, c[1] + 38)).replace('\n', ' ').strip()
             cap = re.sub(r'\s+', ' ', cap)
