@@ -81,14 +81,26 @@ const escapeHtmlAttr = (text) => String(text).replace(/&/g, '&amp;').replace(/"/
 
 function OcclusionPreview({ image, masks, imageWidth = 720, mode = 'hide-all', cardIndex = 0, answerSide = false }) {
   const [dimensions, setDimensions] = useState(null);
-  const groups = [...new Set(masks.map((mask, index) => String(mask.group || mask.id || `mask-${index + 1}`)))];
-  const activeGroup = groups[cardIndex] || groups[0];
+  const [gone, setGone] = useState([]);
+  const oneByOne = mode === 'sequential' || mode === 'random';
+  const keyOf = (mask, index) => String(mask.group || mask.id || `mask-${index + 1}`);
+  const groups = [...new Set(masks.map((mask, index) => keyOf(mask, index)))];
+  // Same behaviour as the exported card: a click reveals a region (the next one in order, or a random one).
+  useEffect(() => { setGone([]); }, [mode, masks.length, answerSide, image]);
+  const remainingGroups = groups.filter(group => !gone.includes(group));
+  const activeGroup = oneByOne ? (mode === 'sequential' ? remainingGroups[0] : null) : (groups[cardIndex] || groups[0]);
+  const revealGroup = (group) => setGone(previous => (previous.includes(group) ? previous : [...previous, group]));
+  const revealNext = () => {
+    if (!remainingGroups.length) return;
+    revealGroup(mode === 'random' ? remainingGroups[Math.floor(Math.random() * remainingGroups.length)] : remainingGroups[0]);
+  };
   const shownMasks = masks.filter((mask, index) => {
-    const isActive = String(mask.group || mask.id || `mask-${index + 1}`) === activeGroup;
+    if (oneByOne) return !answerSide && !gone.includes(keyOf(mask, index));
+    const isActive = keyOf(mask, index) === activeGroup;
     return mode === 'hide-one' ? (!answerSide && isActive) : (!answerSide || !isActive);
   });
   return (
-    <div className="preview-occlusion-image">
+    <div className="preview-occlusion-image" onClick={oneByOne && !answerSide ? revealNext : undefined} style={oneByOne && !answerSide ? { cursor: 'pointer' } : undefined} title={oneByOne && !answerSide ? 'Click to reveal' : undefined}>
       <img
         src={image}
         alt="Image occlusion card source"
@@ -104,10 +116,12 @@ function OcclusionPreview({ image, masks, imageWidth = 720, mode = 'hide-all', c
           className="preview-occlusion-masks"
           viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
           preserveAspectRatio="none"
-          aria-label={`${groups.length} image occlusion cards`}
+          aria-label={oneByOne ? 'One-by-one image occlusion card' : `${groups.length} image occlusion cards`}
+          style={oneByOne ? { pointerEvents: 'none' } : undefined}
         >
           {shownMasks.map((mask, index) => {
-            const isQuestionMask = String(mask.group || mask.id || `mask-${index + 1}`) === activeGroup;
+            const maskGroup = keyOf(mask, index);
+            const isQuestionMask = maskGroup === activeGroup;
             const x = mask.x * dimensions.width;
             const y = mask.y * dimensions.height;
             const width = mask.width * dimensions.width;
@@ -119,6 +133,7 @@ function OcclusionPreview({ image, masks, imageWidth = 720, mode = 'hide-all', c
               strokeWidth: 1.25,
               style: { fill: isQuestionMask ? '#ff8e8e' : '#ffeba2', stroke: isQuestionMask ? '#b94d4d' : '#b89a3a' },
               vectorEffect: 'non-scaling-stroke',
+              ...(oneByOne ? { onClick: (event) => { event.stopPropagation(); revealGroup(maskGroup); }, style: { fill: isQuestionMask ? '#ff8e8e' : '#ffeba2', stroke: isQuestionMask ? '#b94d4d' : '#b89a3a', cursor: 'pointer', pointerEvents: 'auto' } } : {}),
             };
             if (mask.shape === 'polygon' && mask.points?.length >= 3) {
               return <polygon key={maskKey} {...common} points={mask.points.map(point => `${point.x * dimensions.width},${point.y * dimensions.height}`).join(' ')} />;
@@ -193,6 +208,13 @@ const listStyles = `
     display: inline-block; 
   }
 `;
+
+const cardPillLabel = (card) => {
+  if (card.type === 'Cloze' && card.sequential) return 'Cloze · one by one';
+  if (card.type === 'Image Occlusion' && card.occlusionMode === 'sequential') return 'Occlusion · in order';
+  if (card.type === 'Image Occlusion' && card.occlusionMode === 'random') return 'Occlusion · random';
+  return card.type || 'Basic';
+};
 
 const getCardPreview = (content) => {
     if (!content) return '';
@@ -394,6 +416,9 @@ export default function FlashcardEditor() {
   const [occlusionEditorOpen, setOcclusionEditorOpen] = useState(false);
   const [occlusionMasks, setOcclusionMasks] = useState([]);
   const [occlusionMode, setOcclusionMode] = useState('hide-all');
+  // AnKing-style "One by One": every cloze on a single card, revealed in number order.
+  const [clozeSequential, setClozeSequential] = useState(() => { try { return localStorage.getItem('ankiClozeSequential') === '1'; } catch { return false; } });
+  useEffect(() => { try { localStorage.setItem('ankiClozeSequential', clozeSequential ? '1' : '0'); } catch { /* storage unavailable */ } }, [clozeSequential]);
   const [manualMaskPreview, setManualMaskPreview] = useState(null);
   const manualMaskStartRef = useRef(null);
   const imageResizeStartRef = useRef(null);
@@ -602,6 +627,7 @@ export default function FlashcardEditor() {
           question: cardType === 'Image Occlusion' ? '' : finalFront,
           answer: finalBack,
           tags: currentTags,
+          ...(cardType === 'Cloze' ? { sequential: clozeSequential } : {}),
           ...(cardType === 'Image Occlusion' ? { imageData: finalOcclusionImage, imageWidth: occlusionImageWidth, masks: occlusionMasks, occlusionMode, restoreType: card.restoreType || previousCardTypeRef.current } : {}),
       } : card));
 
@@ -617,7 +643,7 @@ export default function FlashcardEditor() {
       setCurrentTags([]);
       if (frontRef.current) frontRef.current.innerHTML = '';
       if (backRef.current) backRef.current.innerHTML = '';
-  }, [front, back, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode, cardType, currentTags, editingIndex]);
+  }, [front, back, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode, cardType, currentTags, editingIndex, clozeSequential]);
 
   const deleteCard = (indexToDelete) => {
       if (window.confirm(`Are you sure you want to delete Card #${cards.length - indexToDelete}?`)) {
@@ -691,6 +717,7 @@ export default function FlashcardEditor() {
         question: finalFront,
         answer: finalBack,
         tags: currentTags,
+        ...(cardType === 'Cloze' ? { sequential: clozeSequential } : {}),
         created: new Date().toLocaleTimeString()
     };
 
@@ -704,7 +731,7 @@ export default function FlashcardEditor() {
     setClozeNumber(1);
     setActiveClozeId(null);
 
-  }, [cardType, front, back, currentTags, editingIndex, updateCard, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode, fieldPrefs.pinned]);
+  }, [cardType, front, back, currentTags, editingIndex, updateCard, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode, fieldPrefs.pinned, clozeSequential]);
 
 
   const exportDeck = useCallback(async () => {
@@ -722,6 +749,7 @@ export default function FlashcardEditor() {
         question: c.question,
         answer: c.answer,
         tags: c.tags,
+        ...(c.type === 'Cloze' ? { sequential: Boolean(c.sequential) } : {}),
         ...(c.type === 'Image Occlusion' ? { image_data: c.imageData, image_width: c.imageWidth, masks: c.masks, occlusion_mode: c.occlusionMode } : {}),
       }))
     };
@@ -848,6 +876,7 @@ export default function FlashcardEditor() {
       setOcclusionMode(card.occlusionMode || 'hide-all');
     } else {
       setOcclusionImage(null); setOcclusionMasks([]);
+      if (card.type === 'Cloze') setClozeSequential(Boolean(card.sequential));
     }
 
     const question = card.question || '';
@@ -1893,6 +1922,9 @@ export default function FlashcardEditor() {
 
   const toolbarTargetRef = activeEditor === 'back' ? backRef : frontRef;
 
+  const oneByOneOcclusion = occlusionMode === 'sequential' || occlusionMode === 'random';
+  const occlusionCardCount = oneByOneOcclusion ? 1 : new Set(occlusionMasks.map((mask, index) => mask.group || mask.id || `mask-${index + 1}`)).size;
+
   const syncAfterEdit = (targetRef) => setTimeout(() => {
     if (!targetRef.current) return;
     if (targetRef === frontRef) syncFrontContent(targetRef.current.innerHTML);
@@ -2054,6 +2086,8 @@ export default function FlashcardEditor() {
 
             {formMessage && <div className="form-message" role="alert">{formMessage}</div>}
 
+            {cardType === 'Cloze' && <label className="seq-toggle"><input type="checkbox" checked={clozeSequential} onChange={event => setClozeSequential(event.target.checked)} /><span><strong>Reveal one by one</strong><small>Puts every cloze on a single card and reveals them in number order: click a cloze or press N, and comma reveals all. Clozes sharing a number appear together.</small></span></label>}
+
             {cardType !== 'Image Occlusion' && <div className="editor-toolbar" role="toolbar" aria-label="Card formatting" onPointerDown={(e) => e.preventDefault()}>
               <div className="flex w-max min-w-full flex-nowrap items-center gap-1">
               {cardType === 'Basic' ? basicColorPresets.map((color, index) => (
@@ -2124,7 +2158,7 @@ export default function FlashcardEditor() {
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, frontRef)} />
               {!occlusionImage ? <div className="io-image-empty"><Crop size={22}/><span>Paste an image here, drop an occluded capture, or choose a file</span></div> : <div className="io-image-preview"><div className="io-mask-draw-area" onPointerDown={e => { if (e.target.closest('.manual-mask-remove')) return; e.currentTarget.setPointerCapture(e.pointerId); manualMaskStartRef.current = manualMaskPoint(e); setManualMaskPreview({ x: manualMaskStartRef.current.x, y: manualMaskStartRef.current.y, width: 0, height: 0 }); }} onPointerMove={e => { if (!manualMaskStartRef.current) return; const p = manualMaskPoint(e), s = manualMaskStartRef.current; setManualMaskPreview({ x: Math.min(s.x,p.x), y: Math.min(s.y,p.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }} onPointerUp={finishManualMask} onPointerCancel={cancelManualMask}><img src={occlusionImage} alt="Image occlusion source" draggable="false"/>{occlusionMasks.map((mask,index) => <button type="button" className="manual-mask-remove" key={mask.id} title={`Remove region ${index+1}`} onPointerDown={e => e.stopPropagation()} onClick={() => setOcclusionMasks(prev => prev.filter(m => m.id !== mask.id))} style={{left:`${mask.x*100}%`,top:`${mask.y*100}%`,width:`${mask.width*100}%`,height:`${mask.height*100}%`,borderRadius:mask.shape === 'ellipse' ? '50%' : 0,clipPath:mask.shape === 'polygon' && mask.points?.length >= 3 ? `polygon(${mask.points.map(point => `${((point.x-mask.x)/Math.max(mask.width,.0001))*100}% ${((point.y-mask.y)/Math.max(mask.height,.0001))*100}%`).join(',')})` : undefined}}>{index+1} ×</button>)}{manualMaskPreview && <span className="manual-mask-draft" style={{left:`${manualMaskPreview.x*100}%`,top:`${manualMaskPreview.y*100}%`,width:`${manualMaskPreview.width*100}%`,height:`${manualMaskPreview.height*100}%`}}/>}</div><div><strong>{occlusionMasks.length} hidden region{occlusionMasks.length === 1 ? '' : 's'}</strong><span>Drag over image to add a mask; tap a mask to remove it.</span></div></div>}
               <p className="io-helper">Draw masks on a PDF capture, then drag it here. The source image and mask geometry stay attached to this card.</p>
-              <label className="io-mode-select">Review mode <select value={occlusionMode} onChange={e => setOcclusionMode(e.target.value)}><option value="hide-all">Hide All, Guess One</option><option value="hide-one">Hide One, Guess One</option></select></label>
+              <label className="io-mode-select">Review mode <select value={occlusionMode} onChange={e => setOcclusionMode(e.target.value)}><option value="hide-all">Hide All, Guess One</option><option value="hide-one">Hide One, Guess One</option><option value="sequential">Reveal one by one (in order)</option><option value="random">Reveal one by one (random order)</option></select></label>
             </section>}
 
             {cardType === 'Image Occlusion' && occlusionImage && occlusionEditorOpen && createPortal(<div className="io-editor-backdrop" role="dialog" aria-modal="true" aria-label="Image occlusion editor" onPointerDown={e => { if (e.target === e.currentTarget) setOcclusionEditorOpen(false); }}><section className="io-editor-dialog"><header className="io-editor-header"><div><span className="section-eyebrow">IMAGE OCCLUSION</span><h2>Arrange masks</h2></div><div className="io-editor-actions"><label>Image size <input aria-label="Image width" type="range" min="180" max="1800" step="10" value={occlusionImageWidth} onChange={e => setOcclusionImageWidth(Number(e.target.value))}/><span>{occlusionImageWidth}px</span></label><button type="button" className="quiet-button" onClick={() => setOcclusionEditorOpen(false)}>Done</button></div></header><div className="io-editor-stage"><div className="io-editor-resize-frame" style={{width:`min(${occlusionImageWidth}px, calc(100vw - 64px))`}}><div className="io-mask-draw-area io-editor-mask-area" onPointerDown={e => { if (e.target.closest('.manual-mask-remove,.io-resize-handle')) return; e.currentTarget.setPointerCapture(e.pointerId); manualMaskStartRef.current = manualMaskPoint(e); setManualMaskPreview({ x: manualMaskStartRef.current.x, y: manualMaskStartRef.current.y, width: 0, height: 0 }); }} onPointerMove={e => { if (!manualMaskStartRef.current) return; const p = manualMaskPoint(e), s = manualMaskStartRef.current; setManualMaskPreview({ x: Math.min(s.x,p.x), y: Math.min(s.y,p.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }} onPointerUp={finishManualMask} onPointerCancel={cancelManualMask}><img src={occlusionImage} alt="Image occlusion source" draggable="false"/>{occlusionMasks.map((mask,index) => <button type="button" className="manual-mask-remove" key={mask.id} title={`Remove region ${index+1}`} onPointerDown={e => e.stopPropagation()} onClick={() => setOcclusionMasks(prev => prev.filter(m => m.id !== mask.id))} style={{left:`${mask.x*100}%`,top:`${mask.y*100}%`,width:`${mask.width*100}%`,height:`${mask.height*100}%`,borderRadius:mask.shape === 'ellipse' ? '50%' : 0}}>{index+1} ×</button>)}{manualMaskPreview && <span className="manual-mask-draft" style={{left:`${manualMaskPreview.x*100}%`,top:`${manualMaskPreview.y*100}%`,width:`${manualMaskPreview.width*100}%`,height:`${manualMaskPreview.height*100}%`}}/>}</div>{['n','ne','e','se','s','sw','w','nw'].map(direction => <button type="button" key={direction} aria-label={`Resize image ${direction}`} className={`io-resize-handle ${direction}`} onPointerDown={e => beginImageResize(e,direction)} onPointerMove={moveImageResize} onPointerUp={endImageResize} onPointerCancel={endImageResize}/>)}</div></div><footer className="io-editor-footer"><span>{occlusionMasks.length} hidden region{occlusionMasks.length === 1 ? '' : 's'} · Drag to add a mask, select a mask to remove it. Resize handles keep the image proportions.</span><button type="button" className="primary-button" onClick={() => setOcclusionEditorOpen(false)}>Done</button></footer></section></div>, document.body)}
@@ -2282,7 +2316,7 @@ export default function FlashcardEditor() {
               <article key={`${card.created}-${index}`} className="card-item">
                 <div className="card-item-top">
                   <span className="card-index">{String(cards.length - index).padStart(2, '0')}</span>
-                  <span className="card-type-pill">{card.type || "Basic"}</span>
+                  <span className="card-type-pill">{cardPillLabel(card)}</span>
                   <span className="card-created">{card.created}</span>
                 </div>
                 <button className="card-content-button" onClick={() => loadCardForEdit(index)} aria-label={`Edit card ${cards.length - index}`}>
@@ -2320,8 +2354,8 @@ export default function FlashcardEditor() {
                 {cardType === 'Image Occlusion' ? <>
                   <div className="io-reviewer-controls">
                     <button type="button" aria-label="Previous occlusion card" disabled={previewOcclusionIndex <= 0} onClick={() => { setPreviewOcclusionIndex(index => Math.max(0, index - 1)); setPreviewAnswerSide(false); }}>‹</button>
-                    <span>Card <strong>{Math.min(previewOcclusionIndex + 1, Math.max(1, new Set(occlusionMasks.map((mask, index) => mask.group || mask.id || `mask-${index + 1}`)).size))}</strong> of {new Set(occlusionMasks.map((mask, index) => mask.group || mask.id || `mask-${index + 1}`)).size}</span>
-                    <button type="button" aria-label="Next occlusion card" disabled={previewOcclusionIndex >= new Set(occlusionMasks.map((mask, index) => mask.group || mask.id || `mask-${index + 1}`)).size - 1} onClick={() => { setPreviewOcclusionIndex(index => Math.min(Math.max(0, new Set(occlusionMasks.map((mask, i) => mask.group || mask.id || `mask-${i + 1}`)).size - 1), index + 1)); setPreviewAnswerSide(false); }}>›</button>
+                    <span>Card <strong>{Math.min(previewOcclusionIndex + 1, Math.max(1, occlusionCardCount))}</strong> of {occlusionCardCount}</span>
+                    <button type="button" aria-label="Next occlusion card" disabled={previewOcclusionIndex >= occlusionCardCount - 1} onClick={() => { setPreviewOcclusionIndex(index => Math.min(Math.max(0, occlusionCardCount - 1), index + 1)); setPreviewAnswerSide(false); }}>›</button>
                     <div className="io-reviewer-flip"><button type="button" aria-pressed={!previewAnswerSide} onClick={() => setPreviewAnswerSide(false)}>Question</button><button type="button" aria-pressed={previewAnswerSide} onClick={() => setPreviewAnswerSide(true)}>Show answer</button></div>
                   </div>
                   <div className="io-reviewer-image">

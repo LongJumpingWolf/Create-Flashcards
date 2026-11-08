@@ -16,6 +16,10 @@ from pydantic import BaseModel, Field, field_validator
 import genanki
 from PIL import Image, ImageDraw
 
+from sequential_templates import (
+    SEQ_CLOZE_CSS_EXTRA, SEQ_CLOZE_QFMT, SEQ_CLOZE_AFMT, SEQ_IO_CSS, SEQ_IO_QFMT, SEQ_IO_AFMT,
+)
+
 # --- Configuration ---
 # NEW: Define a robust CSS structure for centering non-list content and handling lists cleanly.
 DEFAULT_CARD_CSS = """
@@ -107,6 +111,23 @@ ANKI_CLOZE_MODEL = genanki.Model(
     css=DEFAULT_CARD_CSS + '.cloze { font-weight: bold; }', 
 )
 
+# AnKing-style "one by one" note types (templates are shared with the in-browser exporter).
+ANKI_SEQ_CLOZE_MODEL = genanki.Model(
+    1607392324,
+    'Sequential Cloze (one by one)',
+    fields=[{'name': 'Text'}, {'name': 'Extra'}],
+    templates=[{'name': 'Sequential Cloze', 'qfmt': SEQ_CLOZE_QFMT, 'afmt': SEQ_CLOZE_AFMT}],
+    css=DEFAULT_CARD_CSS + SEQ_CLOZE_CSS_EXTRA,
+)
+ANKI_SEQ_IO_MODEL = genanki.Model(
+    1607392325,
+    'Image Occlusion One by One',
+    fields=[{'name': name} for name in ['Header', 'Image', 'Masks', 'Extra', 'Mode']],
+    templates=[{'name': 'IO One by One', 'qfmt': SEQ_IO_QFMT, 'afmt': SEQ_IO_AFMT}],
+    css=SEQ_IO_CSS,
+    sort_field_index=1,
+)
+
 IOE_FIELDS = [
     'ID (hidden)', 'Header', 'Image', 'Question Mask', 'Footer', 'Remarks',
     'Sources', 'Extra 1', 'Extra 2', 'Answer Mask', 'Original Mask',
@@ -163,7 +184,8 @@ class CardPayload(BaseModel):
     image_data: str | None = None
     image_width: int = Field(default=720, ge=180, le=1800)
     masks: List[dict] = Field(default_factory=list, max_length=300)
-    occlusion_mode: Literal["hide-all", "hide-one"] = "hide-all"
+    occlusion_mode: Literal["hide-all", "hide-one", "sequential", "random"] = "hide-all"
+    sequential: bool = False  # Cloze cards: reveal the clozes one by one on a single card
 
     @field_validator("tags")
     @classmethod
@@ -286,6 +308,32 @@ def _ioe_mask_svg(image_width: int, image_height: int, mask_groups: list[list[di
     )
 
 
+def _sequential_masks_svg(image_width: int, image_height: int, mask_groups: list[list[dict]]) -> str:
+    """Inline SVG for the one-by-one occlusion card: one <g class="sq-m"> per revealable region."""
+    body = ''.join(
+        f'<g class="sq-m" data-i="{index}">'
+        + ''.join(_ioe_svg_shape(mask, image_width, image_height, '#FFEBA2', f'm{index}-{child}') for child, mask in enumerate(group))
+        + '</g>'
+        for index, group in enumerate(mask_groups)
+    )
+    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {image_width} {image_height}" preserveAspectRatio="none">{body}</svg>'
+
+
+def cloze_to_sequential_html(html: str) -> tuple[str, int]:
+    """{{c1::answer::hint}} -> <span class="sc" data-n="1" data-hint="hint">answer</span>."""
+    count = 0
+
+    def replace(match):
+        nonlocal count
+        count += 1
+        hint = match.group(3)
+        clean_hint = html_escape(re.sub(r'<[^>]*>', '', hint).strip(), quote=True) if hint else ''
+        attribute = f' data-hint="{clean_hint}"' if hint else ''
+        return f'<span class="sc" data-n="{int(match.group(1))}"{attribute}>{match.group(2)}</span>'
+
+    return re.sub(r'\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}', replace, html, flags=re.DOTALL), count
+
+
 def create_anki_deck(deck_payload: DeckPayload) -> bytes:
     """Creates a .apkg file in memory from the deck payload."""
     deck_id = random.randint(1000000000, 9999999999)
@@ -338,6 +386,21 @@ def create_anki_deck(deck_payload: DeckPayload) -> bytes:
             image.save(image_buffer, format="PNG")
             all_media_files[image_name] = image_buffer.getvalue()
             mask_groups = list(groups.values())
+            if card_data.occlusion_mode in ('sequential', 'random'):
+                answer_html, answer_media = extract_media_from_html(card_data.answer)
+                all_media_files.update(answer_media)
+                deck.add_note(genanki.Note(
+                    model=ANKI_SEQ_IO_MODEL,
+                    fields=[
+                        '',
+                        f'<img src="{image_name}" style="width:{card_data.image_width}px;max-width:100%;height:auto">',
+                        _sequential_masks_svg(image.width, image.height, mask_groups),
+                        answer_html,
+                        card_data.occlusion_mode,
+                    ],
+                    tags=card_data.tags,
+                ))
+                continue
             mode = 'ao' if card_data.occlusion_mode == 'hide-all' else 'oa'
             session_id = uuid.uuid4().hex
             original_mask_name = f'{session_id}-{mode}-O.svg'
@@ -397,6 +460,13 @@ def create_anki_deck(deck_payload: DeckPayload) -> bytes:
             all_media_files.update(t_media)
             all_media_files.update(e_media)
             
+            if card_data.sequential:
+                t_html, cloze_count = cloze_to_sequential_html(t_html)
+                if not cloze_count:
+                    raise ValueError("Add at least one cloze deletion, such as {{c1::key term}}.")
+                deck.add_note(genanki.Note(model=ANKI_SEQ_CLOZE_MODEL, fields=[t_html, e_html], tags=card_data.tags))
+                continue
+
             note = genanki.Note(
                 model=ANKI_CLOZE_MODEL,
                 fields=[t_html, e_html],

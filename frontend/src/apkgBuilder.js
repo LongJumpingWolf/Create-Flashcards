@@ -6,6 +6,7 @@
 // which keeps this module testable in Node and byte-for-byte comparable with the
 // backend output.
 import { zipSync } from 'fflate';
+import { SEQ_CLOZE_CSS_EXTRA, SEQ_CLOZE_QFMT, SEQ_CLOZE_AFMT, SEQ_IO_CSS, SEQ_IO_QFMT, SEQ_IO_AFMT } from './sequentialTemplates.js';
 
 // Problems with the user's card content (as opposed to browser/runtime failures).
 export class CardError extends Error {}
@@ -126,6 +127,26 @@ const MODELS = {
     css: `${DEFAULT_CARD_CSS}.cloze { font-weight: bold; }`,
     sortField: 0,
     req: [[0, 'all', [0, 1]]],
+  },
+  'Sequential Cloze': {
+    id: 1607392324,
+    name: 'Sequential Cloze (one by one)',
+    type: 0,
+    fields: ['Text', 'Extra'],
+    templates: [{ name: 'Sequential Cloze', qfmt: SEQ_CLOZE_QFMT, afmt: SEQ_CLOZE_AFMT }],
+    css: `${DEFAULT_CARD_CSS}${SEQ_CLOZE_CSS_EXTRA}`,
+    sortField: 0,
+    req: [[0, 'all', [0]]],
+  },
+  'Image Occlusion One by One': {
+    id: 1607392325,
+    name: 'Image Occlusion One by One',
+    type: 0,
+    fields: ['Header', 'Image', 'Masks', 'Extra', 'Mode'],
+    templates: [{ name: 'IO One by One', qfmt: SEQ_IO_QFMT, afmt: SEQ_IO_AFMT }],
+    css: SEQ_IO_CSS,
+    sortField: 1,
+    req: [[0, 'all', [1]]],
   },
   'Image Occlusion': {
     id: 1607392322,
@@ -427,6 +448,25 @@ function ioeMaskSvg(width, height, groups, mode, targetIndex, side, sessionId) {
     + `<g inkscape:groupmode="layer" inkscape:label="Masks" id="ioe-mask-layer">${elements.join('')}</g></svg>`;
 }
 
+// One-by-one image occlusion keeps every region on a single card: an inline SVG whose
+// regions (grouped shapes) the card's JavaScript reveals one at a time.
+function sequentialMasksSvg(width, height, groups) {
+  const body = groups.map((group, index) => `<g class="sq-m" data-i="${index}">${group.map((mask, child) => ioeSvgShape(mask, width, height, '#FFEBA2', `m${index}-${child}`)).join('')}</g>`).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">${body}</svg>`;
+}
+
+// {{c1::answer::hint}} -> <span class="sc" data-n="1" data-hint="hint">answer</span>, which the
+// sequential cloze template hides and reveals in cloze-number order.
+export function clozeToSequentialHtml(html) {
+  let count = 0;
+  const converted = html.replace(/\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}/g, (_match, number, text, hint) => {
+    count += 1;
+    const hintAttribute = hint ? ` data-hint="${htmlEscape(hint.replace(/<[^>]*>/g, '').trim())}"` : '';
+    return `<span class="sc" data-n="${Number(number)}"${hintAttribute}>${text}</span>`;
+  });
+  return { html: converted, count };
+}
+
 function normalizeMasks(masks) {
   const normalized = [];
   const groups = new Map();
@@ -511,6 +551,17 @@ async function planNotes(payload, { prepareImage, warn, onProgress }) {
       if (image.width * image.height > 40_000_000) throw new CardError('Image Occlusion source image is too large');
 
       const { groups } = normalizeMasks(card.masks);
+      const oneByOne = card.occlusion_mode === 'sequential' || card.occlusion_mode === 'random';
+      if (oneByOne) {
+        const widthSetting = Number.isFinite(card.image_width) ? Math.min(1800, Math.max(180, Math.round(card.image_width))) : 720;
+        const answerHtml = await extractMedia(card.answer || '', ctx);
+        notes.push({
+          model: MODELS['Image Occlusion One by One'],
+          fields: ['', `<img src="${imageName}" style="width:${widthSetting}px;max-width:100%;height:auto">`, sequentialMasksSvg(image.width, image.height, groups), answerHtml, card.occlusion_mode],
+          tags,
+          cards: [0],
+        });
+      } else {
       const mode = card.occlusion_mode === 'hide-one' ? 'oa' : 'ao';
       const sessionId = uuidHex();
       const originalMaskName = `${sessionId}-${mode}-O.svg`;
@@ -540,18 +591,25 @@ async function planNotes(payload, { prepareImage, warn, onProgress }) {
           cards: [0],
         });
       });
+      }
     } else if (card.type === 'Basic' || card.type === 'Cloze') {
       if (!String(card.question || '').trim()) throw new CardError('Question cannot be empty');
       const question = await extractMedia(card.question || '', ctx);
       const answer = await extractMedia(card.answer || '', ctx);
       const isCloze = card.type === 'Cloze';
-      let ords = [0];
-      if (isCloze) {
-        const found = new Set();
-        for (const match of question.matchAll(/{{c(\d+)::.+?}}/gs)) if (Number(match[1]) > 0) found.add(Number(match[1]) - 1);
-        ords = found.size ? [...found] : [0];
+      if (isCloze && card.sequential) {
+        const sequential = clozeToSequentialHtml(question);
+        if (!sequential.count) throw new CardError('Add at least one cloze deletion, such as {{c1::key term}}.');
+        notes.push({ model: MODELS['Sequential Cloze'], fields: [sequential.html, answer], tags, cards: [0] });
+      } else {
+        let ords = [0];
+        if (isCloze) {
+          const found = new Set();
+          for (const match of question.matchAll(/{{c(\d+)::.+?}}/gs)) if (Number(match[1]) > 0) found.add(Number(match[1]) - 1);
+          ords = found.size ? [...found] : [0];
+        }
+        notes.push({ model: MODELS[card.type], fields: [question, answer], tags, cards: ords });
       }
-      notes.push({ model: MODELS[card.type], fields: [question, answer], tags, cards: ords });
     } else {
       throw new CardError(`Unsupported card type: ${card.type}`);
     }

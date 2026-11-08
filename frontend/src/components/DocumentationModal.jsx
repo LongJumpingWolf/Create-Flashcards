@@ -65,7 +65,7 @@ export default function DocumentationModal({ isVisible, onClose }) {
             </GuideSection>
 
             <GuideSection number="04" title="Occlude and review" description="Hide one or more regions, label them if useful, and choose how Anki reveals them." icon={<Braces size={17} />}>
-              <p><strong>Hide All, Guess One</strong> creates a review card for each region with the others hidden. <strong>Hide One, Guess One</strong> tests one region at a time. Exports use Anki’s native Image Occlusion note type and cloze-based regions.</p>
+              <p><strong>Hide All, Guess One</strong> creates a review card for each region with the others hidden. <strong>Hide One, Guess One</strong> tests one region at a time. Exports use Anki’s native Image Occlusion note type and cloze-based regions. <strong>One by one, in order</strong> and <strong>random</strong> keep every region on a single card that you reveal by clicking (or N; comma reveals all). For cloze cards, turn on <strong>Reveal one by one</strong> to get the same behavior for text.</p>
             </GuideSection>
           </div>
 

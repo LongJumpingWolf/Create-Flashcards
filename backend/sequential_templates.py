@@ -1,0 +1,152 @@
+# Generated from frontend/src/sequentialTemplates.js by frontend/scripts/gen-python-templates.mjs. Do not edit by hand.
+SEQ_CLOZE_AFMT = r'''<div class="editable-content" id="sc-text">{{Text}}</div>
+<script>if (window.__sqKey) { document.removeEventListener('keydown', window.__sqKey); window.__sqKey = null; }</script>
+{{#Extra}}<hr id="answer"><div class="editable-content">{{Extra}}</div>{{/Extra}}'''
+SEQ_CLOZE_CSS_EXTRA = r'''
+.sc { font-weight: bold; color: #1f5fbf; }
+.sc-hidden { background: #d6e4ff; border-radius: 5px; padding: 0 5px; cursor: pointer; }
+.sc-active { background: #ffd9a8; color: #8a4b00; outline: 2px solid #f39c12; }
+.sc-shown { color: #1a7f37; }
+#sc-help { margin-top: 14px; font-size: 12px; color: #8a8f98; }
+'''
+SEQ_CLOZE_QFMT = r'''<div class="editable-content" id="sc-text">{{Text}}</div>
+<div id="sc-help">Click the highlighted cloze or press N to reveal the next one &middot; , reveals all</div>
+<script>
+(function () {
+  var autoFlip = true; // flip to the back after the last cloze (desktop and AnkiDroid; ignored on AnkiMobile)
+  var root = document.getElementById('sc-text');
+  if (!root) return;
+  var spans = Array.prototype.slice.call(root.querySelectorAll('.sc'));
+  if (!spans.length) return;
+  var order = [];
+  spans.forEach(function (span) {
+    var n = Number(span.getAttribute('data-n')) || 1;
+    if (order.indexOf(n) < 0) order.push(n);
+  });
+  order.sort(function (a, b) { return a - b; });
+  spans.forEach(function (span) {
+    var hint = span.getAttribute('data-hint');
+    span.sqAnswer = span.innerHTML;
+    span.textContent = hint ? '[' + hint + ']' : '[...]';
+    span.className = 'sc sc-hidden';
+  });
+  function groupOf(span) { return Number(span.getAttribute('data-n')) || 1; }
+  function isHidden(span) { return span.className.indexOf('sc-hidden') >= 0; }
+  function hiddenIn(n) { return spans.filter(function (span) { return isHidden(span) && groupOf(span) === n; }); }
+  function nextGroup() {
+    for (var i = 0; i < order.length; i++) { if (hiddenIn(order[i]).length) return order[i]; }
+    return null;
+  }
+  function mark() {
+    var next = nextGroup();
+    spans.forEach(function (span) {
+      var hidden = isHidden(span);
+      span.className = 'sc ' + (hidden ? 'sc-hidden' : 'sc-shown') + (hidden && groupOf(span) === next ? ' sc-active' : '');
+    });
+  }
+  function show(n) { hiddenIn(n).forEach(function (span) { span.innerHTML = span.sqAnswer; span.className = 'sc sc-shown'; }); }
+  function done() { if (autoFlip && typeof pycmd === 'function') setTimeout(function () { pycmd('ans'); }, 350); }
+  function revealNext() {
+    var n = nextGroup();
+    if (n === null) { done(); return; }
+    show(n); mark();
+    if (nextGroup() === null) done();
+  }
+  function revealAll() {
+    var n;
+    while ((n = nextGroup()) !== null) show(n);
+    mark(); done();
+  }
+  root.addEventListener('click', function (event) {
+    var target = event.target;
+    while (target && target !== root && !(target.className && /(^| )sc( |$)/.test(target.className))) target = target.parentNode;
+    if (target && target !== root && isHidden(target)) {
+      show(groupOf(target)); mark();
+      if (nextGroup() === null) done();
+    } else {
+      revealNext();
+    }
+  });
+  if (window.__sqKey) document.removeEventListener('keydown', window.__sqKey);
+  window.__sqKey = function (event) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === 'n' || event.key === 'N') revealNext();
+    else if (event.key === ',') revealAll();
+  };
+  document.addEventListener('keydown', window.__sqKey);
+  mark();
+})();
+</script>'''
+SEQ_IO_AFMT = r'''{{#Image}}
+<div id="io-header">{{Header}}</div>
+<div id="sq-wrap"><div id="sq-image">{{Image}}</div></div>
+<script>if (window.__sqKey) { document.removeEventListener('keydown', window.__sqKey); window.__sqKey = null; }</script>
+{{#Extra}}<div id="sq-extra">{{Extra}}</div>{{/Extra}}
+{{/Image}}'''
+SEQ_IO_CSS = r'''
+.card { font-family: Arial, sans-serif; font-size: 20px; text-align: center; color: #202521; background: #fff; }
+#io-header { margin: .5em auto; max-width: 90%; }
+#sq-wrap { position: relative; display: inline-block; max-width: 100%; margin: 0 auto; line-height: 0; }
+#sq-image img { display: block; max-width: 100%; height: auto; }
+#sq-masks { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+#sq-masks svg { display: block; width: 100%; height: 100%; }
+.sq-m { cursor: pointer; }
+.sq-m rect, .sq-m ellipse, .sq-m polygon { fill: #FFEBA2; stroke: #2D2D2D; stroke-width: 2; }
+.sq-m[data-active] rect, .sq-m[data-active] ellipse, .sq-m[data-active] polygon { fill: #FF7E7E; stroke: #b02a2a; }
+.sq-m[data-gone] { display: none; }
+#sq-help { margin: 10px auto 0; max-width: 90%; font-size: 12px; line-height: 1.4; color: #8a8f98; }
+#sq-extra { width: min(80%, 42rem); margin: .8em auto; text-align: left; line-height: 1.5; }
+'''
+SEQ_IO_QFMT = r'''{{#Image}}
+<div id="io-header">{{Header}}</div>
+<div id="sq-wrap" data-mode="{{Mode}}"><div id="sq-image">{{Image}}</div><div id="sq-masks">{{Masks}}</div></div>
+<div id="sq-help"></div>
+<script>
+(function () {
+  var autoFlip = true; // flip to the back after the last region (desktop and AnkiDroid; ignored on AnkiMobile)
+  var wrap = document.getElementById('sq-wrap');
+  if (!wrap) return;
+  var random = wrap.getAttribute('data-mode') === 'random';
+  var masks = Array.prototype.slice.call(wrap.querySelectorAll('.sq-m'));
+  var help = document.getElementById('sq-help');
+  if (help) help.textContent = random
+    ? 'Click a region, or click anywhere / press N to reveal a random one \u00b7 , reveals all'
+    : 'Click the image or press N to reveal the highlighted region \u00b7 , reveals all';
+  if (!masks.length) return;
+  function remaining() { return masks.filter(function (mask) { return !mask.hasAttribute('data-gone'); }); }
+  function highlight() {
+    masks.forEach(function (mask) { mask.removeAttribute('data-active'); });
+    if (!random) { var left = remaining(); if (left.length) left[0].setAttribute('data-active', '1'); }
+  }
+  function done() { if (autoFlip && typeof pycmd === 'function') setTimeout(function () { pycmd('ans'); }, 350); }
+  function reveal(mask) {
+    mask.setAttribute('data-gone', '1');
+    highlight();
+    if (!remaining().length) done();
+  }
+  function revealNext() {
+    var left = remaining();
+    if (!left.length) { done(); return; }
+    reveal(random ? left[Math.floor(Math.random() * left.length)] : left[0]);
+  }
+  function revealAll() {
+    remaining().forEach(function (mask) { mask.setAttribute('data-gone', '1'); });
+    highlight(); done();
+  }
+  wrap.addEventListener('click', function (event) {
+    var target = event.target;
+    while (target && target !== wrap && !(target.getAttribute && target.getAttribute('data-i') !== null)) target = target.parentNode;
+    if (target && target !== wrap && !target.hasAttribute('data-gone')) reveal(target);
+    else revealNext();
+  });
+  if (window.__sqKey) document.removeEventListener('keydown', window.__sqKey);
+  window.__sqKey = function (event) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === 'n' || event.key === 'N') revealNext();
+    else if (event.key === ',') revealAll();
+  };
+  document.addEventListener('keydown', window.__sqKey);
+  highlight();
+})();
+</script>
+{{/Image}}'''
