@@ -3,14 +3,21 @@ import FlashcardEditor from "./components/FlashcardEditor";
 import './index.css'; // Make sure the styles are imported
 
 const SettingsPage = lazy(() => import('./components/SettingsPage'));
-const settingsRequested = () => typeof window !== 'undefined' && window.location.hash === '#settings';
+const IconMaker = lazy(() => import('./components/IconMaker'));
+const routeFromHash = () => {
+  if (typeof window === 'undefined') return '';
+  return window.location.hash === '#settings' ? 'settings' : window.location.hash === '#icons' ? 'icons' : '';
+};
 
 function App() {
-  const [showSettings, setShowSettings] = useState(settingsRequested);
-  const openSettings = useCallback(() => { window.location.hash = 'settings'; setShowSettings(true); }, []);
-  const closeSettings = useCallback(() => { if (window.location.hash === '#settings') history.replaceState(null, '', window.location.pathname + window.location.search); setShowSettings(false); }, []);
+  const [route, setRoute] = useState(routeFromHash);
+  const go = useCallback((next) => {
+    if (next) window.location.hash = next;
+    else if (window.location.hash) history.replaceState(null, '', window.location.pathname + window.location.search);
+    setRoute(next);
+  }, []);
   useEffect(() => {
-    const sync = () => setShowSettings(settingsRequested());
+    const sync = () => setRoute(routeFromHash());
     window.addEventListener('hashchange', sync);
     return () => window.removeEventListener('hashchange', sync);
   }, []);
@@ -46,8 +53,9 @@ function App() {
   return (
     <div className="min-h-screen">
       {/* The editor stays mounted (hidden) while settings are open, so nothing in progress is lost. */}
-      <div hidden={showSettings}><FlashcardEditor onOpenSettings={openSettings} /></div>
-      {showSettings && <Suspense fallback={<div className="set-loading">Loading settings…</div>}><SettingsPage onClose={closeSettings} /></Suspense>}
+      <div hidden={route !== ''}><FlashcardEditor onOpenSettings={() => go('settings')} /></div>
+      {route === 'settings' && <Suspense fallback={<div className="set-loading">Loading settings…</div>}><SettingsPage onClose={() => go('')} onOpenIcons={() => go('icons')} /></Suspense>}
+      {route === 'icons' && <Suspense fallback={<div className="set-loading">Loading icon maker…</div>}><IconMaker onClose={() => go('settings')} /></Suspense>}
     </div>
   );
 }

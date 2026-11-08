@@ -127,7 +127,7 @@ function ColorField({ value, onChange, label }) {
 // --------------------------------------------------------------------------------------------
 // Page
 // --------------------------------------------------------------------------------------------
-export default function SettingsPage({ onClose }) {
+export default function SettingsPage({ onClose, onOpenIcons }) {
   const [settings, setSettings] = useState(() => loadSettings());
   const [previewType, setPreviewType] = useState('cloze');
   const [side, setSide] = useState('answer');
@@ -221,6 +221,7 @@ export default function SettingsPage({ onClose }) {
         <button type="button" className="quiet-button" onClick={onClose}><ChevronLeft size={16} /><span>Back to editor</span></button>
         <div className="set-title"><span className="section-eyebrow">BEERUS CARD TYPES</span><h1>Settings</h1></div>
         <div className="set-top-actions">
+          <button type="button" className="quiet-button" onClick={() => onOpenIcons?.()}><span>Icon maker</span></button>
           <button type="button" className="quiet-button" onClick={downloadTestDeck}><Download size={15} /><span>Test deck</span></button>
           <button type="button" className="quiet-button" onClick={() => downloadJson(settings, 'beerus-settings.json')}><Download size={15} /><span>Export settings</span></button>
           <button type="button" className="quiet-button" onClick={() => importRef.current?.click()}><Upload size={15} /><span>Import</span></button>
@@ -243,7 +244,7 @@ export default function SettingsPage({ onClose }) {
                 <div className="set-pill-head"><span className="set-pill-chip" style={{ background: pill.color }}>{pill.iconType === 'emoji' ? pill.icon : ''} {pill.label}</span><strong>Pill {index + 1}</strong></div>
                 <Row label="Label"><input type="text" maxLength={24} value={pill.label} onChange={e => update(['pills', index, 'label'], e.target.value)} /></Row>
                 <Row label="Colour"><ColorField value={pill.color} label={`Pill ${index + 1} colour`} onChange={value => update(['pills', index, 'color'], value)} /></Row>
-                <Row label="Icon" hint="Emoji costs nothing. An uploaded icon is shrunk to 64 px and stored once for the whole deck. A web link adds no file at all but needs internet when you review.">
+                <Row label="Icon" hint="Emoji costs nothing. An uploaded icon is shrunk to 64 px and stored once for the whole deck. A web link adds no file at all but needs internet when you review. Need a custom one at 48 px? Use the Icon maker.">
                   <select value={pill.iconType} onChange={e => update(['pills', index, 'iconType'], e.target.value)}>
                     <option value="emoji">Emoji</option><option value="image">Upload image</option><option value="url">Image link (URL)</option><option value="none">No icon</option>
                   </select>
