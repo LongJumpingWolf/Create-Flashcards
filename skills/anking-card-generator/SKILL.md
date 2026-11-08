@@ -427,6 +427,20 @@ List card (one-by-one): `Structures passing through the <b>foramen magnum</b>: {
 
 ---
 
+### 7a. Precise masks and figure crops with `io_tools.py` (use whenever you can run Python and have the source PDF)
+
+Never type pixel coordinates yourself - vision guesses drift by several percent and a drifting mask leaks or hides the wrong thing. **You decide WHAT to hide; `io_tools.py` (bundled next to this file; `pip install pymupdf pillow`) measures WHERE, from the PDF's own text layer.**
+
+1. `python io_tools.py figures book.pdf OUT/` - finds every embedded figure and its `Fig. N.M` caption, crops it, writes `OUT/figures.json` (`b64`, `caption`, `page`). Look at a contact sheet of the crops before using them. Attach per §13 (max two cards per figure).
+2. `python io_tools.py page book.pdf PAGE page.png` - preview with a point ruler; pick the rectangle of a labelled diagram (`x0,y0,x1,y1`, PDF points).
+3. `python io_tools.py labels book.pdf PAGE x0,y0,x1,y1 OUT/io1` - prints numbered text labels found in that rectangle and writes `overlay.png` (red numbered boxes). **View the overlay.** If the diagram has no text layer (scan), the list is empty: fall back to a plan (`image_occlusion_plans`) for the user to draw in the app, never guessed boxes.
+4. Choose label numbers and write a spec: `{"pdf": ..., "candidates": "OUT/io1/candidates.json", "tags": [...], "extra": "<Book> Fig. N - caption", "cards": [{"mode": "hide-one", "hide": [1,2,5,[7,8]]}]}`; `python io_tools.py build spec.json io.json`. A nested list joins several labels into one hidden group. Modes: `hide-one` (tree/anatomy where neighbours help), `hide-all` (hide everything, guess one), `sequential` (ordered pathway, ONE note), `random` (unordered set, ONE note).
+5. `python io_tools.py check io.json OUT/chk` - renders each card with its masks; LOOK at it. Merge `io.json` cards into the deck JSON (same `cards` array).
+6. Photos / histology with arrows have no text to measure: attach the picture in Extra of a cloze card instead (e.g. "Fig. 6.9 hairy cell leukemia") and say in the report that arrow-target occlusion needs the app's mask editor.
+7. Skip junk labels (connector glyphs are already filtered), keep only learning targets, and never occlude the figure caption.
+8. Source images/cards derived from a user's book stay local (copyright); only this script and the skill go to the public repo.
+
+
 ## 8. Permutation matrix — input × content × action
 
 ### 8.1 By input type
