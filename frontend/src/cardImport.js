@@ -2,6 +2,7 @@
 // Accepts raw JSON, JSON inside ``` fences (a whole chat reply works), an array of cards, or
 // { deck_name, cards: [...] }. Nothing is added to the deck until the user confirms.
 import { sanitizePastedHtml } from './components/editorHelpers';
+import { normalizePills } from './beerus';
 
 const TYPE_ALIASES = { cloze: 'Cloze', basic: 'Basic', 'image occlusion': 'Image Occlusion', io: 'Image Occlusion', occlusion: 'Image Occlusion' };
 const OCCLUSION_MODES = ['hide-all', 'hide-one', 'sequential', 'random'];
@@ -84,6 +85,9 @@ export function validateImportedCard(raw, index) {
   if (!type) return { problems: [`${label}: unknown type "${raw.type}" (use Cloze, Basic or Image Occlusion)`], warnings };
   const question = type === 'Image Occlusion' ? '' : sanitizePastedHtml(String(raw.question ?? ''));
   const answer = sanitizePastedHtml(String(raw.answer ?? ''));
+  // Pills: "pills": [html, html, html, html] or { "1": html, ... } or pill_1 ... pill_4 keys.
+  const pillSource = raw.pills ?? Object.fromEntries([1, 2, 3, 4].filter(n => raw[`pill_${n}`] != null).map(n => [n, raw[`pill_${n}`]]));
+  const pills = normalizePills(pillSource).map(html => (html ? sanitizePastedHtml(html) : ''));
   const tags = cleanTags(raw.tags);
 
   if (type === 'Cloze') {
@@ -92,13 +96,13 @@ export function validateImportedCard(raw, index) {
     if (check.error) return { problems: [`${label}: ${check.error}`], warnings };
     check.warnings.forEach(message => warnings.push(`${label}: ${message}`));
     if (raw.sequential && new Set([...question.matchAll(/\{\{c(\d+)::/g)].map(match => match[1])).size < 2 && (question.match(/\{\{c\d+::/g) || []).length < 2) warnings.push(`${label}: "one by one" with a single cloze behaves like a normal cloze`);
-    return { card: { type, question, answer, tags, sequential: Boolean(raw.sequential) }, problems, warnings };
+    return { card: { type, question, answer, tags, sequential: Boolean(raw.sequential), pills }, problems, warnings };
   }
   if (type === 'Basic') {
     if (!stripTags(question)) return { problems: [`${label}: empty question`], warnings };
     if (!stripTags(answer) && !/<img|<audio|<table/i.test(answer)) return { problems: [`${label}: Basic card needs an answer`], warnings };
     if (/\{\{c\d+::/.test(question)) warnings.push(`${label}: contains cloze markup but type is Basic`);
-    return { card: { type, question, answer, tags }, problems, warnings };
+    return { card: { type, question, answer, tags, pills }, problems, warnings };
   }
   // Image occlusion
   const maskResult = normalizeMasks(raw.masks);
@@ -108,7 +112,7 @@ export function validateImportedCard(raw, index) {
     return { plan: { label, image_ref: raw.image_ref || '(no image)', mode, masks: raw.masks, answer, tags }, problems: [`${label}: Image Occlusion needs "image_data" (a data URL). Attach the picture in the app and draw the masks; the labels are kept as a plan.`], warnings };
   }
   if (maskResult.error) return { problems: [`${label}: ${maskResult.error}`], warnings };
-  return { card: { type, question: '', answer, tags, header: String(raw.header || '').slice(0, 500), imageData: raw.image_data, imageWidth: Math.min(1800, Math.max(180, Math.round(Number(raw.image_width) || 720))), masks: maskResult.masks, occlusionMode: mode }, problems, warnings };
+  return { card: { type, question: '', answer, tags, pills, header: String(raw.header || '').slice(0, 500), imageData: raw.image_data, imageWidth: Math.min(1800, Math.max(180, Math.round(Number(raw.image_width) || 720))), masks: maskResult.masks, occlusionMode: mode }, problems, warnings };
 }
 
 /**

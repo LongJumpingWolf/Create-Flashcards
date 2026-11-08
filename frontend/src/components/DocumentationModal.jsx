@@ -56,6 +56,10 @@ export default function DocumentationModal({ isVisible, onClose }) {
               <div><strong>Image Occlusion</strong><span>Cover parts of an image to test visual recall.</span></div>
             </GuideSection>
 
+            <GuideSection number="01b" title="Pills and card types" description="Every exported card uses the BeeRus note types, with four toggle pills (reference screenshot, comparison, lecture notes, your notes) under the answer." icon={<Download size={17} />}>
+              <p>Open <strong>Pills</strong> under the Extra field to paste a screenshot, add an image link or type notes. Empty pills never show. Rename pills, set icons, colours, the optional corner watermark, fonts and review keys on the <strong>Settings</strong> page; its live preview uses the exact exported HTML, and “Test deck” downloads one sample card of every type for your own Anki.</p>
+            </GuideSection>
+
             <GuideSection number="02" title="Format in place" description="Click where you want to type. Select text to style it with the single formatting bar." icon={<Pen size={17} />}>
               <p>Paste images directly into a card. Use the Extra field for a hint, explanation, or source. Pin a field (pin icon) to keep it after adding, collapse it (eye icon), or edit its raw HTML (&lt;/&gt;). Add tables, MathJax, audio, highlights, sub/superscript and lists from the toolbar.</p>
             </GuideSection>

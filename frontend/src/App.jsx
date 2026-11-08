@@ -1,8 +1,20 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import FlashcardEditor from "./components/FlashcardEditor";
 import './index.css'; // Make sure the styles are imported
 
+const SettingsPage = lazy(() => import('./components/SettingsPage'));
+const settingsRequested = () => typeof window !== 'undefined' && window.location.hash === '#settings';
+
 function App() {
+  const [showSettings, setShowSettings] = useState(settingsRequested);
+  const openSettings = useCallback(() => { window.location.hash = 'settings'; setShowSettings(true); }, []);
+  const closeSettings = useCallback(() => { if (window.location.hash === '#settings') history.replaceState(null, '', window.location.pathname + window.location.search); setShowSettings(false); }, []);
+  useEffect(() => {
+    const sync = () => setShowSettings(settingsRequested());
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, []);
+
   useEffect(() => {
     const preventPagePinch = (event) => event.preventDefault();
     const preventPagePinchMove = (event) => {
@@ -33,8 +45,9 @@ function App() {
 
   return (
     <div className="min-h-screen">
-      {/* This renders your new custom component */}
-      <FlashcardEditor />
+      {/* The editor stays mounted (hidden) while settings are open, so nothing in progress is lost. */}
+      <div hidden={showSettings}><FlashcardEditor onOpenSettings={openSettings} /></div>
+      {showSettings && <Suspense fallback={<div className="set-loading">Loading settings…</div>}><SettingsPage onClose={closeSettings} /></Suspense>}
     </div>
   );
 }

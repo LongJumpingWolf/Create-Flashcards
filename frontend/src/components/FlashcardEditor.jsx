@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 // NEW: Import the modal component
 import DocumentationModal from './DocumentationModal';
 import ImportCardsModal from './ImportCardsModal';
+import PillFields from './PillFields';
+import { buildThemePayload, loadSettings, normalizePills } from '../beerus';
 import { hasSavedPdf } from '../pdfResumeStorage';
 import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView, TableGridPicker } from './editorTools';
 import { smartTyping, smartEnter, listTab, markdownToHtml, looksLikeMarkdown, isPlainHtml, tidyHtml, SMART_DEFAULTS } from './smartTyping';
@@ -385,11 +387,13 @@ const RenderTagHierarchy = ({ nodes, level = 0, currentTags, onSelectTag, getTag
 };
 
 
-export default function FlashcardEditor() {
+export default function FlashcardEditor({ onOpenSettings }) {
   const [deckName, setDeckName] = useState(initialDecks[0]);
   const [cardType, setCardType] = useState("Basic");
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
+  const [pills, setPills] = useState(["", "", "", ""]);
+  const [pillsResetKey, setPillsResetKey] = useState(0);
   const [tagInput, setTagInput] = useState("");
   const [currentTags, setCurrentTags] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
@@ -636,6 +640,7 @@ export default function FlashcardEditor() {
           question: cardType === 'Image Occlusion' ? '' : finalFront,
           answer: finalBack,
           tags: currentTags,
+          pills,
           ...(cardType === 'Cloze' ? { sequential: clozeSequential } : {}),
           ...(cardType === 'Image Occlusion' ? { imageData: finalOcclusionImage, imageWidth: occlusionImageWidth, masks: occlusionMasks, occlusionMode, restoreType: card.restoreType || previousCardTypeRef.current } : {}),
       } : card));
@@ -649,10 +654,11 @@ export default function FlashcardEditor() {
       setFormMessage('');
       setFront("");
       setBack("");
+      setPills(["", "", "", ""]); setPillsResetKey(key => key + 1);
       setCurrentTags([]);
       if (frontRef.current) frontRef.current.innerHTML = '';
       if (backRef.current) backRef.current.innerHTML = '';
-  }, [front, back, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode, cardType, currentTags, editingIndex, clozeSequential]);
+  }, [pills, front, back, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode, cardType, currentTags, editingIndex, clozeSequential]);
 
   const deleteCard = (indexToDelete) => {
       if (window.confirm(`Are you sure you want to delete Card #${cards.length - indexToDelete}?`)) {
@@ -686,13 +692,14 @@ export default function FlashcardEditor() {
         setFormMessage('This card is set to Image Occlusion, but no hidden regions were made. Draw at least one mask or switch back to the previous card type.');
         return;
       }
-      const ioCard = { type: cardType, question: '', answer: finalBack, tags: currentTags, created: new Date().toLocaleTimeString(), imageData: finalOcclusionImage, imageWidth: occlusionImageWidth, masks: occlusionMasks, occlusionMode, restoreType: previousCardTypeRef.current };
+      const ioCard = { type: cardType, question: '', answer: finalBack, tags: currentTags, pills, created: new Date().toLocaleTimeString(), imageData: finalOcclusionImage, imageWidth: occlusionImageWidth, masks: occlusionMasks, occlusionMode, restoreType: previousCardTypeRef.current };
       if (editingIndex !== null) return updateCard();
       setCards(prev => [ioCard, ...prev]);
       window.clearTimeout(frontSaveTimerRef.current); window.clearTimeout(backSaveTimerRef.current);
       setFormMessage('');
       if (!fieldPrefs.pinned.back) { setBack(''); if (backRef.current) backRef.current.innerHTML = ''; }
       setFront(''); setCurrentTags([]);
+      setPills(['', '', '', '']); setPillsResetKey(key => key + 1);
       setCardType(previousCardTypeRef.current);
       setOcclusionImage(null); setOcclusionMasks([]);
       if (frontRef.current) frontRef.current.innerHTML = '';
@@ -726,6 +733,7 @@ export default function FlashcardEditor() {
         question: finalFront,
         answer: finalBack,
         tags: currentTags,
+        pills,
         ...(cardType === 'Cloze' ? { sequential: clozeSequential } : {}),
         created: new Date().toLocaleTimeString()
     };
@@ -737,10 +745,11 @@ export default function FlashcardEditor() {
     if (!fieldPrefs.pinned.front) { setFront(""); if (frontRef.current) frontRef.current.innerHTML = ''; }
     if (!fieldPrefs.pinned.back) { setBack(""); if (backRef.current) backRef.current.innerHTML = ''; }
     setCurrentTags([]);
+    setPills(['', '', '', '']); setPillsResetKey(key => key + 1);
     setClozeNumber(1);
     setActiveClozeId(null);
 
-  }, [cardType, front, back, currentTags, editingIndex, updateCard, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode, fieldPrefs.pinned, clozeSequential]);
+  }, [pills, cardType, front, back, currentTags, editingIndex, updateCard, occlusionImage, occlusionImageWidth, occlusionMasks, occlusionMode, fieldPrefs.pinned, clozeSequential]);
 
 
   const exportDeck = useCallback(async () => {
@@ -751,13 +760,16 @@ export default function FlashcardEditor() {
     setIsExporting(true);
     setExportMessage('');
 
+    const settings = loadSettings();
     const payload = {
       deck_name: deckName,
+      settings,
       cards: cards.map(c => ({
         type: c.type,
         question: c.question,
         answer: c.answer,
         tags: c.tags,
+        pills: normalizePills(c.pills),
         ...(c.type === 'Cloze' ? { sequential: Boolean(c.sequential) } : {}),
         ...(c.type === 'Image Occlusion' ? { image_data: c.imageData, image_width: c.imageWidth, masks: c.masks, occlusion_mode: c.occlusionMode, header: c.header || '' } : {}),
       }))
@@ -792,7 +804,7 @@ export default function FlashcardEditor() {
 
     // Fallback: the hosted export service (only possible while the payload fits
     // within the host's ~4.5 MB request limit).
-    const body = JSON.stringify(payload);
+    const body = JSON.stringify({ ...payload, settings: undefined, theme: buildThemePayload(settings) });
     if (body.length > 4_000_000) {
       setExportMessage('Export failed on this device (low memory?). Try again, or remove a few large images and export in two parts.');
       setIsExporting(false);
@@ -893,6 +905,7 @@ export default function FlashcardEditor() {
     const displayFront = card.type === 'Cloze' ? colorClozeContent(question, clozeColor) : question;
     setFront(question);
     setBack(answer);
+    setPills(normalizePills(card.pills)); setPillsResetKey(key => key + 1);
     setCurrentTags(card.tags || []);
 
     if (frontRef.current) frontRef.current.innerHTML = displayFront;
@@ -2087,6 +2100,7 @@ export default function FlashcardEditor() {
         <div className="header-status"><span className={`save-dot ${saveStatus === 'Storage full' ? 'save-error' : ''}`} /><span>{saveStatus === 'Saved' ? 'All changes saved' : saveStatus}</span><span className="status-divider" /><span>{cards.length} {cards.length === 1 ? 'card' : 'cards'}</span></div>
         <div className="header-actions">
           <button onClick={() => setShowImportModal(true)} title="Import cards from JSON (AI-generated)" className="icon-button"><Upload size={18} /><span>Import</span></button>
+          <button onClick={() => onOpenSettings?.()} title="Card types, pills, watermark and look" className="icon-button"><Settings size={18} /><span>Settings</span></button>
           <button onClick={() => setShowDocumentationModal(true)} title="Help and keyboard shortcuts" className="icon-button"><HelpCircle size={18} /><span>Help</span></button>
           {pdfOpen && <button onClick={() => { const opening = !(showLibrary && mobileView === 'cards'); setShowLibrary(opening); setMobileView(opening ? 'cards' : 'pdf'); }} aria-pressed={showLibrary && mobileView === 'cards'} title={showLibrary && mobileView === 'cards' ? 'Return to PDF' : 'Open card library'} className={`icon-button library-toggle ${showLibrary && mobileView === 'cards' ? 'active' : ''}`}><BookOpen size={17} /><span>Cards {cards.length}</span></button>}
           <button onPointerEnter={() => { if (!pdfOpen) preloadPdfStudyPanel().catch(() => {}); }} onFocus={() => { if (!pdfOpen) preloadPdfStudyPanel().catch(() => {}); }} onTouchStart={() => { if (!pdfOpen) preloadPdfStudyPanel().catch(() => {}); }} onClick={() => pdfOpen ? closePdfWorkspace() : openPdfWorkspace()} className="quiet-button"><FileText size={16} /><span>{pdfOpen ? 'Close PDF' : 'Open PDF'}</span></button>
@@ -2270,6 +2284,8 @@ export default function FlashcardEditor() {
               />
               {htmlOpen.back && !fieldPrefs.collapsed.back && <HtmlView field="back" label="Back HTML" value={htmlDraft.back} onChange={(value) => changeHtmlView('back', value)} />}
             </section>
+
+            <PillFields values={pills} onChange={setPills} resetKey={pillsResetKey} />
 
             <section className="space-y-2 mb-6 relative">
                 <label className="text-sm font-medium flex items-center justify-between">

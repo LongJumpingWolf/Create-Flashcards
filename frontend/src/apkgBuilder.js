@@ -6,7 +6,7 @@
 // which keeps this module testable in Node and byte-for-byte comparable with the
 // backend output.
 import { zipSync } from 'fflate';
-import { ANKING_CARD_CSS, BASIC_QFMT, BASIC_AFMT, CLOZE_QFMT, CLOZE_AFMT, SEQ_CLOZE_CSS_EXTRA, SEQ_CLOZE_QFMT, SEQ_CLOZE_AFMT, SEQ_IO_CSS, SEQ_IO_QFMT, SEQ_IO_AFMT } from './sequentialTemplates.js';
+import { buildModels, normalizeSettings, normalizePills, themeMedia } from './beerus.js';
 
 // Problems with the user's card content (as opposed to browser/runtime failures).
 export class CardError extends Error {}
@@ -14,94 +14,7 @@ export class CardError extends Error {}
 const FIELD_SEPARATOR = '\x1f';
 const MAX_DECK_NAME = 100;
 
-// --- Card models (identical to backend/app.py; look + templates live in sequentialTemplates.js) ---
-const IOE_FIELDS = [
-  'ID (hidden)', 'Header', 'Image', 'Question Mask', 'Footer', 'Remarks',
-  'Sources', 'Extra 1', 'Extra 2', 'Answer Mask', 'Original Mask',
-];
-const IOE_CARD_CSS = `
-.card { font-family: Arial, sans-serif; font-size: 20px; text-align: center; color: #202521; background: #fff; }
-#io-header, #io-footer { margin: .5em auto; max-width: 90%; }
-#io-wrapper { position: relative; display: inline-block; max-width: 100%; margin: 0 auto; line-height: 0; }
-#io-original { position: relative; z-index: 1; }
-#io-original img { display: block; max-width: 100%; height: auto; }
-#io-overlay { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; }
-#io-overlay img { display: block; width: 100%; height: 100%; object-fit: fill; }
-#io-revl-btn { display: block; margin: .8em auto; padding: .35em .8em; }
-#io-extra-wrapper { width: min(80%, 42rem); margin: .8em auto; text-align: left; line-height: 1.5; }
-.io-extra-entry { margin-top: .6em; }
-.io-field-descr { font-weight: 700; margin-bottom: .15em; }
-`;
-const IOE_QFMT = `{{#Image}}
-<div id="io-header">{{Header}}</div>
-<div id="io-wrapper"><div id="io-overlay">{{Question Mask}}</div><div id="io-original">{{Image}}</div></div>
-{{#Footer}}<div id="io-footer">{{Footer}}</div>{{/Footer}}
-{{/Image}}`;
-const IOE_AFMT = `{{#Image}}
-<div id="io-header">{{Header}}</div>
-<div id="io-wrapper"><div id="io-overlay">{{Answer Mask}}</div><div id="io-original">{{Image}}</div></div>
-{{#Footer}}<div id="io-footer">{{Footer}}</div>{{/Footer}}
-<button id="io-revl-btn" onclick="var m=document.getElementById('io-overlay');m.style.display=m.style.display==='none'?'block':'none'">Toggle Masks</button>
-<div id="io-extra-wrapper">
-{{#Remarks}}<div class="io-extra-entry"><div class="io-field-descr">Remarks</div>{{Remarks}}</div>{{/Remarks}}
-{{#Sources}}<div class="io-extra-entry"><div class="io-field-descr">Sources</div>{{Sources}}</div>{{/Sources}}
-{{#Extra 1}}<div class="io-extra-entry">{{Extra 1}}</div>{{/Extra 1}}
-{{#Extra 2}}<div class="io-extra-entry">{{Extra 2}}</div>{{/Extra 2}}
-</div>
-{{/Image}}`;
-
-const MODELS = {
-  Basic: {
-    id: 1607392319,
-    name: 'Simple Basic Model',
-    type: 0,
-    fields: ['Question', 'Answer'],
-    templates: [{ name: 'Card 1', qfmt: BASIC_QFMT, afmt: BASIC_AFMT }],
-    css: ANKING_CARD_CSS,
-    sortField: 0,
-    req: [[0, 'all', [0]]],
-  },
-  Cloze: {
-    id: 1607392320,
-    name: 'Simple Cloze Model',
-    type: 1,
-    fields: ['Text', 'Extra'],
-    templates: [{ name: 'Cloze Card', qfmt: CLOZE_QFMT, afmt: CLOZE_AFMT }],
-    css: ANKING_CARD_CSS,
-    sortField: 0,
-    req: [[0, 'all', [0, 1]]],
-  },
-  'Sequential Cloze': {
-    id: 1607392324,
-    name: 'Sequential Cloze (one by one)',
-    type: 0,
-    fields: ['Text', 'Extra'],
-    templates: [{ name: 'Sequential Cloze', qfmt: SEQ_CLOZE_QFMT, afmt: SEQ_CLOZE_AFMT }],
-    css: `${ANKING_CARD_CSS}${SEQ_CLOZE_CSS_EXTRA}`,
-    sortField: 0,
-    req: [[0, 'all', [0]]],
-  },
-  'Image Occlusion One by One': {
-    id: 1607392325,
-    name: 'Image Occlusion One by One',
-    type: 0,
-    fields: ['Header', 'Image', 'Masks', 'Extra', 'Mode'],
-    templates: [{ name: 'IO One by One', qfmt: SEQ_IO_QFMT, afmt: SEQ_IO_AFMT }],
-    css: SEQ_IO_CSS,
-    sortField: 1,
-    req: [[0, 'all', [1]]],
-  },
-  'Image Occlusion': {
-    id: 1607392322,
-    name: 'Image Occlusion Enhanced',
-    type: 0,
-    fields: IOE_FIELDS,
-    templates: [{ name: 'IO Card', qfmt: IOE_QFMT, afmt: IOE_AFMT }],
-    css: IOE_CARD_CSS,
-    sortField: 1,
-    req: [[0, 'all', [2]]],
-  },
-};
+// Note types (BeeRus) are built from the user's settings in beerus.js.
 
 const LATEX_PRE = '\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n';
 const LATEX_POST = '\\end{document}';
@@ -372,7 +285,7 @@ function ioeSvgShape(mask, width, height, fill, shapeId) {
   return `<rect ${common} x="${x.toFixed(3)}" y="${y.toFixed(3)}" width="${w.toFixed(3)}" height="${h.toFixed(3)}" />`;
 }
 
-function ioeMaskSvg(width, height, groups, mode, targetIndex, side, sessionId) {
+export function ioeMaskSvg(width, height, groups, mode, targetIndex, side, sessionId) {
   const elements = [];
   groups.forEach((group, index) => {
     if (side === 'A' && (mode === 'oa' || index === targetIndex)) return;
@@ -393,7 +306,7 @@ function ioeMaskSvg(width, height, groups, mode, targetIndex, side, sessionId) {
 
 // One-by-one image occlusion keeps every region on a single card: an inline SVG whose
 // regions (grouped shapes) the card's JavaScript reveals one at a time.
-function sequentialMasksSvg(width, height, groups) {
+export function sequentialMasksSvg(width, height, groups) {
   const body = groups.map((group, index) => `<g class="sq-m" data-i="${index}">${group.map((mask, child) => ioeSvgShape(mask, width, height, '#FFEBA2', `m${index}-${child}`)).join('')}</g>`).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">${body}</svg>`;
 }
@@ -450,7 +363,7 @@ function normalizeMasks(masks) {
 // --- Note planning -------------------------------------------------------------
 // Converts payload cards into notes + media without touching SQLite, so the work
 // can be split across several packages when a deck is very large.
-async function planNotes(payload, { prepareImage, warn, onProgress }) {
+async function planNotes(payload, { prepareImage, warn, onProgress, models }) {
   const planned = [];
   const imageCache = new Map();
 
@@ -482,6 +395,9 @@ async function planNotes(payload, { prepareImage, warn, onProgress }) {
       },
     };
 
+    const pills = [];
+    for (const pillHtml of normalizePills(card.pills)) pills.push(await extractMedia(pillHtml, ctx));
+
     if (card.type === 'Image Occlusion') {
       if (!card.image_data || !card.image_data.startsWith('data:image/') || !card.masks?.length) {
         throw new CardError('Image Occlusion cards need a source image and at least one mask');
@@ -505,8 +421,8 @@ async function planNotes(payload, { prepareImage, warn, onProgress }) {
         const widthSetting = Number.isFinite(card.image_width) ? Math.min(1800, Math.max(180, Math.round(card.image_width))) : 720;
         const answerHtml = await extractMedia(card.answer || '', ctx);
         notes.push({
-          model: MODELS['Image Occlusion One by One'],
-          fields: [ioHeader(card.header), `<img src="${imageName}" style="width:${widthSetting}px;max-width:100%;height:auto">`, sequentialMasksSvg(image.width, image.height, groups), answerHtml, card.occlusion_mode],
+          model: card.occlusion_mode === 'random' ? models.ioRandom : models.ioSeq,
+          fields: [ioHeader(card.header), `<img src="${imageName}" style="width:${widthSetting}px;max-width:100%;height:auto">`, sequentialMasksSvg(image.width, image.height, groups), answerHtml, card.occlusion_mode, ...pills],
           tags,
           cards: [0],
         });
@@ -525,7 +441,7 @@ async function planNotes(payload, { prepareImage, warn, onProgress }) {
         media.set(answerMaskName, utf8(ioeMaskSvg(image.width, image.height, groups, mode, targetIndex, 'A', sessionId)));
         const maskStyle = 'style="display:block;width:100%;height:100%"';
         notes.push({
-          model: MODELS['Image Occlusion'],
+          model: models.io,
           fields: [
             noteId, ioHeader(card.header, groups[targetIndex]),
             `<img src="${imageName}" style="width:${imageWidth}px;max-width:100%;height:auto">`,
@@ -535,6 +451,7 @@ async function planNotes(payload, { prepareImage, warn, onProgress }) {
             '',
             `<img src="${answerMaskName}" ${maskStyle}>`,
             `<img src="${originalMaskName}">`,
+            ...pills,
           ],
           tags,
           cards: [0],
@@ -549,7 +466,7 @@ async function planNotes(payload, { prepareImage, warn, onProgress }) {
       if (isCloze && card.sequential) {
         const sequential = clozeToSequentialHtml(question);
         if (!sequential.count) throw new CardError('Add at least one cloze deletion, such as {{c1::key term}}.');
-        notes.push({ model: MODELS['Sequential Cloze'], fields: [sequential.html, answer], tags, cards: [0] });
+        notes.push({ model: models.clozeSeq, fields: [sequential.html, answer, ...pills], tags, cards: [0] });
       } else {
         let ords = [0];
         if (isCloze) {
@@ -557,7 +474,7 @@ async function planNotes(payload, { prepareImage, warn, onProgress }) {
           for (const match of question.matchAll(/{{c(\d+)::.+?}}/gs)) if (Number(match[1]) > 0) found.add(Number(match[1]) - 1);
           ords = found.size ? [...found] : [0];
         }
-        notes.push({ model: MODELS[card.type], fields: [question, answer], tags, cards: ords });
+        notes.push({ model: isCloze ? models.cloze : models.basic, fields: [question, answer, ...pills], tags, cards: ords });
       }
     } else {
       throw new CardError(`Unsupported card type: ${card.type}`);
@@ -638,11 +555,17 @@ function writePackage({ SQL, deckId, deckName, items, timestamp }) {
   }
 }
 
-function zipPackage(database, items) {
+function zipPackage(database, items, themeFiles = []) {
   const files = { 'collection.anki2': [database, { level: 6 }] };
   const mediaMap = {};
   let index = 0;
   const seen = new Set();
+  for (const file of themeFiles) {
+    seen.add(file.name);
+    mediaMap[index] = file.name;
+    files[String(index)] = [file.bytes, { level: /\.(svg)$/i.test(file.name) ? 6 : 0 }];
+    index += 1;
+  }
   for (const item of items) {
     for (const [name, bytes] of item.media) {
       if (seen.has(name)) continue;
@@ -674,8 +597,13 @@ export async function buildApkg(payload, options) {
   if (deckName.length > MAX_DECK_NAME) throw new CardError(`Deck name must be ${MAX_DECK_NAME} characters or fewer`);
   if (!payload.cards?.length) throw new CardError('Add at least one card before exporting.');
 
+  const settings = normalizeSettings(options.settings ?? payload.settings);
+  const models = buildModels(settings);
+  const themeFiles = themeMedia(settings).map(file => ({ name: file.name, bytes: base64ToBytes(file.base64) }));
+
   const warnings = [];
   const planned = await planNotes(payload, {
+    models,
     prepareImage,
     warn: message => warnings.push(message),
     onProgress: (done, total) => onProgress?.('prepare', done, total),
@@ -703,7 +631,7 @@ export async function buildApkg(payload, options) {
     onProgress?.('package', index + 1, groups.length);
     const timestamp = Date.now() / 1000;
     const database = writePackage({ SQL, deckId, deckName, items: groups[index], timestamp });
-    parts.push(zipPackage(database, groups[index]));
+    parts.push(zipPackage(database, groups[index], themeFiles));
     groups[index] = null;
     // Let the UI breathe between large packages.
     await new Promise(resolve => setTimeout(resolve, 0));

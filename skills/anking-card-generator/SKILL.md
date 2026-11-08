@@ -553,6 +553,7 @@ Return ONE JSON object in a fenced ```json block (nothing else inside the block)
       "question": "<b>Warfarin</b> inhibits {{c1::vitamin K epoxide reductase (VKORC1)}}",
       "answer": "<i>↓ factors II, VII, IX, X; monitored by INR</i>",
       "tags": ["MBBS::Pharmacology::Blood::Anticoagulants", "#Src::KDT::Ch_Anticoagulants", "~HY"],
+      "pills": ["<img src=\"data:image/jpeg;base64,...\"><br>Pathoma p. 41", "", "", ""],
       "sequential": false
     },
     {
@@ -564,7 +565,7 @@ Return ONE JSON object in a fenced ```json block (nothing else inside the block)
   ]
 }
 ```
-Rules: valid JSON (double quotes, no trailing commas, no comments); `type` ∈ `Cloze | Basic | Image Occlusion`; Cloze `question` must contain ≥ 1 `{{cN::…}}`; Basic needs both `question` and `answer`; `sequential` only on Cloze (omit or false otherwise); strings are HTML (§3.3). Split very large outputs into batches of ≤ 60 cards per JSON block, each a complete valid object with the same `deck_name`.
+Rules: valid JSON (double quotes, no trailing commas, no comments); `type` ∈ `Cloze | Basic | Image Occlusion`; Cloze `question` must contain ≥ 1 `{{cN::…}}`; Basic needs both `question` and `answer`; `sequential` only on Cloze (omit or false otherwise); strings are HTML (§3.3). Optional `pills`: up to 4 HTML strings = Pill 1-4, toggle buttons under the answer on every card type (default labels Reference / Compare / Lecture notes / My notes, renamed on the site's Settings page). Use Pill 1 for the source screenshot/figure, Pill 2 for a comparison table or contrast the source states, Pill 3 for lecture notes, leave Pill 4 for the user. Empty pills are not shown. Image occlusion cards also take `header` (text above the picture) and a per-mask `hint` (what to answer). Every export from the site uses the BeeRus note types (Basic / Cloze / Cloze (Sequential) / Image Occlusion / (Sequential) / (Random) - BeeRus). Split very large outputs into batches of ≤ 60 cards per JSON block, each a complete valid object with the same `deck_name`.
 
 ### 11.2 Secondary: TSV for real Anki (AnKing note type)
 Tab-separated, 3 columns, no header: `Text<TAB>Extra<TAB>Tags` (tags space-separated). For reveal-one-by-one add a 4th column handled as the **One by one** field (`y`) and map fields during import (note type `AnKingOverhaul`). Escape tabs/newlines inside HTML with `<br>`; fields with `"` must be wrapped in quotes with `""` escaping. Say clearly which columns map to which fields.
@@ -631,7 +632,8 @@ Do not output cards inside Markdown tables; do not output prose between cards; d
 - **Images in Extra:** only if the user supplied the image file to the app; otherwise write `[Figure: <caption>]` and tag `#Img`.
 - **Attaching the source's own figures / tables (do this whenever you can open the source file, e.g. a PDF in Claude Code):**
   1. Locate every printed figure/table (search the page text for `Fig.`/`Table`) and crop only the picture band (not the caption) at ~3x zoom with PyMuPDF; shrink to <= 1000 px wide, JPEG q~82 (~40 KB each). Look at a contact sheet of all crops before using them.
-  2. Put the crop in the card's `answer` (Extra) as `<img src="data:image/jpeg;base64,...">` (the app/exporter turns it into a media file), then a plain caption line: `<Book> Fig. N - caption (Courtesy ...)` - keep the source's credit line.
+  2. Put the crop in **Pill 1** (`"pills": ["<img src=\"data:image/jpeg;base64,...\"><br><Book> Fig. N - caption (Courtesy ...)"]`), NOT in Extra: the pill is a toggle button under the answer (label set on the site's Settings page, e.g. "Pathoma"), so Extra stays one short line and the picture is one tap away. Keep the source's credit line in the caption. Older decks without pills: fall back to `answer`.
+  2b. **Screenshot of the exact passage:** `python io_tools.py passage book.pdf "start of the sentence" "end of the sentence" OUT/` crops those lines from the PDF text layer (exact, no guessed rectangles) into `OUT/passages.json`. Put it in Pill 1 (or Pill 3 when Pill 1 holds a figure). Use it only where the card is hard to verify or the wording matters; share one crop between cards of the same passage.
   3. Attach the image to at most the two best cards per figure; other cards on the same figure get only the text reference `<Book> Fig. N`. A multi-panel figure (A/B/C) is attached whole.
   4. Tables: one crop of the whole table on the 3-4 most representative row cards; every row still gets its own text cards.
   5. Add 1 short source-grounded Extra (mechanism, association, "also seen with") to as many cards as the source supports - aim for >= 40% of cards, never invent.

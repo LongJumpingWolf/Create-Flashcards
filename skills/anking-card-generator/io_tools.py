@@ -28,6 +28,13 @@ The AI decides WHAT to hide; this script measures WHERE it is (exact text-layer 
   python io_tools.py check    OUT.json  OUT_DIR
         Renders every IO card with its masks drawn so you can LOOK at the result before delivering.
   python io_tools.py page     book.pdf PAGE OUT.png      (preview a page with a point ruler to pick rectangles)
+
+  python io_tools.py passage  book.pdf "start of the passage" "end of the passage" OUT_DIR
+        Screenshot of the exact lines of the source that a card is built from (for the card's Pill 1 / reference).
+        Finds both phrases in the PDF text layer (case-insensitive, first match), crops from the first line to the
+        last line of the column at ~2.6x and writes OUT_DIR/passage_<n>.jpg plus OUT_DIR/passages.json
+        {"b64":..., "page":..., "rect":[...]}.  Use a short distinctive start (4-8 words) and end (4-8 words);
+        pass the same phrase twice for a one-line passage.  Prints NOT FOUND instead of guessing.
 """
 import sys, json, io, re, base64, os
 
@@ -178,6 +185,39 @@ def cmd_check(path, out):
     print('rendered to', out)
 
 
+def cmd_passage(pdf, start, end, out):
+    pm = _fitz(); os.makedirs(out, exist_ok=True)
+    doc = pm.open(pdf)
+    norm = lambda text: re.sub(r'\s+', ' ', text).strip()
+    def find(phrase, page, after_y=None):
+        for q in (norm(phrase), norm(phrase)[:40], norm(phrase)[:24]):
+            for r in page.search_for(q):
+                if after_y is None or r.y1 >= after_y - 2:
+                    return r
+        return None
+    for pno, page in enumerate(doc, 1):
+        a = find(start, page)
+        if not a:
+            continue
+        b = find(end, page, a.y0) or a
+        top, bottom = min(a.y0, b.y0), max(a.y1, b.y1)
+        col = [w for w in page.get_text('words') if top + 1 <= (w[1] + w[3]) / 2 <= bottom - 1 and w[2] > a.x0 - 80 and w[0] < a.x0 + 430]
+        if not col:
+            continue
+        rect = pm.Rect(min(w[0] for w in col) - 6, min(w[1] for w in col) - 1.5, max(w[2] for w in col) + 6, max(w[3] for w in col) + 1.5) & page.rect
+        pix = page.get_pixmap(matrix=pm.Matrix(2.6, 2.6), clip=rect, alpha=False)
+        im, data = _jpeg(pix, quality=82, max_w=900)
+        path = os.path.join(out, 'passages.json')
+        existing = json.load(open(path, encoding='utf-8')) if os.path.exists(path) else []
+        n = len(existing) + 1
+        fn = os.path.join(out, f'passage_{n}.jpg'); open(fn, 'wb').write(data)
+        existing.append({'file': fn, 'page': pno, 'rect': [round(v, 1) for v in rect], 'start': start, 'end': end, 'b64': base64.b64encode(data).decode()})
+        json.dump(existing, open(path, 'w', encoding='utf-8'), ensure_ascii=False)
+        print(f'passage_{n}: page {pno}, {int(rect.width)}x{int(rect.height)} pt -> {fn}')
+        return
+    print('NOT FOUND:', start)
+
+
 def cmd_page(pdf, page_no, out):
     pm = _fitz(); from PIL import ImageDraw, Image
     page = pm.open(pdf)[int(page_no) - 1]
@@ -192,7 +232,7 @@ def cmd_page(pdf, page_no, out):
 
 if __name__ == '__main__':
     a = sys.argv[1:]
-    cmds = {'figures': (cmd_figures, 2), 'labels': (cmd_labels, 4), 'build': (cmd_build, 2), 'check': (cmd_check, 2), 'page': (cmd_page, 3)}
+    cmds = {'figures': (cmd_figures, 2), 'labels': (cmd_labels, 4), 'build': (cmd_build, 2), 'check': (cmd_check, 2), 'page': (cmd_page, 3), 'passage': (cmd_passage, 4)}
     if not a or a[0] not in cmds or len(a) - 1 != cmds[a[0]][1]:
         sys.exit(__doc__)
     cmds[a[0]][0](*a[1:])

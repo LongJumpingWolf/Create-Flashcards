@@ -3,10 +3,12 @@
 import initSqlJs from 'sql.js/dist/sql-wasm-browser.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm-browser.wasm?url';
 import { buildApkg } from './apkgBuilder';
+import { normalizeSettings } from './beerus';
 
-const MAX_IMAGE_EDGE = 2000;
 const SHRINK_ABOVE_BYTES = 500 * 1024;
-const JPEG_QUALITY = 0.86;
+// Set per export from the settings page (Export section).
+let MAX_IMAGE_EDGE = 2000;
+let JPEG_QUALITY = 0.86;
 
 let sqlPromise = null;
 const loadSql = () => {
@@ -105,7 +107,11 @@ const triggerDownload = (bytes, filename) => {
  * name, so Anki merges them back into a single deck on import.
  */
 export async function exportDeckLocally(payload, { onProgress } = {}) {
+  const settings = normalizeSettings(payload.settings);
+  MAX_IMAGE_EDGE = settings.export.maxImageEdge;
+  JPEG_QUALITY = settings.export.jpegQuality;
   const result = await buildApkg(payload, {
+    settings,
     initSql: loadSql,
     prepareImage,
     maxPartBytes: (isTouchDevice() ? 60 : 200) * 1024 * 1024,
