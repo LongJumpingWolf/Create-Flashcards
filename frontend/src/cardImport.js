@@ -1,12 +1,14 @@
 // Parses and validates AI-generated card batches (see skills/anking-card-generator/SKILL.md).
 // Accepts raw JSON, JSON inside ``` fences (a whole chat reply works), an array of cards, or
 // { deck_name, cards: [...] }. Nothing is added to the deck until the user confirms.
-import { sanitizePastedHtml, duplicateKey } from './components/editorHelpers';
+import { sanitizePastedHtml } from './components/editorHelpers';
 
 const TYPE_ALIASES = { cloze: 'Cloze', basic: 'Basic', 'image occlusion': 'Image Occlusion', io: 'Image Occlusion', occlusion: 'Image Occlusion' };
 const OCCLUSION_MODES = ['hide-all', 'hide-one', 'sequential', 'random'];
 const MAX_CARDS = 1000;
 
+// Keeps the cloze markup so sibling cards that hide different words of one sentence are not flagged.
+const duplicateKey = (html) => String(html || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
 const stripTags = (html) => String(html || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
 
 function jsonCandidates(text) {

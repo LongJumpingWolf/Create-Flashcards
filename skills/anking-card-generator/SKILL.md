@@ -55,7 +55,7 @@ Observed real examples (style reference, paraphrased from the deck):
 - Hinted: `{{c1::<b>Carbapenems</b>::Monobactams or Carbapenems}} are used to treat <u>anaerobic</u> infections`
 - Count hint: `What <u>pathologies</u> may be associated with <b>pseudogout</b>?<br>{{c1::Hemochromatosis and hyperparathyroidism::2}}`
 - Direction hint: `{{c1::↓::↑/↓}} platelet count in <b>DIC</b>` (all parallel lines with the same `↑/↓` hint, one-by-one)
-- Mnemonic list: `The <b>pathway of sperm</b> can be remembered by "<b>SEVEN UP</b>": {{c1::<u><b>S</b></u>eminiferous tubules::<b>S</b>}} …` (hint = the mnemonic letter; **One by one** on).
+- Mnemonic list: `The <b>pathway of sperm</b> can be remembered by "<b>SEVEN UP</b>": {{c1::<u><b>S</b></u>eminiferous tubules::S}} …` (hint = the mnemonic letter; **One by one** on).
 
 ---
 
@@ -140,7 +140,7 @@ Use a hint when the blank could be answered from several domains, or the **forma
 | Direction | `↑/↓` | `{{c1::↓::↑/↓}} PTH` |
 | Category of answer | `diagnosis`, `drug`, `treatment`, `next step`, `investigation`, `organism`, `location`, `age group`, `inheritance`, `enzyme`, `nerve`, `artery`, `gene` | `{{c1::Rifampicin::drug}}` |
 | Binary choice | `proximal or distal`, `T/F`, `enveloped?` | |
-| Mnemonic letter | the letter in bold | `{{c1::Pulmonary stenosis::<b>P</b>}}` |
+| Mnemonic letter | the plain letter (hints never contain HTML) | `{{c1::Pulmonary stenosis::P}}` |
 | Specificity | `specific`, `most common`, `1st line` | |
 Never write a hint that contains the answer. Never use the same hint word as the stem noun.
 
@@ -167,6 +167,17 @@ Never write a hint that contains the answer. Never use the same hint word as the
 
 ---
 
+### 4a. Calibration lessons (from the first real batch: Pathoma CNS chapter → 362 cards)
+1. **Interlocked blanks are the commonest mistake.** `X is damage to the {{c1::A}} due to {{c2::B}}` makes two cards that give each other away. Hide ONE thing per card; show the other as bold context. If both facts matter, make two separate cards (one blank each) — do not use c1+c2 on a sentence whose parts imply each other.
+2. **Pairs that must be recalled together share one number** (`{{c1::A}} … {{c1::B}}`), they do not get c1/c2.
+3. **Do not add "category" hints that repeat the stem** (`Which organism…{{c1::X::organism}}`, `<u>Treatment</u>…{{c1::Y::treatment}}`). A hint must add information the stem lacks: a count, a direction (`↑/↓`), a binary choice (`upper/lower`, `pale/hemorrhagic`, `sporadic/familial`), a mnemonic letter, or a format.
+4. **A hint never contains the answer's own word** (`{{c1::middle cerebral artery::artery}}` is wrong).
+5. **Density:** dense Pathoma-style pages legitimately give ~20–30 cards/page (AnKing's Pathoma tag averages ≈ 24 notes/page). Declarative textbooks give fewer Extras and fewer hints than AnKing: say so in the report instead of padding.
+6. **Figures in the source:** a pure photo (gross specimen/H&E) with only a caption → reference the figure in `answer` (`<i>Fig. 17.4</i>`); do not invent a description of what the picture shows.
+7. **Validate before you hand over:** every cloze balanced, numbers 1…n without gaps, no duplicate questions, no `}}` inside answers. (A 20-line script or the app's Import preview does this.)
+
+---
+
 ## 5. Pattern library (reusable templates)
 
 Use `[ ]` for what you replace. All examples are valid for the app JSON (shown condensed: `Q` = question, `E` = answer/Extra).
@@ -190,7 +201,7 @@ Use `[ ]` for what you replace. All examples are valid for the app JSON (shown c
 `Q:` `<b>[Parameter]</b> normally is {{c1::[value + unit]}}` `E:` `<i>[meaning / when abnormal]</i>`
 
 ### 5.7 Mnemonic (acronym)
-`Q:` `[Topic] can be remembered by the mnemonic "<b>[ACRONYM]</b>":<br>{{c1::<u><b>X</b></u>xxxx::<b>X</b>}}<br>…` with **reveal-one-by-one**; hint = the letter. `E:` the plain expansion.
+`Q:` `[Topic] can be remembered by the mnemonic "<b>[ACRONYM]</b>":<br>{{c1::<u><b>X</b></u>xxxx::X}}<br>…` with **reveal-one-by-one**; hint = the letter. `E:` the plain expansion.
 
 ### 5.8 Table → cards
 For a table (rows = items, cols = attributes):
