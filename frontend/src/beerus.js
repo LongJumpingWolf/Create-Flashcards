@@ -54,11 +54,12 @@ export const DEFAULT_SETTINGS = {
   },
   pillStyle: { shape: 'pill', scale: 100, iconScale: 125, showIcons: true, style: 'bubble', pattern: 'none' },
   pills: [
-    { label: 'Reference', color: '#3B82F6', iconType: 'emoji', icon: '📖', iconData: '', iconUrl: '', open: false },
-    { label: 'Compare', color: '#10B981', iconType: 'emoji', icon: '⚖️', iconData: '', iconUrl: '', open: false },
-    { label: 'Lecture notes', color: '#F59E0B', iconType: 'emoji', icon: '📝', iconData: '', iconUrl: '', open: false },
-    { label: 'My notes', color: '#A855F7', iconType: 'emoji', icon: '⭐', iconData: '', iconUrl: '', open: false },
+    { label: 'Reference', color: '#3B82F6', iconType: 'emoji', icon: '📖', iconData: '', iconUrl: '', open: false, format: 'auto' },
+    { label: 'Compare', color: '#10B981', iconType: 'emoji', icon: '⚖️', iconData: '', iconUrl: '', open: false, format: 'auto' },
+    { label: 'Lecture notes', color: '#F59E0B', iconType: 'emoji', icon: '📝', iconData: '', iconUrl: '', open: false, format: 'auto' },
+    { label: 'My notes', color: '#A855F7', iconType: 'emoji', icon: '⭐', iconData: '', iconUrl: '', open: false, format: 'auto' },
   ],
+  chatgpt: { day: { bg: '#FCFCFC', text: '#0D0D0D' }, night: { bg: '#212121', text: '#EDEDED' }, radius: 16, padding: 16 },
   watermark: { enabled: false, iconType: 'default', iconData: '', iconUrl: '', size: 22, opacity: 0.45, corner: 'bottom-right' },
   export: { maxImageEdge: 2000, jpegQuality: 0.86 },
 };
@@ -101,7 +102,12 @@ export function normalizeSettings(saved) {
     pill.label = String(pill.label || '').slice(0, 24) || 'Pill';
     if (!['emoji', 'image', 'url', 'none'].includes(pill.iconType)) pill.iconType = 'emoji';
     if (!/^#[0-9a-f]{6}$/i.test(pill.color)) pill.color = '#3B82F6';
+    if (!['auto', 'chatgpt', 'plain'].includes(pill.format)) pill.format = 'auto';
   });
+  const gp = settings.chatgpt;
+  ['bg', 'text'].forEach(key => { ['day', 'night'].forEach(mode => { if (!/^#[0-9a-f]{6}$/i.test(gp[mode][key])) gp[mode][key] = DEFAULT_SETTINGS.chatgpt[mode][key]; }); });
+  gp.radius = clamp(Number(gp.radius), 0, 32, 16);
+  gp.padding = clamp(Number(gp.padding), 4, 32, 16);
   const ps = settings.pillStyle;
   ps.scale = clamp(Number(ps.scale), 60, 200, 100);
   ps.iconScale = clamp(Number(ps.iconScale), 70, 220, 125);
@@ -275,10 +281,63 @@ function pillSurface(style, pattern) {
   }
 }
 
+const GPT_FONT = '-apple-system-body, ui-sans-serif, -apple-system, system-ui, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"';
+
+/**
+ * The ChatGPT look for <div class="gpt"> content (values measured from a saved ChatGPT answer page, light theme:
+ * body 16px/26px #0D0D0D, titles 18px/28px and 16px/26px weight 600 with 24px space above, lists 8px above / 32px
+ * indent, soft pill badges 12px, tables 14px/20px with hairline row rules, 16px rounded media panel).
+ * Night colours follow Anki's night mode.
+ */
+export function gptCss(settings) {
+  const g = settings.chatgpt;
+  const nm = '.nightMode .gpt, .night_mode .gpt';
+  const night = (selector, rule) => `.nightMode ${selector}, .night_mode ${selector} { ${rule} }\n`;
+  return `
+.gpt { display: block; box-sizing: border-box; text-align: left; font-family: ${GPT_FONT}; font-size: calc(16px * var(--gs, 1)); line-height: 1.625; font-weight: 400; font-style: normal; background: ${g.day.bg}; color: ${g.day.text}; border-radius: ${g.radius}px; padding: ${g.padding}px ${g.padding + 2}px; }
+${nm} { background: ${g.night.bg}; color: ${g.night.text}; }
+.gpt > :first-child { margin-top: 0 !important; }
+.gpt p { margin: 16px 0 0; }
+.gpt h2 { margin: 24px 0 0; font-size: 1.125em; line-height: 1.5556; font-weight: 600; }
+.gpt h3, .gpt h4 { margin: 24px 0 0; font-size: 1em; line-height: 1.625; font-weight: 600; }
+.gpt b, .gpt strong { font-weight: 600; color: inherit; }
+.gpt i, .gpt em { color: inherit; }
+.gpt ul, .gpt ol { display: block; max-width: none; margin: 8px 0 0; padding: 0 0 0 32px; text-align: left; }
+.gpt li { margin: 0; }
+.gpt li > p { margin: 0; }
+.gpt table { width: 100%; margin: 16px 0 0; border-collapse: collapse; font-size: .875em; line-height: 1.4286; }
+.gpt th, .gpt td { border: 0; background: none; padding: 8px 12px 8px 0; text-align: left; vertical-align: top; }
+.gpt th { font-weight: 600; }
+.gpt tr { border-bottom: 1px solid rgba(0,0,0,.06); }
+${night('.gpt tr', 'border-bottom-color: rgba(255,255,255,.12);')}.gpt code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .875em; padding: .12em .4em; border-radius: 6px; background: rgba(128,128,128,.16); }
+.gpt pre { margin: 16px 0 0; padding: 14px 16px; border-radius: 12px; overflow-x: auto; background: rgba(128,128,128,.14); text-align: left; }
+.gpt pre code { padding: 0; background: none; }
+.gpt blockquote { display: block; margin: 16px 0 0; padding: 0 0 0 16px; border-left: 4px solid rgba(128,128,128,.4); text-align: left; }
+.gpt hr { margin: 24px 0 0; border: 0; border-top: 1px solid rgba(128,128,128,.3); opacity: 1; }
+.gpt img { display: block; max-width: 100%; margin: 16px 0 0; border-radius: 16px; }
+.gpt a { color: inherit; text-decoration: underline; }
+.gpt .gpt-badgerow { margin: 16px 0 0; }
+.gpt-badge { display: inline-block; padding: 0 7px; border-radius: 9999px; font-size: .75em; line-height: 1.6667; font-weight: 500; }
+.gpt-badge-info { color: #0285FF; background: rgba(2,133,255,.13); }
+.gpt-badge-warning { color: #923B0F; background: rgba(251,106,34,.16); }
+.gpt-badge-success { color: #0B7A3E; background: rgba(0,168,80,.14); }
+.gpt-badge-danger { color: #B42318; background: rgba(240,68,56,.14); }
+.gpt-badge-neutral { color: #5D5D5D; background: rgba(0,0,0,.07); }
+${night('.gpt-badge-info', 'color: #4DA6FF; background: rgba(2,133,255,.22);')}${night('.gpt-badge-warning', 'color: #FDBA8C; background: rgba(251,106,34,.24);')}${night('.gpt-badge-success', 'color: #4ADE80; background: rgba(0,200,100,.2);')}${night('.gpt-badge-danger', 'color: #FDA29B; background: rgba(240,68,56,.24);')}${night('.gpt-badge-neutral', 'color: #BDBDBD; background: rgba(255,255,255,.12);')}`;
+}
+
+/** Anki treats a field holding only whitespace / <br> / empty <div> as empty; do the same so no empty pill ever shows. */
+export function cleanPillHtml(html) {
+  const text = String(html ?? '');
+  if (/<(img|audio|video|table|hr)\b|\[sound:/i.test(text)) return text;
+  const bare = text.replace(/<br\s*\/?>|<\/?(div|p|span)[^>]*>|&nbsp;|\u200b|\s/gi, '');
+  return bare.replace(/<[^>]*>/g, '') === '' ? '' : text;
+}
+
 export function pillCss(settings, files = themeMedia(settings)) {
   const p = settings.pillStyle;
   const lines = [`
-#bpills { margin: 1.1rem auto 0; display: flex; flex-direction: column; align-items: center; gap: .5rem; font-size: ${(0.6 * p.scale / 100).toFixed(3)}rem; --ics: ${(p.iconScale / 100).toFixed(2)}; font-style: normal; text-align: center; }
+#bpills { margin: 1.1rem auto 0; display: flex; flex-direction: column; align-items: center; gap: .5rem; font-size: ${(0.6 * p.scale / 100).toFixed(3)}rem; --ics: ${(p.iconScale / 100).toFixed(2)}; --gs: ${(p.scale / 100).toFixed(2)}; font-style: normal; text-align: center; }
 .bpill { max-width: 96%; }
 .bpill > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: .45em; padding: .34em 1em; border-radius: ${RADIUS[p.shape] || RADIUS.pill}; font-weight: 700; font-family: Arial, sans-serif; line-height: 1.2; letter-spacing: .01em; user-select: none; transition: filter .12s, transform .08s; ${pillSurface(p.style, p.pattern)} }
 .bpill > summary:hover { filter: brightness(1.08); }
@@ -290,7 +349,9 @@ export function pillCss(settings, files = themeMedia(settings)) {
 .bpill-ic { display: inline-block; width: calc(1.2em * var(--ics, 1)); height: calc(1.2em * var(--ics, 1)); background: center / contain no-repeat; }
 .bpill-em { font-size: calc(1.1em * var(--ics, 1)); line-height: 1; }
 .bpill-body { margin-top: .55rem; padding: .45rem .7rem; border-radius: .55em; border: 1px solid rgba(128,128,128,.35); border-left: 4px solid var(--bp); background: rgba(128,128,128,.1); font-size: .72rem; line-height: 1.4; text-align: ${settings.appearance.align === 'left' ? 'left' : 'center'}; }
+
 .bpill-body img { max-width: 100%; height: auto; border-radius: .3em; }
+.bpill-gpt .bpill-body { padding: 0; border: 0; background: none; }
 .bs-bubble .bpill-em, .bs-bubble .bpill-ic { background-color: #fff; border-radius: 50%; display: inline-grid; place-items: center; overflow: hidden; }
 .bs-bubble .bpill-em { font-size: calc(.95em * var(--ics, 1)); width: 1.85em; height: 1.85em; }
 .bs-bubble .bpill-ic { width: calc(1.85em * var(--ics, 1)); height: calc(1.85em * var(--ics, 1)); background-size: cover; }
@@ -315,7 +376,7 @@ function pillsHtml(settings) {
   const style = settings.pillStyle.style;
   const items = settings.pills.map((pill, index) => {
     const field = `Pill ${index + 1}`;
-    return `{{#${field}}}<details class="bpill bpill-${index + 1}" data-i="${index + 1}"><summary>${pillIconHtml(pill, settings)}<span class="bpill-label">${escapeHtml(pill.label)}</span></summary><div class="bpill-body">{{${field}}}</div></details>{{/${field}}}`;
+    return `{{#${field}}}<details class="bpill bpill-${index + 1}${pill.format === 'chatgpt' ? ' bpill-gpt' : ''}" data-i="${index + 1}"><summary>${pillIconHtml(pill, settings)}<span class="bpill-label">${escapeHtml(pill.label)}</span></summary><div class="bpill-body">{{${field}}}</div></details>{{/${field}}}`;
   });
   return `<div id="bpills" class="bs-${style}">${items.join('')}</div>`;
 }
@@ -399,7 +460,7 @@ export function buildModels(rawSettings) {
   const settings = normalizeSettings(rawSettings);
   const files = themeMedia(settings);
   const seqIoExtra = SEQ_IO_CSS.startsWith(ANKING_CARD_CSS) ? SEQ_IO_CSS.slice(ANKING_CARD_CSS.length) : SEQ_IO_CSS;
-  const common = baseCss(settings) + pillCss(settings, files) + watermarkCss(settings, files) + (settings.behavior.showTags ? TAGS_CSS : '') + (settings.behavior.showHelp ? '' : HELP_CSS);
+  const common = baseCss(settings) + pillCss(settings, files) + gptCss(settings) + watermarkCss(settings, files) + (settings.behavior.showTags ? TAGS_CSS : '') + (settings.behavior.showHelp ? '' : HELP_CSS);
   const pills = pillsHtml(settings);
   const script = pillsScript(settings);
   const mark = markHtml(settings);
@@ -478,7 +539,7 @@ export function normalizePills(pills) {
       if (match) out[Number(match[1]) - 1] = String(pills[key] ?? '');
     });
   }
-  return out;
+  return out.map(cleanPillHtml);
 }
 
 // ---------------------------------------------------------------------------------------------

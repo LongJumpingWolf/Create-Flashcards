@@ -191,6 +191,15 @@ def _ioe_mask_svg(image_width: int, image_height: int, mask_groups: list[list[di
     )
 
 
+def _clean_pill(html: str) -> str:
+    """A pill whose field holds only whitespace / <br> / empty tags is empty (Anki would hide it too)."""
+    text = html or ''
+    if re.search(r'<(img|audio|video|table|hr)\b|\[sound:', text, re.I):
+        return text
+    bare = re.sub(r'<br\s*/?>|</?(div|p|span)[^>]*>|&nbsp;|\u200b|\s', '', text, flags=re.I)
+    return '' if re.sub(r'<[^>]*>', '', bare) == '' else text
+
+
 def _io_header(card_header: str, group: list) -> str:
     """Header line(s) of an occlusion note: the card's header plus the hint of the hidden group (what to answer)."""
     hint = next((str(m.get('hint')) for m in group if m.get('hint')), '')
@@ -239,7 +248,7 @@ def create_anki_deck(deck_payload: DeckPayload) -> bytes:
         for pill_index in range(4):
             pill_html, pill_media = extract_media_from_html(card_data.pills[pill_index] if pill_index < len(card_data.pills) else '')
             all_media_files.update(pill_media)
-            pills.append(pill_html)
+            pills.append(_clean_pill(pill_html))
         if card_data.type == "Image Occlusion":
             if not card_data.image_data or not card_data.image_data.startswith("data:image/") or not card_data.masks:
                 raise ValueError("Image Occlusion cards need a source image and at least one mask")

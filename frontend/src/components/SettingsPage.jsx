@@ -26,7 +26,7 @@ const placeholderSvg = (label) => `data:image/svg+xml;charset=utf-8,${encodeURIC
 const SAMPLE_PILLS = [
   `<img src="${placeholderSvg('screenshot of the source page')}"><br>Pathoma p. 41`,
   '<table><tr><th></th><th>Folate</th><th>B12</th></tr><tr><td>Methylmalonic acid</td><td>normal</td><td>↑</td></tr></table>',
-  'Lecture 3: say it with the mnemonic on slide 12.',
+  '<div class="gpt"><h2>Why microcytic?</h2><div class="gpt-badgerow"><span class="gpt-badge gpt-badge-warning">Mechanism: Inhibition of heme synthesis</span></div><p>Lead directly inhibits two enzymes of <b>heme synthesis</b>:</p><ol><li><b>ALA dehydratase</b> – converts ALA into porphobilinogen.</li><li><b>Ferrochelatase</b> – inserts iron into protoporphyrin IX.</li></ol><table><tbody><tr><th>Stimulus</th><th>Hepcidin</th></tr><tr><td>Inflammation (IL-6)</td><td>↑ Increases</td></tr></tbody></table></div>',
   'My own note: always check the MCV first.',
 ];
 
@@ -252,6 +252,7 @@ export default function SettingsPage({ onClose, onOpenIcons }) {
                   {pill.iconType === 'image' && <label className="set-file"><input type="file" accept="image/*" onChange={e => { uploadIcon(['pills', index, 'iconData'], e.target.files?.[0]); e.target.value = ''; }} />{pill.iconData ? <img src={pill.iconData} alt="" /> : null}<span>{pill.iconData ? 'Change' : 'Choose file'}</span></label>}
                   {pill.iconType === 'url' && <input type="url" placeholder="https://…/icon.png" value={pill.iconUrl} onChange={e => update(['pills', index, 'iconUrl'], e.target.value.trim())} />}
                 </Row>
+                <Row label="Content format" hint="Auto converts a ChatGPT answer (selected text) pasted into this pill. ChatGPT look also converts the Markdown from ChatGPT's Copy button and removes the pill's own frame. Plain never converts."><select value={pill.format} onChange={e => update(['pills', index, 'format'], e.target.value)} aria-label={`Pill ${index + 1} content format`}><option value="auto">Auto-detect ChatGPT</option><option value="chatgpt">ChatGPT look (always)</option><option value="plain">Plain</option></select></Row>
                 <Row label="Open by default"><Toggle checked={pill.open} onChange={value => update(['pills', index, 'open'], value)} label={pill.open ? 'Starts expanded' : 'Starts collapsed'} /></Row>
               </div>
             ))}
@@ -263,6 +264,14 @@ export default function SettingsPage({ onClose, onOpenIcons }) {
             <Row label="Icons"><Toggle checked={settings.pillStyle.showIcons} onChange={value => update(['pillStyle', 'showIcons'], value)} label="Show icons on pills" /></Row>
             <Row label="Keyboard" hint="Shift+1…4 toggles a pill, Shift+0 toggles all. Plain 1–4 stay Anki's answer buttons."><select value={b.pillShortcut} onChange={e => update(['behavior', 'pillShortcut'], e.target.value)}><option value="shift">Shift + number</option><option value="alt">Alt + number</option><option value="off">Off</option></select></Row>
             <Row label="Remember" hint="An opened pill stays open on the next card until you close it."><Toggle checked={b.rememberPills} onChange={value => update(['behavior', 'rememberPills'], value)} label="Keep pills open between cards" /></Row>
+          </Section>
+
+          <Section id="set-chatgpt" title="ChatGPT look" hint="Pasted ChatGPT answers keep ChatGPT's formatting: 16 px text, 18 px section titles, soft pill badges, 14 px tables, rounded panel. Sizes are measured from a real ChatGPT answer page; the panel colours are yours to adjust.">
+            <Row label="Day panel"><span className="set-colors"><label>Background <ColorField value={settings.chatgpt.day.bg} label="Day panel background" onChange={value => update(['chatgpt', 'day', 'bg'], value)} /></label><label>Text <ColorField value={settings.chatgpt.day.text} label="Day panel text" onChange={value => update(['chatgpt', 'day', 'text'], value)} /></label></span></Row>
+            <Row label="Night panel"><span className="set-colors"><label>Background <ColorField value={settings.chatgpt.night.bg} label="Night panel background" onChange={value => update(['chatgpt', 'night', 'bg'], value)} /></label><label>Text <ColorField value={settings.chatgpt.night.text} label="Night panel text" onChange={value => update(['chatgpt', 'night', 'text'], value)} /></label></span></Row>
+            <Row label="Corners"><NumberField value={settings.chatgpt.radius} min={0} max={32} onChange={value => update(['chatgpt', 'radius'], value)} suffix="px" /></Row>
+            <Row label="Padding"><NumberField value={settings.chatgpt.padding} min={4} max={32} onChange={value => update(['chatgpt', 'padding'], value)} suffix="px" /></Row>
+            <p className="set-note">The preview's third pill (Lecture notes) is sample ChatGPT content. Paste a real answer into a pill in the editor to try it.</p>
           </Section>
 
           <Section id="set-watermark" title="Watermark" hint="A small icon in a corner of every card. Off by default; the note-type name already marks the deck as yours.">

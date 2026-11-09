@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { PILL_COUNT, loadSettings } from '../beerus';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { PILL_COUNT, gptCss, loadSettings, pillCss, themeMedia, cleanPillHtml } from '../beerus';
+import { chatgptFromClipboard } from '../chatgptFormat';
 import { sanitizePastedHtml } from './editorHelpers';
 
 const MAX_EDGE = 1100;
@@ -34,16 +35,35 @@ const readAsDataUrl = (file) => new Promise((resolve, reject) => {
 });
 
 const IMAGE_URL = /^https?:\/\/\S+\.(png|jpe?g|gif|webp|svg)(\?\S*)?$/i;
+const FORMAT_LABEL = { auto: 'Auto', chatgpt: 'ChatGPT look', plain: 'Plain' };
+
+function PillChip({ pill, index, settings, dim }) {
+  const icon = !settings.pillStyle.showIcons || pill.iconType === 'none' ? null
+    : pill.iconType === 'emoji' ? (pill.icon ? <span className="bpill-em">{pill.icon}</span> : null)
+      : <span className="bpill-ic" />;
+  return (
+    <div className={`bpill bpill-${index + 1}${pill.format === 'chatgpt' ? ' bpill-gpt' : ''}${dim ? ' pill-chip-dim' : ''}`}>
+      <summary>{icon}<span className="bpill-label">{pill.label}</span></summary>
+    </div>
+  );
+}
 
 /**
- * The four pill fields of a card (Pill 1..4). Each is a small rich box: paste or drop a screenshot,
- * add an image link, or type notes. Empty pills do not appear on the exported card.
+ * The four pill fields of a card (Pill 1..4). Each field is headed by the real pill (exactly the button that will appear
+ * on the card); a pill whose field is empty is dimmed and does not appear on the card at all.
+ * Paste a screenshot, drop an image, add an image link, or paste a ChatGPT answer (formatting is kept).
  * `values` is the array of 4 HTML strings; `resetKey` changes whenever a different card is loaded.
  */
 export default function PillFields({ values, onChange, resetKey }) {
   const refs = useRef([]);
   const [open, setOpen] = useState(false);
-  const labels = loadSettings().pills.map(pill => pill.label);
+  const [settings, setSettings] = useState(() => loadSettings());
+  useEffect(() => { setSettings(loadSettings()); }, [open, resetKey]); // pick up changes made on the Settings page
+  const css = useMemo(() => {
+    let text = pillCss(settings) + gptCss(settings);
+    themeMedia(settings).forEach(file => { text = text.split(file.name).join(file.dataUrl); });
+    return text;
+  }, [settings]);
 
   // Push external changes (loading / clearing a card) into the editable boxes without fighting the caret.
   useEffect(() => {
@@ -79,52 +99,66 @@ export default function PillFields({ values, onChange, resetKey }) {
       return;
     }
     const text = event.clipboardData?.getData('text/plain')?.trim() || '';
+    const html = event.clipboardData?.getData('text/html');
     if (IMAGE_URL.test(text)) {
       event.preventDefault();
       insertImage(index, text);
       return;
     }
-    const html = event.clipboardData?.getData('text/html');
     event.preventDefault();
-    document.execCommand('insertHTML', false, html ? sanitizePastedHtml(html) : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>'));
+    const gpt = chatgptFromClipboard({ html, text }, settings.pills[index].format);
+    document.execCommand('insertHTML', false, gpt || (html ? sanitizePastedHtml(html) : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')));
     set(index, read(index));
   };
 
-  const filled = values.filter(value => value.replace(/<[^>]*>/g, '').trim() || /<img/i.test(value)).length;
+  const filledFlags = values.map(value => cleanPillHtml(value) !== '');
+  const filled = filledFlags.filter(Boolean).length;
 
   return (
     <section className="pill-fields">
+      <style>{css}</style>
       <button type="button" className="pill-fields-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
-        <span>Pills (toggle buttons under the answer)</span>
-        <small>{filled ? `${filled} filled` : 'optional'}</small>
+        <span>Pills <em>(toggle buttons under the answer)</em></span>
+        <small>{filled ? `${filled} on the card` : 'optional'}</small>
       </button>
+      <div className={`pill-onCard bs-${settings.pillStyle.style}`} style={{ '--ics': settings.pillStyle.iconScale / 100, '--gs': settings.pillStyle.scale / 100, fontSize: `${(0.6 * settings.pillStyle.scale / 100 * 28).toFixed(1)}px` }} aria-label="Pills that will appear on the card">
+        {filled ? settings.pills.map((pill, index) => (filledFlags[index] ? <PillChip key={index} pill={pill} index={index} settings={settings} /> : null)) : <span className="pill-onCard-empty">Nothing here yet. A pill only appears on the card when its field has content.</span>}
+      </div>
       {open && (
         <div className="pill-fields-body">
-          {Array.from({ length: PILL_COUNT }, (_, index) => (
-            <div className="pill-field" key={index}>
-              <div className="pill-field-head">
-                <strong>{`Pill ${index + 1}`}</strong><span>{labels[index]}</span>
-                <label className="pill-field-btn">Add image<input type="file" accept="image/*" hidden onChange={e => { addFile(index, e.target.files?.[0]); e.target.value = ''; }} /></label>
-                <button type="button" className="pill-field-btn" onClick={() => { const url = window.prompt('Image link (https://…)'); if (url && /^https?:\/\//i.test(url.trim())) insertImage(index, url.trim()); }}>Image link</button>
-                {values[index] && <button type="button" className="pill-field-btn" onClick={() => set(index, '')}>Clear</button>}
+          {Array.from({ length: PILL_COUNT }, (_, index) => {
+            const pill = settings.pills[index];
+            return (
+              <div className={`pill-field${filledFlags[index] ? '' : ' pill-field-empty'}`} key={index}>
+                <div className="pill-field-head">
+                  <div className={`pill-head-chip bs-${settings.pillStyle.style}`} style={{ '--ics': settings.pillStyle.iconScale / 100, '--gs': settings.pillStyle.scale / 100, fontSize: `${(0.6 * settings.pillStyle.scale / 100 * 28).toFixed(1)}px` }} title={filledFlags[index] ? 'Shown on the card' : 'Empty: this pill will not appear on the card'}>
+                    <PillChip pill={pill} index={index} settings={settings} dim={!filledFlags[index]} />
+                  </div>
+                  <span className="pill-field-state">{filledFlags[index] ? 'on the card' : 'empty, hidden'}{pill.format !== 'auto' ? ` · ${FORMAT_LABEL[pill.format]}` : ''}</span>
+                  <label className="pill-field-btn">Add image<input type="file" accept="image/*" hidden onChange={e => { addFile(index, e.target.files?.[0]); e.target.value = ''; }} /></label>
+                  <button type="button" className="pill-field-btn" onClick={() => { const url = window.prompt('Image link (https://…)'); if (url && /^https?:\/\//i.test(url.trim())) insertImage(index, url.trim()); }}>Image link</button>
+                  {values[index] && <button type="button" className="pill-field-btn" onClick={() => set(index, '')}>Clear</button>}
+                </div>
+                <div className="nightMode">
+                  <div
+                    ref={node => { refs.current[index] = node; }}
+                    className="pill-field-box editable-content"
+                    contentEditable
+                    role="textbox"
+                    aria-label={`Pill ${index + 1} content`}
+                    data-placeholder="Paste a screenshot, an image link, a ChatGPT answer or type notes…"
+                    suppressContentEditableWarning
+                    onInput={() => set(index, read(index))}
+                    onPaste={event => onPaste(event, index)}
+                    onDrop={event => {
+                      const file = [...(event.dataTransfer?.files || [])].find(item => item.type.startsWith('image/'));
+                      if (file) { event.preventDefault(); addFile(index, file); }
+                    }}
+                  />
+                </div>
               </div>
-              <div
-                ref={node => { refs.current[index] = node; }}
-                className="pill-field-box editable-content"
-                contentEditable
-                role="textbox"
-                aria-label={`Pill ${index + 1} content`}
-                data-placeholder="Paste a screenshot, an image link or type notes…"
-                suppressContentEditableWarning
-                onInput={() => set(index, read(index))}
-                onPaste={event => onPaste(event, index)}
-                onDrop={event => {
-                  const file = [...(event.dataTransfer?.files || [])].find(item => item.type.startsWith('image/'));
-                  if (file) { event.preventDefault(); addFile(index, file); }
-                }}
-              />
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

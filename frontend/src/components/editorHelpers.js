@@ -114,7 +114,7 @@ export function useAudioRecorder(onFinished, onError) {
 const PASTE_TAGS = new Set(['A', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'SUB', 'SUP', 'SPAN', 'FONT', 'BR', 'P', 'DIV', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'IMG', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TD', 'TH', 'BLOCKQUOTE', 'CODE', 'PRE', 'HR', 'MARK', 'AUDIO']);
 const DROP_WITH_CONTENT = new Set(['SCRIPT', 'STYLE', 'META', 'LINK', 'IFRAME', 'OBJECT', 'EMBED', 'NOSCRIPT', 'TEMPLATE', 'FORM', 'INPUT', 'BUTTON', 'SVG', 'CANVAS']);
 // Layout classes defined by the card CSS (AnKing: left-aligned mnemonic block, centred block).
-const KEEP_CLASSES = new Set(['mnemonics', 'centerbox']);
+const KEEP_CLASSES = new Set(['mnemonics', 'centerbox', 'gpt', 'gpt-badgerow', 'gpt-badge', 'gpt-badge-info', 'gpt-badge-warning', 'gpt-badge-success', 'gpt-badge-danger', 'gpt-badge-neutral']);
 const KEEP_STYLES = ['color', 'background-color', 'font-weight', 'font-style', 'text-decoration', 'text-align', 'vertical-align'];
 
 // Keeps meaningful formatting from a web page / Word / PDF paste but drops the junk

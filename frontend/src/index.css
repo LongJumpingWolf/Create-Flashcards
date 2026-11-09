@@ -1371,3 +1371,17 @@ body { background:#202124; }
 .icon-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 99px; color: #fff; font-size: 12px; font-weight: 700; }
 .icon-pill img { width: 16px; height: 16px; object-fit: contain; }
 @media (max-width: 1000px) { .icon-layout { grid-template-columns: minmax(0, 1fr); } .icon-side { position: static; order: -1; } }
+
+/* ---------- Pill fields in the editor: real pills ---------- */
+.pill-fields-toggle em { font-style: normal; color: var(--muted); font-weight: 500; }
+.pill-onCard { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 14px 12px; align-items: center; }
+.pill-onCard-empty { color: var(--muted-dim); font-size: 12px; }
+.pill-head-chip { display: inline-flex; font-family: Arial, sans-serif; }
+.pill-chip-dim { opacity: .38; filter: grayscale(.7); }
+.pill-fields .bpill > summary { cursor: default; }
+.pill-fields .bpill > summary::after { display: none; }
+.pill-field-state { color: var(--muted); font-size: 11.5px; }
+.pill-field-empty .pill-field-box { opacity: .92; }
+.pill-field-box .gpt { margin: 4px 0; }
+.pill-field-head .pill-head-chip span, .pill-onCard span.bpill-label { color: inherit; }
+.pill-field-head .pill-head-chip .bpill-label { color: #fff; }
