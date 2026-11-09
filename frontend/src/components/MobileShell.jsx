@@ -3,7 +3,7 @@ import { PILL_COUNT, cleanPillHtml, loadSettings, normalizePills, saveSettings }
 import { chatgptFromClipboard } from '../chatgptFormat';
 import { repairOldChatGptPaste } from '../chatgptFormat';
 import { sanitizePastedHtml } from './editorHelpers';
-import { shrinkImageFile } from './PillFields';
+import { shrinkImageFile } from '../imageUtils';
 import CardPreviewFrame from './CardPreviewFrame';
 import { setFullEditor } from '../useDevice';
 import { logAdded } from '../activity';

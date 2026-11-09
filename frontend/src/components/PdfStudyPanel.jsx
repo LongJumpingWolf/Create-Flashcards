@@ -36,7 +36,7 @@ const INSERT_PROMPT_STYLE = {
   occlusion: { width: 43, minWidth: 43, minHeight: 43, display: 'grid', placeItems: 'center', border: '1px solid rgba(129,190,144,.28)', borderRadius: 9, background: '#1e3425', color: '#b9dfc1', cursor: 'pointer' },
 };
 
-export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ target: 'front', label: 'Front' }, { target: 'back', label: 'Back' }], isSmallScreen = false, onMobileView, incomingFile = null }) {
+export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ target: 'front', label: 'Front' }, { target: 'back', label: 'Back' }], isSmallScreen = false, onMobileView, incomingFile = null, pillOptions = [] }) {
   const fileInputRef = useRef(null);
   const hostRef = useRef(null);
   const pagePositionRef = useRef(null);
@@ -78,6 +78,10 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
   const [snipStart, setSnipStart] = useState(null);
   const [pendingSnip, setPendingSnip] = useState(null);
   const [targetPromptSnip, setTargetPromptSnip] = useState(null);
+  // "After snipping": ask each time, or send straight to Front / Back / a pill (fewer clicks when you snip a lot)
+  const [quickTarget, setQuickTargetState] = useState(() => { try { return localStorage.getItem('beerus-snip-quick') || 'ask'; } catch { return 'ask'; } });
+  const quickTargetRef = useRef(quickTarget);
+  const setQuickTarget = (value) => { quickTargetRef.current = value; setQuickTargetState(value); try { localStorage.setItem('beerus-snip-quick', value); } catch { /* storage unavailable */ } };
   const [snippets, setSnippets] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -795,7 +799,10 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
       crop.getContext('2d', { alpha: false }).drawImage(qualityPage.canvas, sx, sy, sourceWidth, sourceHeight, 0, 0, outputWidth, outputHeight);
       const captured = { image: crop.toDataURL('image/jpeg', .95), width: outputWidth, height: outputHeight, page: pageNumber, name: `${pdfName} · p. ${pageNumber}`, intent: captureIntent, masks: [], mode: 'hide-all', id: crypto.randomUUID() };
       if (captureIntent === 'occlusion') setPendingSnip(captured);
-      else setTargetPromptSnip(captured);
+      else if (quickTargetRef.current && quickTargetRef.current !== 'ask') {
+        setSnippets(previous => [captured, ...previous]);
+        onInsertSnippet(captured, quickTargetRef.current);
+      } else setTargetPromptSnip(captured);
     } catch (err) {
       setError(`Could not capture this region: ${err.message}`);
     } finally { setCaptureLoading(false); }
@@ -830,7 +837,12 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
     if (!targetPromptSnip) return undefined;
     const chooseFieldByNumber = event => {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
-      if (event.key === '1' || event.key === '3') {
+      if (['4', '5', '6', '7'].includes(event.key)) {
+        const pill = pillOptions[Number(event.key) - 4];
+        if (!pill) return;
+        event.preventDefault();
+        insertCapturedSnippet(pill.target);
+      } else if (event.key === '1' || event.key === '3') {
         const field = fieldOptions[event.key === '1' ? 0 : 1];
         if (!field) return;
         event.preventDefault();
@@ -842,7 +854,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
     };
     window.addEventListener('keydown', chooseFieldByNumber);
     return () => window.removeEventListener('keydown', chooseFieldByNumber);
-  }, [targetPromptSnip, fieldOptions]);
+  }, [targetPromptSnip, fieldOptions, pillOptions]);
 
   const onDragStart = (event, snippet) => {
     event.dataTransfer.effectAllowed = 'copy';
@@ -923,6 +935,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
         <div className="pdf-page-controls"><button className="pdf-icon-button" onClick={() => setPageNumber(page => Math.max(1, page - 1))} disabled={pageNumber <= 1 || captureLoading} title="Previous page"><ChevronLeft size={17} /></button><label><input aria-label="PDF page number" inputMode="numeric" value={pageDraft ?? pageNumber} disabled={captureLoading} onFocus={event => event.target.select()} onChange={event => setPageDraft(event.target.value.replace(/\D/g, '').slice(0, 5))} onBlur={commitPageDraft} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commitPageDraft(); event.currentTarget.blur(); } }} /> <span>/ {pdfDoc.numPages}</span></label><button className="pdf-icon-button" onClick={() => setPageNumber(page => Math.min(pdfDoc.numPages, page + 1))} disabled={pageNumber >= pdfDoc.numPages || captureLoading} title="Next page"><ChevronRight size={17} /></button></div>
         <div className="pdf-zoom-controls"><button className="pdf-icon-button" onClick={() => stepZoom(.8)} disabled={captureLoading} title="Zoom out (Ctrl −)"><Minus size={16} /></button><button className="pdf-zoom-readout" onClick={fitZoom} disabled={captureLoading} title="Fit width, then fit page (Ctrl 0) · double-click the page to zoom">{Math.round(zoom * 100)}%</button><button className="pdf-icon-button" onClick={() => stepZoom(1.25)} disabled={captureLoading} title="Zoom in (Ctrl +)"><PlusCircle size={16} /></button></div>
         <button className={`snip-toggle ${snipping ? 'snip-active' : ''}`} title="Snip: S · Snip for image occlusion: Shift+S" onClick={() => { captureIntentRef.current = 'normal'; setSnipIntent('normal'); setSnipping(value => !value); setSelection(null); setSnipStart(null); }} disabled={!pdfDoc || rendering || captureLoading}>{captureLoading ? 'Preparing capture…' : snipping ? snipIntent === 'occlusion' ? 'Select an occlusion image…' : 'Select a region…' : <><Crop size={15} /> Snip region</>}</button>
+        {pillOptions.length > 0 && <label className="snip-quick" title="Where a snip goes right after you capture it"><span>After snip</span><select value={quickTarget} onChange={e => setQuickTarget(e.target.value)} aria-label="After snipping, send the capture to"><option value="ask">Ask me</option><option value="front">{fieldOptions[0]?.label || 'Front'}</option><option value="back">{fieldOptions[1]?.label || 'Back'}</option>{pillOptions.map(pill => <option key={pill.target} value={pill.target}>{pill.label} pill</option>)}</select></label>}
       </div>}
 
       {error && <div className="pdf-error" role="alert"><span>{error}</span><button onClick={() => setError('')}><XCircle size={15} /></button></div>}
@@ -935,11 +948,11 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
         {snippets.length > 0 && <div className="snip-tray"><div className="snip-tray-heading"><span>CAPTURES <b>{snippets.length}</b></span><span>Newest first · drag to Write card</span></div><div className="snip-tray-list">{snippets.map((snippet, index) => <article key={snippet.id} className="snip-tray-item" draggable={nativeDragEnabled} onDragStart={event => onDragStart(event, snippet)} onPointerDown={event => onTouchSnippetPointerDown(event, snippet)}>
           <img src={snippet.image} alt="Captured PDF region" draggable="false" />
           <div className="snip-tray-info"><strong><span className="snip-number">{snippets.length - index}</span>{snippet.masks.length ? `Occlusion · ${snippet.masks.length} regions` : 'PDF capture'}</strong><span>{snippet.name}</span></div>
-          <div className="snip-tray-actions"><button onClick={() => onInsertSnippet(snippet, 'front')} title="Insert into front/text">Front</button><button onClick={() => onInsertSnippet(snippet, 'back')} title="Insert into back/extra">Back</button></div>
+          <div className="snip-tray-actions"><button onClick={() => onInsertSnippet(snippet, 'front')} title="Insert into front/text">Front</button><button onClick={() => onInsertSnippet(snippet, 'back')} title="Insert into back/extra">Back</button>{pillOptions.map((pill, i) => <button key={pill.target} className="snip-pill-btn" style={{ '--pc': pill.color }} onClick={() => onInsertSnippet(snippet, pill.target)} title={`Add to the ${pill.label} pill`} aria-label={`Add to the ${pill.label} pill`}>{i + 1}</button>)}</div>
         </article>)}</div></div>}
       </>}
       {pendingSnip && <PdfAnnotationEditor snip={pendingSnip} initialTool={pendingSnip.intent === 'occlusion' ? 'mask-rect' : 'select'} onClose={() => setPendingSnip(null)} onSave={saveSnippet} />}
-      {targetPromptSnip && <div className="snip-modal-backdrop snip-target-backdrop" style={INSERT_PROMPT_STYLE.backdrop} role="dialog" aria-modal="true" aria-label="Choose where to insert the capture"><section className="snip-target-dialog" style={INSERT_PROMPT_STYLE.panel}><header style={INSERT_PROMPT_STYLE.header}><div><span className="section-eyebrow" style={INSERT_PROMPT_STYLE.eyebrow}>CAPTURE READY · PAGE {targetPromptSnip.page}</span><h2 style={INSERT_PROMPT_STYLE.title}>Insert image into…</h2></div><button type="button" className="snip-close" style={INSERT_PROMPT_STYLE.close} aria-label="Cancel capture" onClick={() => { saveSnippet(targetPromptSnip); setTargetPromptSnip(null); }}><XCircle size={19} /></button></header><img style={INSERT_PROMPT_STYLE.image} src={targetPromptSnip.image} alt="Captured PDF region preview"/><p style={INSERT_PROMPT_STYLE.description}>Press 1 for Front, 3 for Back, or 2 to make an image occlusion card.</p><div className="snip-target-options" style={{ ...INSERT_PROMPT_STYLE.options, display: 'flex' }}>{fieldOptions[0] && <button style={{ ...INSERT_PROMPT_STYLE.option, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} type="button" onClick={() => insertCapturedSnippet(fieldOptions[0].target)}><kbd style={INSERT_PROMPT_STYLE.key}>1</kbd>{fieldOptions[0].label}</button>}{fieldOptions[0] && <button style={{ ...INSERT_PROMPT_STYLE.occlusion, display: 'flex', gap: 6, padding: '0 10px', width: 'auto' }} type="button" aria-label="Use as image occlusion and open editor" title="Use field 1 as the image occlusion source (2)" onClick={() => insertCapturedSnippet(fieldOptions[0].target, true)}><kbd style={INSERT_PROMPT_STYLE.key}>2</kbd><Crop size={18} /></button>}{fieldOptions[1] && <button style={{ ...INSERT_PROMPT_STYLE.option, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} type="button" onClick={() => insertCapturedSnippet(fieldOptions[1].target)}><kbd style={INSERT_PROMPT_STYLE.key}>3</kbd>{fieldOptions[1].label}</button>}</div></section></div>}
+      {targetPromptSnip && <div className="snip-modal-backdrop snip-target-backdrop" style={INSERT_PROMPT_STYLE.backdrop} role="dialog" aria-modal="true" aria-label="Choose where to insert the capture"><section className="snip-target-dialog" style={INSERT_PROMPT_STYLE.panel}><header style={INSERT_PROMPT_STYLE.header}><div><span className="section-eyebrow" style={INSERT_PROMPT_STYLE.eyebrow}>CAPTURE READY · PAGE {targetPromptSnip.page}</span><h2 style={INSERT_PROMPT_STYLE.title}>Insert image into…</h2></div><button type="button" className="snip-close" style={INSERT_PROMPT_STYLE.close} aria-label="Cancel capture" onClick={() => { saveSnippet(targetPromptSnip); setTargetPromptSnip(null); }}><XCircle size={19} /></button></header><img style={INSERT_PROMPT_STYLE.image} src={targetPromptSnip.image} alt="Captured PDF region preview"/><p style={INSERT_PROMPT_STYLE.description}>Press 1 for Front, 3 for Back, 4–7 for a pill, or 2 to make an image occlusion card.</p><div className="snip-target-options" style={{ ...INSERT_PROMPT_STYLE.options, display: 'flex' }}>{fieldOptions[0] && <button style={{ ...INSERT_PROMPT_STYLE.option, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} type="button" onClick={() => insertCapturedSnippet(fieldOptions[0].target)}><kbd style={INSERT_PROMPT_STYLE.key}>1</kbd>{fieldOptions[0].label}</button>}{fieldOptions[0] && <button style={{ ...INSERT_PROMPT_STYLE.occlusion, display: 'flex', gap: 6, padding: '0 10px', width: 'auto' }} type="button" aria-label="Use as image occlusion and open editor" title="Use field 1 as the image occlusion source (2)" onClick={() => insertCapturedSnippet(fieldOptions[0].target, true)}><kbd style={INSERT_PROMPT_STYLE.key}>2</kbd><Crop size={18} /></button>}{fieldOptions[1] && <button style={{ ...INSERT_PROMPT_STYLE.option, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} type="button" onClick={() => insertCapturedSnippet(fieldOptions[1].target)}><kbd style={INSERT_PROMPT_STYLE.key}>3</kbd>{fieldOptions[1].label}</button>}</div>{pillOptions.length > 0 && <div className="snip-pill-row">{pillOptions.map((pill, i) => <button key={pill.target} type="button" style={{ '--pc': pill.color }} onClick={() => insertCapturedSnippet(pill.target)}><kbd>{i + 4}</kbd>{pill.label}</button>)}</div>}</section></div>}
     </section>
   );
 }

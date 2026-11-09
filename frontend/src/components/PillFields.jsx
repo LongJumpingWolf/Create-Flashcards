@@ -2,30 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PILL_COUNT, gptCss, loadSettings, saveSettings, pillCss, themeMedia, cleanPillHtml, stripThemeColors } from '../beerus';
 import { chatgptFromClipboard, chatgptForce, chatgptHtmlToGpt } from '../chatgptFormat';
 import { sanitizePastedHtml } from './editorHelpers';
-
-const MAX_EDGE = 1100;
-
-// Screenshots are shrunk on paste so a pill never adds megabytes to the deck.
-export async function shrinkImageFile(file) {
-  const url = URL.createObjectURL(file);
-  try {
-    const image = new Image();
-    image.src = url;
-    await image.decode();
-    const scale = Math.min(1, MAX_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
-    if (scale === 1 && file.size < 250_000 && /image\/(png|jpeg)/.test(file.type)) return null; // keep as is
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.82);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+import { shrinkImageFile } from '../imageUtils';
 
 const readAsDataUrl = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
@@ -201,6 +178,20 @@ export default function PillFields({ values, onChange, resetKey }) {
     set(index, node.innerHTML);
   };
 
+  // Snips dragged from the PDF panel: open the pills as drop targets as soon as a drag starts.
+  useEffect(() => {
+    const onStart = (event) => { if ([...(event.dataTransfer?.types || [])].includes('application/x-anki-study-snippet')) setOpen(true); };
+    window.addEventListener('dragstart', onStart);
+    return () => window.removeEventListener('dragstart', onStart);
+  }, []);
+  const dropSnippet = (event, index) => {
+    const payload = event.dataTransfer?.getData('application/x-anki-study-snippet');
+    if (!payload) return false;
+    event.preventDefault(); event.stopPropagation();
+    try { insertImage(index, JSON.parse(payload).image); } catch { /* unreadable capture */ }
+    return true;
+  };
+
   const addFile = async (index, file) => {
     if (!file || !file.type.startsWith('image/')) return;
     try {
@@ -291,7 +282,10 @@ export default function PillFields({ values, onChange, resetKey }) {
                     onBlur={flush}
                     onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') flush(); }}
                     onPaste={event => onPaste(event, index)}
+                    data-editor-drop-target={`pill${index + 1}`}
+                    onDragOver={event => { if ([...(event.dataTransfer?.types || [])].includes('application/x-anki-study-snippet')) event.preventDefault(); }}
                     onDrop={event => {
+                      if (dropSnippet(event, index)) return;
                       const file = [...(event.dataTransfer?.files || [])].find(item => item.type.startsWith('image/'));
                       if (file) { event.preventDefault(); addFile(index, file); }
                     }}

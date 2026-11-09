@@ -1888,6 +1888,16 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
   };
 
   const insertStudySnippet = (snippet, target = 'front', dropEvent = null) => {
+    const pillMatch = /^pill([1-4])$/.exec(target);
+    if (pillMatch) { // a PDF capture sent to a pill
+      const n = Number(pillMatch[1]) - 1;
+      const picture = `<img src="${snippet.image}" alt="PDF capture" style="max-width:100%;height:auto;">`;
+      setPills(prev => prev.map((html, i) => (i === n ? `${html || ''}${picture}` : html)));
+      setPillsResetKey(key => key + 1);
+      setFormMessage(`Capture added to the “${loadSettings().pills[n]?.label || `Pill ${n + 1}`}” pill.`);
+      window.setTimeout(() => setFormMessage(''), 2500);
+      return;
+    }
     const targetRef = target === 'back' ? backRef : frontRef;
     const hasOcclusion = Array.isArray(snippet.masks) && snippet.masks.length > 0;
     if (target === 'front' && (hasOcclusion || cardType === 'Image Occlusion')) {
@@ -2539,7 +2549,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
 
         </div>
 
-        {pdfOpen && <div className={mobileView === 'pdf' ? '' : 'pdf-panel-mobile-hidden'}><PdfPanelErrorBoundary onClose={closePdfWorkspace}><Suspense fallback={<section className="pdf-study-panel pdf-loading-state">Loading PDF tools…</section>}><PdfStudyPanel fieldOptions={cardType === 'Basic' ? [{ target: 'front', label: 'Front' }, { target: 'back', label: 'Back' }] : cardType === 'Cloze' ? [{ target: 'front', label: 'Text' }, { target: 'back', label: 'Extra' }] : [{ target: 'front', label: 'Image' }, { target: 'back', label: 'Extra' }]} onInsertSnippet={insertStudySnippet} isSmallScreen={false} onMobileView={setMobileView} incomingFile={incomingPdf} /></Suspense></PdfPanelErrorBoundary></div>}
+        {pdfOpen && <div className={mobileView === 'pdf' ? '' : 'pdf-panel-mobile-hidden'}><PdfPanelErrorBoundary onClose={closePdfWorkspace}><Suspense fallback={<section className="pdf-study-panel pdf-loading-state">Loading PDF tools…</section>}><PdfStudyPanel fieldOptions={cardType === 'Basic' ? [{ target: 'front', label: 'Front' }, { target: 'back', label: 'Back' }] : cardType === 'Cloze' ? [{ target: 'front', label: 'Text' }, { target: 'back', label: 'Extra' }] : [{ target: 'front', label: 'Image' }, { target: 'back', label: 'Extra' }]} onInsertSnippet={insertStudySnippet} isSmallScreen={false} onMobileView={setMobileView} incomingFile={incomingPdf} pillOptions={loadSettings().pills.map((pill, i) => ({ target: `pill${i + 1}`, label: pill.label, color: pill.color }))} /></Suspense></PdfPanelErrorBoundary></div>}
         <div className={`cards-panel ${mobileView !== 'cards' ? 'mobile-hidden' : ''} ${pdfOpen ? `library-drawer ${showLibrary ? 'library-open' : ''}` : ''}`}>
           <div className="library-heading">
             <div><p className="section-eyebrow">YOUR DECK</p><h2><BookOpen size={19} /> Card library <span className="library-count">{cards.length}</span></h2></div>
