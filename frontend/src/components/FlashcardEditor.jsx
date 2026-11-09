@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 // NEW: Import the modal component
 import DocumentationModal from './DocumentationModal';
 import ImportCardsModal from './ImportCardsModal';
-import PillFields from './PillFields';
+import PillFields, { PreviewPills } from './PillFields';
 import { buildThemePayload, loadSettings, normalizePills } from '../beerus';
 import { hasSavedPdf } from '../pdfResumeStorage';
 import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView, TableGridPicker } from './editorTools';
@@ -991,7 +991,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
       if (showLinkModal) setShowLinkModal(false);
       else if (showColorPicker) { setShowColorPicker(false); setColorPickerTarget(null); }
       else if (showCardBrowser) setShowCardBrowser(false);
-      else if (showPreview) setShowPreview(false);
+      else if (showPreview) return; // the preview closes with its top-right icon only
       else if (occlusionEditorOpen) setOcclusionEditorOpen(false);
     };
     window.addEventListener('keydown', onEscape);
@@ -2411,15 +2411,15 @@ export default function FlashcardEditor({ onOpenSettings }) {
       </main >
 
       {showPreview && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
-          <div className="bg-neutral-800 rounded-xl shadow-lg w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden border border-neutral-700">
-            
-            <h2 className="text-lg font-semibold py-3 px-4 border-b border-neutral-700 text-center bg-neutral-900 text-neutral-100">
-              Current Card Preview
-            </h2>
+        <div className="fixed inset-0 z-50 flex flex-col bg-neutral-900" role="dialog" aria-modal="true" aria-label="Current card preview">
+          <div className="flex h-full w-full flex-col overflow-hidden bg-neutral-800">
+            <header className="flex items-center justify-between border-b border-neutral-700 bg-neutral-900 px-5 py-3">
+              <h2 className="text-lg font-semibold text-neutral-100">Current Card Preview</h2>
+              <button type="button" onClick={() => setShowPreview(false)} className="card-browser-close" aria-label="Close preview" title="Close preview"><XCircle size={22} /></button>
+            </header>
 
             <div className="flex-1 overflow-y-auto p-6 text-center">
-              <div className="preview-content space-y-6">
+              <div className="preview-content mx-auto w-full max-w-5xl space-y-6">
                 {cardType === 'Image Occlusion' ? <>
                   <div className="io-reviewer-controls">
                     <button type="button" aria-label="Previous occlusion card" disabled={previewOcclusionIndex <= 0} onClick={() => { setPreviewOcclusionIndex(index => Math.max(0, index - 1)); setPreviewAnswerSide(false); }}>‹</button>
@@ -2431,6 +2431,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
                     {occlusionImage ? <OcclusionPreview image={occlusionImage} imageWidth={occlusionImageWidth} masks={occlusionMasks} mode={occlusionMode} cardIndex={previewOcclusionIndex} answerSide={previewAnswerSide} /> : <span>Add an image to preview this card.</span>}
                   </div>
                   {previewAnswerSide && back && <div className="io-reviewer-extra"><span>Back extra</span><div dangerouslySetInnerHTML={{ __html: back }} /></div>}
+                  {previewAnswerSide && <PreviewPills pills={pills} night={previewNight} />}
                 </> : <>
                   {(() => {
                     const numbers = cardType === 'Cloze' ? clozeNumbers(cleanColorSpans(front)) : [];
@@ -2452,21 +2453,13 @@ export default function FlashcardEditor({ onOpenSettings }) {
                         <div dangerouslySetInnerHTML={{ __html: frontHtml }} />
                         {previewAnswerSide && cardType === 'Basic' && <><hr /><div dangerouslySetInnerHTML={{ __html: back || '(empty)' }} /></>}
                         {previewAnswerSide && cardType === 'Cloze' && back && <><hr /><div className="anki-extra" dangerouslySetInnerHTML={{ __html: back }} /></>}
+                        {previewAnswerSide && <PreviewPills pills={pills} night={previewNight} />}
                       </div>
                     </>;
                   })()}
                 </>}
                 <div className="text-xs text-neutral-400 pt-4">Tags: {currentTags.map(formatTagForDisplay).join(", ") || "None"}</div>
               </div>
-            </div>
-
-            <div className="p-4 border-t border-neutral-700 bg-neutral-900">
-              <button
-                onClick={() => setShowPreview(false)}
-                className="w-full px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition"
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>

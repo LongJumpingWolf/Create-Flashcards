@@ -50,6 +50,36 @@ function PillChip({ pill, index, settings, dim }) {
   );
 }
 
+/** The pills of a card exactly as the exported card shows them (answer side): only filled pills, real style, real content. */
+export function PreviewPills({ pills, night }) {
+  const settings = useMemo(() => loadSettings(), []);
+  const css = useMemo(() => {
+    let text = pillCss(settings) + gptCss(settings);
+    themeMedia(settings).forEach(file => { text = text.split(file.name).join(file.dataUrl); });
+    return text;
+  }, [settings]);
+  const shown = settings.pills.map((pill, index) => ({ pill, index, html: pills?.[index] || '' })).filter(item => cleanPillHtml(item.html) !== '');
+  if (!shown.length) return null;
+  const px = 0.6 * (settings.pillStyle.scale / 100) * 28;
+  return (
+    <div className={night ? 'nightMode' : ''}>
+      <style>{css}{`.pv-pills .bpill-body { font-size: ${(0.72 * 28).toFixed(1)}px; } .pv-pills .bpill > summary { font-size: ${px.toFixed(1)}px; }`}</style>
+      <div id="bpills" className={`pv-pills bs-${settings.pillStyle.style}`} style={{ fontSize: `${px.toFixed(1)}px` }}>
+        {shown.map(({ pill, index, html }) => (
+          <details key={index} className={`bpill bpill-${index + 1}${pill.format === 'chatgpt' ? ' bpill-gpt' : ''}`} open={pill.open}>
+            <summary>
+              {settings.pillStyle.showIcons && pill.iconType === 'emoji' && pill.icon ? <span className="bpill-em">{pill.icon}</span> : null}
+              {settings.pillStyle.showIcons && (pill.iconType === 'image' || pill.iconType === 'url') ? <span className="bpill-ic" /> : null}
+              <span className="bpill-label">{pill.label}</span>
+            </summary>
+            <div className="bpill-body" dangerouslySetInnerHTML={{ __html: html }} />
+          </details>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * The four pill fields of a card (Pill 1..4). Each field is headed by the real pill (exactly the button that will appear
  * on the card); a pill whose field is empty is dimmed and does not appear on the card at all.
