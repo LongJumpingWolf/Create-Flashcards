@@ -1888,7 +1888,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
   };
 
   const insertStudySnippet = (snippet, target = 'front', dropEvent = null) => {
-    const pillMatch = /^pill([1-4])$/.exec(target);
+    const pillMatch = /^pill([1-8])$/.exec(target);
     if (pillMatch) { // a PDF capture sent to a pill
       const n = Number(pillMatch[1]) - 1;
       const picture = `<img src="${snippet.image}" alt="PDF capture" style="max-width:100%;height:auto;">`;

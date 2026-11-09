@@ -436,7 +436,7 @@ async function planNotes(payload, { prepareImage, warn, onProgress, models, fetc
     };
 
     const pills = [];
-    for (const pillHtml of normalizePills(card.pills)) pills.push(await extractMedia(pillHtml, ctx));
+    for (const pillHtml of normalizePills(card.pills, models.basic.fields.length - 2)) pills.push(await extractMedia(pillHtml, ctx));
 
     if (card.type === 'Image Occlusion') {
       if (!card.image_data || !card.image_data.startsWith('data:image/') || !card.masks?.length) {

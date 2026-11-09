@@ -65,7 +65,7 @@ class CardPayload(BaseModel):
     image_width: int = Field(default=720, ge=180, le=1800)
     masks: List[dict] = Field(default_factory=list, max_length=300)
     occlusion_mode: Literal["hide-all", "hide-one", "sequential", "random"] = "hide-all"
-    pills: List[str] = Field(default_factory=list, max_length=4)  # Pill 1..4 (toggle buttons on the answer side)
+    pills: List[str] = Field(default_factory=list, max_length=8)  # Pill 1..8 (toggle buttons on the answer side)
     header: str = Field(default="", max_length=500)  # Image Occlusion: text shown above the picture
     sequential: bool = False  # Cloze cards: reveal the clozes one by one on a single card
 
@@ -243,9 +243,10 @@ def create_anki_deck(deck_payload: DeckPayload) -> bytes:
         if name.startswith('_beerus_') and re.fullmatch(r'[A-Za-z0-9_.-]{1,60}', name):
             all_media_files[name] = b64decode(item['base64'])
 
+    pill_count = max(4, min(8, len((((deck_payload.theme or {}).get('models') or {}).get('basic') or {}).get('fields') or []) - 2))
     for card_data in deck_payload.cards:
         pills = []
-        for pill_index in range(4):
+        for pill_index in range(pill_count):
             pill_html, pill_media = extract_media_from_html(card_data.pills[pill_index] if pill_index < len(card_data.pills) else '')
             all_media_files.update(pill_media)
             pills.append(_clean_pill(pill_html))

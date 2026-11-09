@@ -86,7 +86,7 @@ export function validateImportedCard(raw, index) {
   const question = type === 'Image Occlusion' ? '' : sanitizePastedHtml(String(raw.question ?? ''));
   const answer = sanitizePastedHtml(String(raw.answer ?? ''));
   // Pills: "pills": [html, html, html, html] or { "1": html, ... } or pill_1 ... pill_4 keys.
-  const pillSource = raw.pills ?? Object.fromEntries([1, 2, 3, 4].filter(n => raw[`pill_${n}`] != null).map(n => [n, raw[`pill_${n}`]]));
+  const pillSource = raw.pills ?? Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8].filter(n => raw[`pill_${n}`] != null).map(n => [n, raw[`pill_${n}`]]));
   const pills = normalizePills(pillSource).map(html => (html ? sanitizePastedHtml(html) : ''));
   const tags = cleanTags(raw.tags);
 

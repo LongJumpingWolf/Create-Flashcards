@@ -1618,3 +1618,17 @@ body { background:#202124; }
 .header-actions .hb-deck svg, .header-actions .hb-pdf svg { color: #60a5fa; }
 .header-actions .hb-deck:hover, .header-actions .hb-pdf:hover { background: rgba(96,165,250,.22); border-color: rgba(96,165,250,.65); }
 .hb-sep { background: rgba(148,163,184,.2); }
+
+/* Pills section, closed: round pill icons (grey until hovered), a + to add more */
+.pill-onCard.pill-icons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 2px 2px; }
+.pill-ic-btn { padding: 2px; border: 0; background: transparent; cursor: pointer; border-radius: 99px; line-height: 0; }
+.pill-ic-btn .bpill { margin: 0; pointer-events: none; transition: filter .15s, opacity .15s, transform .15s; }
+.pill-ic-btn:not(.is-filled) .bpill { filter: grayscale(1) opacity(.55); }
+.pill-ic-btn:hover .bpill, .pill-ic-btn:focus-visible .bpill { filter: none; transform: translateY(-1px) scale(1.06); }
+.pill-ic-btn:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+.pill-ic-btn.is-filled { position: relative; } .pill-ic-btn.is-filled::after { content: ''; position: absolute; right: 0; bottom: 2px; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; border: 2px solid #2a2c30; }
+.pill-add-btn { width: 30px; height: 30px; border-radius: 50%; border: 1.5px dashed rgba(255,255,255,.3); background: transparent; color: #9aa3af; font-size: 18px; line-height: 1; cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
+.pill-add-btn:hover { color: #e8eaed; border-color: #60a5fa; background: rgba(96,165,250,.14); }
+.pill-add-row { align-self: flex-start; margin-top: 4px; padding: 8px 14px; border: 1.5px dashed rgba(255,255,255,.25); border-radius: 99px; background: transparent; color: #9aa3af; font-weight: 600; cursor: pointer; }
+.pill-add-row:hover { color: #e8eaed; border-color: #60a5fa; }
+.set-pill-add { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 14px; }

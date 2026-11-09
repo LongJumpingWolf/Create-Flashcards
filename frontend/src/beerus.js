@@ -16,7 +16,18 @@ import {
 } from './sequentialTemplates.js';
 
 export const SETTINGS_KEY = 'beerus-settings-v1';
-export const PILL_COUNT = 4;
+export const PILL_COUNT = 4; // the pills every deck has (the default); more can be added up to MAX_PILLS
+export const MAX_PILLS = 8;
+const EXTRA_PILLS = [
+  { label: 'Mnemonic', color: '#EC4899', icon: '🧠' },
+  { label: 'Clinical', color: '#EF4444', icon: '🩺' },
+  { label: 'Diagram', color: '#14B8A6', icon: '🖼️' },
+  { label: 'Extra', color: '#6366F1', icon: '💡' },
+];
+const extraPill = (index) => {
+  const base = EXTRA_PILLS[(index - PILL_COUNT) % EXTRA_PILLS.length];
+  return { label: base.label, color: base.color, iconType: 'emoji', icon: base.icon, iconData: '', iconUrl: '', open: false, format: 'auto' };
+};
 export const THEME_MEDIA_PREFIX = '_beerus_'; // leading underscore: Anki never deletes it as "unused media"
 
 export const PILL_STYLES = ['bubble', 'solid', 'gradient', 'glass', 'outline', 'neon'];
@@ -114,6 +125,8 @@ function mergeInto(base, saved) {
 /** Fills any missing/old keys from DEFAULT_SETTINGS and clamps the numbers. */
 export function normalizeSettings(saved) {
   const settings = mergeInto(DEFAULT_SETTINGS, saved);
+  const savedPills = Array.isArray(saved?.pills) ? saved.pills : [];
+  for (let i = settings.pills.length; i < Math.min(savedPills.length, MAX_PILLS); i += 1) settings.pills.push(mergeInto(extraPill(i), savedPills[i]));
   const a = settings.appearance;
   a.fontSize = clamp(Number(a.fontSize), 14, 56, 28);
   a.lineHeight = clamp(Number(a.lineHeight), 1, 2, 1.35);
@@ -187,7 +200,27 @@ export function loadSettings() {
 }
 
 export function saveSettings(settings) {
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); return true; } catch { return false; }
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('beerus-settings-saved'));
+    return true;
+  } catch { return false; }
+}
+
+/** Adds one more pill (up to MAX_PILLS) to the saved settings. Returns the new settings, or null at the limit. */
+export function addPillToSettings() {
+  const next = loadSettings();
+  if (next.pills.length >= MAX_PILLS) return null;
+  next.pills.push(extraPill(next.pills.length));
+  return saveSettings(next) ? next : null;
+}
+
+/** Removes the last added pill (the first four always stay). Returns the new settings, or null. */
+export function removeLastPillFromSettings() {
+  const next = loadSettings();
+  if (next.pills.length <= PILL_COUNT) return null;
+  next.pills.pop();
+  return saveSettings(next) ? next : null;
 }
 
 const escapeHtml = (text) => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -518,7 +551,7 @@ function pillsScript(settings) {
     window.__bpKey = function (event) {
       if (event.ctrlKey || event.metaKey) return;
       if (mod === 'shift' ? !event.shiftKey || event.altKey : !event.altKey || event.shiftKey) return;
-      var match = /^Digit([0-4])$/.exec(event.code || '');
+      var match = /^Digit([0-8])$/.exec(event.code || '');
       if (!match) return;
       event.preventDefault();
       if (match[1] === '0') {
@@ -566,7 +599,7 @@ export const BEERUS_NAMES = {
 };
 
 const MODEL_IDS = { basic: 1807392301, cloze: 1807392302, clozeSeq: 1807392303, io: 1807392304, ioSeq: 1807392305, ioRandom: 1807392306 };
-const PILL_FIELDS = Array.from({ length: PILL_COUNT }, (_, index) => `Pill ${index + 1}`);
+const pillFieldNames = (count) => Array.from({ length: count }, (_, index) => `Pill ${index + 1}`);
 
 /**
  * The six BeeRus note types for these settings: { key: { id, name, type, fields, templates, css, sortField, req } }.
@@ -574,6 +607,7 @@ const PILL_FIELDS = Array.from({ length: PILL_COUNT }, (_, index) => `Pill ${ind
  */
 export function buildModels(rawSettings) {
   const settings = normalizeSettings(rawSettings);
+  const PILL_FIELDS = pillFieldNames(settings.pills.length);
   const files = themeMedia(settings);
   const seqIoExtra = SEQ_IO_CSS.startsWith(ANKING_CARD_CSS) ? SEQ_IO_CSS.slice(ANKING_CARD_CSS.length) : SEQ_IO_CSS;
   const common = baseCss(settings) + pillCss(settings, files) + gptCss(settings) + watermarkCss(settings, files) + (settings.behavior.showTags ? TAGS_CSS : '') + (settings.behavior.showHelp ? '' : HELP_CSS);
@@ -645,14 +679,17 @@ export function buildThemePayload(rawSettings) {
   return { models: buildModels(settings), media: themeMedia(settings).map(({ name, base64 }) => ({ name, base64 })) };
 }
 
-/** The pills of a card as exactly PILL_COUNT strings. Accepts an array or { 1: '', 'Pill 2': '' }. */
-export function normalizePills(pills) {
-  const out = Array.from({ length: PILL_COUNT }, () => '');
-  if (Array.isArray(pills)) pills.slice(0, PILL_COUNT).forEach((value, index) => { out[index] = String(value ?? ''); });
+/** The pills of a card as exactly `count` strings (default: how many pills the settings have). Accepts an array or { 1: '', 'Pill 2': '' }. */
+export function normalizePills(pills, count) {
+  let size = count;
+  if (!size) { try { size = loadSettings().pills.length; } catch { size = PILL_COUNT; } }
+  size = Math.min(MAX_PILLS, Math.max(PILL_COUNT, size));
+  const out = Array.from({ length: size }, () => '');
+  if (Array.isArray(pills)) pills.slice(0, size).forEach((value, index) => { out[index] = String(value ?? ''); });
   else if (isObject(pills)) {
     Object.keys(pills).forEach(key => {
-      const match = /([1-4])$/.exec(key);
-      if (match) out[Number(match[1]) - 1] = String(pills[key] ?? '');
+      const match = /([1-8])$/.exec(key);
+      if (match && Number(match[1]) <= size) out[Number(match[1]) - 1] = String(pills[key] ?? '');
     });
   }
   return out.map(html => cleanPillHtml(stripThemeColors(html)));

@@ -1,7 +1,7 @@
 /* global __APP_VERSION__ */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BEERUS_NAMES, DEFAULT_SETTINGS, FONT_FAMILIES, buildModels, loadSettings, normalizeSettings,
+  BEERUS_NAMES, DEFAULT_SETTINGS, MAX_PILLS, PILL_COUNT, addPillToSettings, removeLastPillFromSettings, FONT_FAMILIES, buildModels, loadSettings, normalizeSettings,
   previewDocument, saveSettings, themeMedia,
 } from '../beerus';
 import { clozeToSequentialHtml, ioeMaskSvg, sequentialMasksSvg } from '../apkgBuilder';
@@ -279,7 +279,7 @@ export default function SettingsPage({ onClose, onOpenIcons }) {
         <div className="set-main" data-tab={tab}>
           <Section id="set-types" title="Card types" hint="Every deck exported from this site uses these six note types, so your own note types are never touched.">
             <ul className="set-types">{Object.values(BEERUS_NAMES).map(name => <li key={name}>{name}</li>)}</ul>
-            <p className="set-note">Each type has four pill fields (Pill 1–4). A pill shows on the answer side only when its field has content, so empty pills cost nothing.</p>
+            <p className="set-note">Each type has one field per pill (four by default, up to eight). A pill shows on the answer side only when its field has content, so empty pills cost nothing.</p>
           </Section>
 
           <Section id="set-pills" title="Pills" hint="Toggle buttons under the answer for reference screenshots, comparisons, lecture notes or your own notes.">
@@ -300,6 +300,7 @@ export default function SettingsPage({ onClose, onOpenIcons }) {
                 <Row label="Open by default"><Toggle checked={pill.open} onChange={value => update(['pills', index, 'open'], value)} label={pill.open ? 'Starts expanded' : 'Starts collapsed'} /></Row>
               </div>
             ))}
+            <div className="set-pill-add">{settings.pills.length < MAX_PILLS && <button type="button" className="pill-add-row" onClick={() => { const next = addPillToSettings(); if (next) setSettings(next); }}>+ Add a pill</button>}{settings.pills.length > PILL_COUNT && <button type="button" className="pill-add-row" onClick={() => { if (window.confirm('Remove the last pill? Cards that have content in it will lose that content on the next export.')) { const next = removeLastPillFromSettings(); if (next) setSettings(next); } }}>Remove last pill</button>}<span className="set-note">{settings.pills.length} of {MAX_PILLS} pills</span></div>
             <Row label="Style"><select value={settings.pillStyle.style} onChange={e => update(['pillStyle', 'style'], e.target.value)}><option value="bubble">Icon bubble</option><option value="gradient">Gradient + shine</option><option value="solid">Solid</option><option value="glass">Glass</option><option value="outline">Outline</option><option value="neon">Neon</option></select></Row>
             <Row label="Pattern" hint="A subtle texture over the pill."><select value={settings.pillStyle.pattern} onChange={e => update(['pillStyle', 'pattern'], e.target.value)}><option value="none">None</option><option value="dots">Dots</option><option value="stripes">Stripes</option><option value="grid">Grid</option><option value="zigzag">Zigzag</option></select></Row>
             <Row label="Shape"><select value={settings.pillStyle.shape} onChange={e => update(['pillStyle', 'shape'], e.target.value)}><option value="pill">Round pill</option><option value="rounded">Rounded</option><option value="square">Square</option></select></Row>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PILL_COUNT, gptCss, loadSettings, saveSettings, pillCss, themeMedia, cleanPillHtml, stripThemeColors } from '../beerus';
+import { MAX_PILLS, PILL_COUNT, addPillToSettings, removeLastPillFromSettings, gptCss, loadSettings, saveSettings, pillCss, themeMedia, cleanPillHtml, stripThemeColors } from '../beerus';
 import { chatgptFromClipboard, chatgptForce, chatgptHtmlToGpt } from '../chatgptFormat';
 import { sanitizePastedHtml } from './editorHelpers';
 import { shrinkImageFile } from '../imageUtils';
@@ -21,13 +21,13 @@ const gptKeepText = (scope, settings) => {
 };
 const FORMAT_LABEL = { auto: 'Auto', chatgpt: 'ChatGPT look', plain: 'Plain' };
 
-function PillChip({ pill, index, settings, dim }) {
+function PillChip({ pill, index, settings, dim, compact }) {
   const icon = !settings.pillStyle.showIcons || pill.iconType === 'none' ? null
     : pill.iconType === 'emoji' ? (pill.icon ? <span className="bpill-em">{pill.icon}</span> : null)
       : <span className="bpill-ic" />;
   return (
     <div className={`bpill bpill-${index + 1}${pill.format === 'chatgpt' ? ' bpill-gpt' : ''}${dim ? ' pill-chip-dim' : ''}`}>
-      <summary>{icon}<span className="bpill-label">{pill.label}</span></summary>
+      <summary>{icon}{(!compact || !icon) && <span className="bpill-label">{compact ? pill.label.slice(0, 1) : pill.label}</span>}</summary>
     </div>
   );
 }
@@ -87,6 +87,8 @@ export default function PillFields({ values, onChange, resetKey }) {
     themeMedia(settings).forEach(file => { text = text.split(file.name).join(file.dataUrl); });
     return text;
   }, [settings]);
+  const count = settings.pills.length;
+  const pad = (list, size = count) => Array.from({ length: size }, (_, i) => list?.[i] ?? '');
 
   // Push external changes (loading / clearing a card) into the editable boxes without fighting the caret.
   useEffect(() => {
@@ -102,7 +104,7 @@ export default function PillFields({ values, onChange, resetKey }) {
   const flush = () => {
     window.clearTimeout(timer.current);
     if (!pendingIndex.current.size) return;
-    const next = valuesRef.current.map((value, i) => (pendingIndex.current.has(i) ? (refs.current[i]?.innerHTML ?? value) : value));
+    const next = pad(valuesRef.current).map((value, i) => (pendingIndex.current.has(i) ? (refs.current[i]?.innerHTML ?? value) : value));
     pendingIndex.current.clear();
     onChange(next);
   };
@@ -126,6 +128,20 @@ export default function PillFields({ values, onChange, resetKey }) {
     return () => window.clearTimeout(timer);
   }, [focusIndex, open]);
   const editPill = (index) => { setOpen(true); setFocusIndex(index); };
+  const addPill = () => {
+    const next = addPillToSettings();
+    if (!next) return;
+    setSettings(next);
+    onChange(pad(valuesRef.current, next.pills.length));
+    editPill(next.pills.length - 1);
+  };
+  const removeLastPill = () => {
+    if (!window.confirm('Remove the last pill? Cards that have content in it will lose that content on the next export.')) return;
+    const next = removeLastPillFromSettings();
+    if (!next) return;
+    setSettings(next);
+    onChange(pad(valuesRef.current, next.pills.length));
+  };
 
   // Renaming applies to every card of the deck (the label is part of the exported note type) and is saved in Settings.
   const startRename = (index) => { setDraft(settings.pills[index].label); setRenaming(index); };
@@ -184,7 +200,7 @@ export default function PillFields({ values, onChange, resetKey }) {
     }
   };
 
-  const set = (index, html) => { pendingIndex.current.delete(index); window.clearTimeout(timer.current); onChange(valuesRef.current.map((value, i) => (i === index ? html : value))); };
+  const set = (index, html) => { pendingIndex.current.delete(index); window.clearTimeout(timer.current); onChange(pad(valuesRef.current).map((value, i) => (i === index ? html : value))); };
   const typed = (index) => { pendingIndex.current.add(index); window.clearTimeout(timer.current); timer.current = window.setTimeout(flush, 350); };
   const read = (index) => refs.current[index]?.innerHTML || '';
 
@@ -239,7 +255,7 @@ export default function PillFields({ values, onChange, resetKey }) {
     setNote(prev => ({ ...prev, [index]: gpt ? 'converted' : (html || text.length > 40 ? 'plain' : null) }));
   };
 
-  const filledFlags = values.map(value => cleanPillHtml(value) !== '');
+  const filledFlags = pad(values).map(value => cleanPillHtml(value) !== '');
   const filled = filledFlags.filter(Boolean).length;
 
   return (
@@ -250,13 +266,16 @@ export default function PillFields({ values, onChange, resetKey }) {
         <small>{filled ? `${filled} on the card` : 'optional'}</small>
       </button>
       {!open && (
-        <div className={`pill-onCard bs-${settings.pillStyle.style}`} style={EDITOR_PILL_STYLE} aria-label="Pills that will appear on the card">
-          {filled ? settings.pills.map((pill, index) => (filledFlags[index] ? <button type="button" key={index} className="pill-chip-btn" onClick={() => editPill(index)} title={`Edit the ${pill.label} pill`} aria-label={`Edit the ${pill.label} pill`}><PillChip pill={pill} index={index} settings={settings} /></button> : null)) : <span className="pill-onCard-empty">Nothing here yet. A pill only appears on the card when its field has content.</span>}
+        <div className={`pill-onCard pill-icons bs-${settings.pillStyle.style}`} style={{ '--ics': 1, '--gs': 0.62, fontSize: '11px' }} aria-label="Pills: click one to write its content">
+          {settings.pills.map((pill, index) => (
+            <button type="button" key={index} className={`pill-ic-btn${filledFlags[index] ? ' is-filled' : ''}`} onClick={() => editPill(index)} title={`${pill.label}${filledFlags[index] ? ' (on the card)' : ' (empty): click to write'}`} aria-label={`Edit the ${pill.label} pill`}><PillChip pill={pill} index={index} settings={settings} compact /></button>
+          ))}
+          {count < MAX_PILLS && <button type="button" className="pill-add-btn" onClick={addPill} title="Add another pill" aria-label="Add another pill">+</button>}
         </div>
       )}
       {open && (
         <div className="pill-fields-body">
-          {Array.from({ length: PILL_COUNT }, (_, index) => {
+          {Array.from({ length: count }, (_, index) => {
             const pill = settings.pills[index];
             return (
               <div className={`pill-field${filledFlags[index] ? '' : ' pill-field-empty'}`} key={index}>
@@ -277,6 +296,7 @@ export default function PillFields({ values, onChange, resetKey }) {
                   <label className="pill-field-btn">Add image<input type="file" accept="image/*" hidden onChange={e => { addFile(index, e.target.files?.[0]); e.target.value = ''; }} /></label>
                   <button type="button" className="pill-field-btn" onClick={() => { const url = window.prompt('Image link (https://…)'); if (url && /^https?:\/\//i.test(url.trim())) insertImage(index, url.trim()); }}>Image link</button>
                   {values[index] && <button type="button" className="pill-field-btn" onClick={() => set(index, '')}>Clear</button>}
+                  {index >= PILL_COUNT && index === count - 1 && <button type="button" className="pill-field-btn" onClick={removeLastPill} title="Remove this pill">Remove pill</button>}
                 </div>
                 {note[index] && (
                   <div className={`pill-note pill-note-${note[index]}`} role="status">
@@ -311,6 +331,7 @@ export default function PillFields({ values, onChange, resetKey }) {
               </div>
             );
           })}
+          {count < MAX_PILLS && <button type="button" className="pill-add-row" onClick={addPill}>+ Add another pill</button>}
         </div>
       )}
     </section>

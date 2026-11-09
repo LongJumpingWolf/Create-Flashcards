@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { gptCss, loadSettings, pillCss, themeMedia } from '../beerus';
 
 /**
@@ -6,8 +6,13 @@ import { gptCss, loadSettings, pillCss, themeMedia } from '../beerus';
  * Used wherever you choose a pill: the PDF capture dialog and the capture tray.
  * `variant="icon"` shows just the round icon (name in the tooltip) for tight places.
  */
-export default function PillButtons({ onPick, variant = 'full', showKeys = false, keyOffset = 1, count = 4 }) {
-  const settings = useMemo(() => loadSettings(), []);
+export default function PillButtons({ onPick, variant = 'full', showKeys = false, keyOffset = 1, count = 8 }) {
+  const [settings, setSettings] = useState(() => loadSettings());
+  useEffect(() => {
+    const refresh = () => setSettings(loadSettings());
+    window.addEventListener('beerus-settings-saved', refresh);
+    return () => window.removeEventListener('beerus-settings-saved', refresh);
+  }, []);
   const css = useMemo(() => {
     let text = pillCss(settings) + gptCss(settings);
     themeMedia(settings).forEach(file => { text = text.split(file.name).join(file.dataUrl); });
@@ -25,7 +30,7 @@ export default function PillButtons({ onPick, variant = 'full', showKeys = false
             : <span className="bpill-ic" />;
         return (
           <button key={index} type="button" className="pb-btn" onClick={() => onPick(`pill${index + 1}`, index)} title={`Add to the ${pill.label} pill`} aria-label={`Add to the ${pill.label} pill`}>
-            {showKeys && <kbd>{index + keyOffset + 3}</kbd>}
+            {showKeys && index < 4 && <kbd>{index + keyOffset + 3}</kbd>}
             <div className={`bpill bpill-${index + 1}`}>
               <summary>{icon}{(!compact || !icon) && <span className="bpill-label">{compact ? pill.label.slice(0, 1) : pill.label}</span>}</summary>
             </div>
