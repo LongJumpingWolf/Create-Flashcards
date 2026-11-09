@@ -6,6 +6,13 @@ import ImportCardsModal from './ImportCardsModal';
 import PillFields, { PreviewPills } from './PillFields';
 import CardPreviewFrame, { DEVICES as PREVIEW_DEVICES } from './CardPreviewFrame';
 import { buildThemePayload, loadSettings, normalizePills } from '../beerus';
+import { repairOldChatGptPaste } from '../chatgptFormat';
+
+// Pills of saved cards: content pasted from ChatGPT by an older version is rebuilt in the ChatGPT look (pills set to Plain are left alone).
+const repairPills = (pills) => {
+  const formats = loadSettings().pills.map(pill => pill.format);
+  return normalizePills(pills).map((html, index) => (formats[index] === 'plain' ? html : repairOldChatGptPaste(html)));
+};
 import { hasSavedPdf } from '../pdfResumeStorage';
 import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView, TableGridPicker } from './editorTools';
 import { smartTyping, smartEnter, listTab, markdownToHtml, looksLikeMarkdown, isPlainHtml, tidyHtml, SMART_DEFAULTS } from './smartTyping';
@@ -771,7 +778,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
         question: c.question,
         answer: c.answer,
         tags: c.tags,
-        pills: normalizePills(c.pills),
+        pills: repairPills(c.pills),
         ...(c.type === 'Cloze' ? { sequential: Boolean(c.sequential) } : {}),
         ...(c.type === 'Image Occlusion' ? { image_data: c.imageData, image_width: c.imageWidth, masks: c.masks, occlusion_mode: c.occlusionMode, header: c.header || '' } : {}),
       }))
@@ -907,7 +914,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
     const displayFront = card.type === 'Cloze' ? colorClozeContent(question, clozeColor) : question;
     setFront(question);
     setBack(answer);
-    setPills(normalizePills(card.pills)); setPillsResetKey(key => key + 1);
+    setPills(repairPills(card.pills)); setPillsResetKey(key => key + 1);
     setCurrentTags(card.tags || []);
 
     if (frontRef.current) frontRef.current.innerHTML = displayFront;
@@ -1132,7 +1139,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
       // Occlusion image/masks are not persisted, so an empty Image Occlusion form would be a dead end.
       const initialCardType = state.cardType && state.cardType !== 'Image Occlusion' ? state.cardType : "Basic";
       setCardType(initialCardType);
-      setCards(state.cards || []);
+      setCards((state.cards || []).map(saved => (saved.pills ? { ...saved, pills: repairPills(saved.pills) } : saved)));
       setCurrentTags(state.tags || []);
       setFront(frontContent || "");
       setBack(backContent || "");

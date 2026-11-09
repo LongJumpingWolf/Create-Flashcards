@@ -30,6 +30,19 @@ export function chatgptForce({ html, text }) {
   return null;
 }
 
+/**
+ * Content that an older version of the site pasted from ChatGPT is stored as a pile of wrapper <div>s (and headings that wrap
+ * whole sections), without the ChatGPT panel and without pictures. Recognise that signature and rebuild it in the ChatGPT
+ * look, so saved cards fix themselves. Anything else (including your own notes) is returned untouched.
+ */
+export function repairOldChatGptPaste(html) {
+  const text = String(html ?? '');
+  if (!text || /class="gpt"/.test(text)) return text;
+  const looksOld = /<li><div><div><p>|<h[1-6]><div>|<div><div><p>|href="https:\/\/images\.openai\.com|<div><div><\/div><div>/.test(text);
+  if (!looksOld) return text;
+  try { return chatgptHtmlToGpt(text) || text; } catch { return text; }
+}
+
 /** True when clipboard HTML clearly comes from a ChatGPT answer. */
 export function isChatGptHtml(html) {
   return /data-d-component=|data-message-author-role|data-turn-id|data-start="\d+"|class="[^"]*\b(?:markdown|prose|TextBase|Badge)[\w-]*/i.test(html || '');
