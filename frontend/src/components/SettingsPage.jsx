@@ -130,6 +130,8 @@ function ColorField({ value, onChange, label }) {
 // --------------------------------------------------------------------------------------------
 export default function SettingsPage({ onClose, onOpenIcons }) {
   const [settings, setSettings] = useState(() => loadSettings());
+  const [tab, setTabState] = useState(() => { try { return localStorage.getItem('beerus-settings-tab') || 'set-pills'; } catch { return 'set-pills'; } });
+  const setTab = (id) => { setTabState(id); try { localStorage.setItem('beerus-settings-tab', id); } catch { /* storage unavailable */ } window.scrollTo?.({ top: 0 }); };
   const [previewType, setPreviewType] = useState('cloze');
   const [side, setSide] = useState('answer');
   const [night, setNight] = useState(true);
@@ -243,13 +245,13 @@ export default function SettingsPage({ onClose, onOpenIcons }) {
       </header>
       {message && <div className="set-message" role="status">{message}</div>}
 
-      <nav className="set-jump" aria-label="Jump to a section">
-        {[['set-types', 'Card types'], ['set-pills', 'Pills'], ['set-pillcontent', 'Pill content text'], ['set-chatgpt', 'ChatGPT look'], ['set-watermark', 'Watermark'], ['set-appearance', 'Appearance'], ['set-behavior', 'Review'], ['set-export', 'Export']].map(([id, label]) => (
-          <button type="button" key={id} onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{label}</button>
+      <nav className="set-jump" role="tablist" aria-label="Settings sections">
+        {[['set-types', 'Card types'], ['set-pills', 'Pills'], ['set-pillcontent', 'Pill content text'], ['set-chatgpt', 'ChatGPT look'], ['set-watermark', 'Watermark'], ['set-appearance', 'Appearance'], ['set-behavior', 'Review'], ['set-export', 'Export'], ['all', 'Show all']].map(([id, label]) => (
+          <button type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} key={id} onClick={() => setTab(id)}>{label}</button>
         ))}
       </nav>
       <div className="set-layout">
-        <div className="set-main">
+        <div className="set-main" data-tab={tab}>
           <Section id="set-types" title="Card types" hint="Every deck exported from this site uses these six note types, so your own note types are never touched.">
             <ul className="set-types">{Object.values(BEERUS_NAMES).map(name => <li key={name}>{name}</li>)}</ul>
             <p className="set-note">Each type has four pill fields (Pill 1–4). A pill shows on the answer side only when its field has content, so empty pills cost nothing.</p>
