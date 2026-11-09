@@ -6,6 +6,7 @@ import { sanitizePastedHtml } from './editorHelpers';
 import { shrinkImageFile } from './PillFields';
 import CardPreviewFrame from './CardPreviewFrame';
 import { setFullEditor } from '../useDevice';
+import { logAdded } from '../activity';
 import './mobile.css';
 
 const STATE_KEY = 'ankiDeckBuilderState';
@@ -111,12 +112,13 @@ export default function MobileShell() {
     if (!plain(front) && !/<img/i.test(front)) { say('Write the front first.'); return; }
     if (type === 'Cloze' && !/\{\{c\d+::[^}]+\}\}/.test(front)) { say('Select some words and tap Cloze to hide them.'); return; }
     if (type === 'Basic' && !plain(back) && !/<img/i.test(back)) { say('Add the answer on the back.'); return; }
-    const card = { type, question: front, answer: back, tags, pills: normalizePills(pills), created: new Date().toLocaleTimeString() };
+    const card = { type, question: front, answer: back, tags, pills: normalizePills(pills), created: new Date().toLocaleTimeString(), createdAt: Date.now() };
     if (editing !== null) {
       setCards(prev => prev.map((old, i) => (i === editing ? { ...old, ...card, created: old.created } : old)));
       say('Card saved.');
     } else {
       setCards(prev => [card, ...prev]);
+      logAdded(1);
       say(`Card added. ${cards.length + 1} in the deck.`);
     }
     clearForm();

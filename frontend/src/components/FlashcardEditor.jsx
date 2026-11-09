@@ -5,7 +5,7 @@ import DocumentationModal from './DocumentationModal';
 import ImportCardsModal from './ImportCardsModal';
 import PillFields, { PreviewPills } from './PillFields';
 import CardBrowser from './CardBrowser';
-import FolderMenu from './FolderMenu';
+import { logAdded } from '../activity';
 import { readFolders, writeFolders, readSnapshot, writeSnapshot, removeSnapshot, newFolderId } from '../folders';
 import { installImageDrop, readDroppedImages } from '../dropImages';
 import CardPreviewFrame, { DEVICES as PREVIEW_DEVICES } from './CardPreviewFrame';
@@ -399,7 +399,7 @@ const RenderTagHierarchy = ({ nodes, level = 0, currentTags, onSelectTag, getTag
 };
 
 
-export default function FlashcardEditor({ onOpenSettings }) {
+export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
   const [deckName, setDeckName] = useState(initialDecks[0]);
   const [cardType, setCardType] = useState("Basic");
   const [front, setFront] = useState("");
@@ -706,6 +706,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
       const ioCard = { type: cardType, question: '', answer: finalBack, tags: currentTags, pills, created: new Date().toLocaleTimeString(), imageData: finalOcclusionImage, imageWidth: occlusionImageWidth, masks: occlusionMasks, occlusionMode, restoreType: previousCardTypeRef.current };
       if (editingIndex !== null) return updateCard();
       setCards(prev => [ioCard, ...prev]);
+      logAdded(1);
       window.clearTimeout(frontSaveTimerRef.current); window.clearTimeout(backSaveTimerRef.current);
       setFormMessage('');
       if (!fieldPrefs.pinned.back) { setBack(''); if (backRef.current) backRef.current.innerHTML = ''; }
@@ -746,10 +747,11 @@ export default function FlashcardEditor({ onOpenSettings }) {
         tags: currentTags,
         pills,
         ...(cardType === 'Cloze' ? { sequential: clozeSequential } : {}),
-        created: new Date().toLocaleTimeString()
+        created: new Date().toLocaleTimeString(), createdAt: Date.now()
     };
 
     setCards(prev => [newCard, ...prev]);
+    logAdded(1);
 
     window.clearTimeout(frontSaveTimerRef.current); window.clearTimeout(backSaveTimerRef.current);
     // Pinned fields keep their content (Anki's "sticky" fields), e.g. a shared source or hint.
@@ -916,6 +918,27 @@ export default function FlashcardEditor({ onOpenSettings }) {
     if (id === folders.active) activateFolder(rest.list[0].id, rest, false);
     else { setFolders(rest); writeFolders(rest); }
   };
+  const renameFolder = (id, name) => {
+    const next = { ...folders, list: folders.list.map(f => (f.id === id ? { ...f, name } : f)) };
+    setFolders(next); writeFolders(next);
+    if (id === folders.active) setDeckName(name);
+    else { const snap = readSnapshot(id); if (snap) writeSnapshot(id, { ...snap, deck: name }); }
+  };
+  // The Folders screen asks for changes through an event; the editor owns the cards, so it carries them out.
+  const folderActionRef = useRef(null);
+  folderActionRef.current = (detail) => {
+    if (detail.type === 'switch') switchFolder(detail.id);
+    else if (detail.type === 'create') createFolder(detail.name);
+    else if (detail.type === 'delete') deleteFolder(detail.id);
+    else if (detail.type === 'rename') renameFolder(detail.id, detail.name);
+    window.setTimeout(() => window.dispatchEvent(new Event('beerus-folders-changed')), 60);
+  };
+  useEffect(() => {
+    const handler = (event) => folderActionRef.current?.(event.detail || {});
+    window.addEventListener('beerus-folder-action', handler);
+    return () => window.removeEventListener('beerus-folder-action', handler);
+  }, []);
+
   const moveCards = (indexes, toId) => {
     const target = readSnapshot(toId) || { deck: folders.list.find(f => f.id === toId)?.name || 'Default Deck', cards: [] };
     const chosen = new Set(indexes);
@@ -2140,6 +2163,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
     if (!imported.length) return;
     const stamp = new Date().toLocaleTimeString();
     setCards(prev => [...imported.map(card => ({ ...card, created: stamp })), ...prev]);
+    logAdded(imported.length);
     if (importedDeckName && (!deckName.trim() || initialDecks.includes(deckName))) setDeckName(importedDeckName);
     setExportMessage(`Imported ${imported.length} card${imported.length === 1 ? '' : 's'}. Review them in the card library, then export.`);
   };
@@ -2192,7 +2216,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
         </div>
         <div className="header-status"><span className={`save-dot ${saveStatus === 'Storage full' ? 'save-error' : ''}`} /><span>{saveStatus === 'Saved' ? 'All changes saved' : saveStatus}</span><span className="status-divider" /><span>{cards.length} {cards.length === 1 ? 'card' : 'cards'}</span></div>
         <div className="header-actions">
-          <FolderMenu folders={folders} activeCards={cards.length} onSwitch={switchFolder} onCreate={createFolder} onDelete={deleteFolder} />
+          <button onClick={() => onOpenFolders?.()} title="Folders: separate decks, today's new cards and your activity calendar" className="icon-button fm-btn"><Layers3 size={18} /><span>{folders.list.find(f => f.id === folders.active)?.name || 'Folders'}</span></button>
           <button onClick={() => setShowCardBrowser(true)} title="Browse all cards (full screen)" className="icon-button"><BookOpen size={18} /><span>Browse</span></button>
           <button onClick={() => setShowImportModal(true)} title="Import cards from JSON (AI-generated)" className="icon-button"><Upload size={18} /><span>Import</span></button>
           <button onClick={() => onOpenSettings?.()} title="Card types, pills, watermark and look" className="icon-button"><Settings size={18} /><span>Settings</span></button>

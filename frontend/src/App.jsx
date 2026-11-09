@@ -7,9 +7,10 @@ const MobileShell = lazy(() => import('./components/MobileShell'));
 
 const SettingsPage = lazy(() => import('./components/SettingsPage'));
 const IconMaker = lazy(() => import('./components/IconMaker'));
+const FoldersPage = lazy(() => import('./components/FoldersPage'));
 const routeFromHash = () => {
   if (typeof window === 'undefined') return '';
-  return window.location.hash === '#settings' ? 'settings' : window.location.hash === '#icons' ? 'icons' : '';
+  return window.location.hash === '#settings' ? 'settings' : window.location.hash === '#icons' ? 'icons' : window.location.hash === '#folders' ? 'folders' : '';
 };
 
 function App() {
@@ -54,8 +55,9 @@ function App() {
   return (
     <div className="min-h-screen">
       {/* The editor stays mounted (hidden) while settings are open, so nothing in progress is lost. */}
-      <div hidden={route !== ''}><FlashcardEditor onOpenSettings={() => go('settings')} /></div>
+      <div hidden={route !== ''}><FlashcardEditor onOpenSettings={() => go('settings')} onOpenFolders={() => go('folders')} /></div>
       {route === 'settings' && <Suspense fallback={<div className="set-loading">Loading settings…</div>}><SettingsPage onClose={() => go('')} onOpenIcons={() => go('icons')} /></Suspense>}
+      {route === 'folders' && <Suspense fallback={<div className="set-loading">Loading folders…</div>}><FoldersPage onClose={() => go('')} /></Suspense>}
       {route === 'icons' && <Suspense fallback={<div className="set-loading">Loading icon maker…</div>}><IconMaker onClose={() => go('settings')} /></Suspense>}
     </div>
   );
