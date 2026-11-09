@@ -1557,3 +1557,23 @@ body { background:#202124; }
 
 .pill-chip-btn { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; border-radius: 99px; transition: transform .12s, filter .12s; } .pill-chip-btn:hover { transform: translateY(-1px); filter: brightness(1.08); } .pill-chip-btn:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
 .pill-chip-btn .bpill, .pill-chip-btn summary { cursor: pointer; pointer-events: none; }
+
+/* Captures: a slim side bar over the PDF instead of a tray that eats its height */
+.pdf-view-wrap { position: relative; flex: 1; min-height: 140px; display: flex; flex-direction: column; min-width: 0; }
+.pdf-view-wrap > .pdf-page-viewport { flex: 1; }
+.snip-side { position: absolute; z-index: 8; top: 10px; right: 12px; bottom: 10px; width: 62px; display: flex; flex-direction: column; gap: 8px; padding: 6px; border: 1px solid rgba(255,255,255,.14); border-radius: 14px; background: rgba(32,34,37,.94); box-shadow: 0 8px 26px rgba(0,0,0,.45); backdrop-filter: blur(6px); transition: width .18s ease; overflow: hidden; }
+.snip-side.open { width: 272px; }
+.snip-side.pulse { animation: snip-pulse 1.4s ease-out; }
+@keyframes snip-pulse { 0% { box-shadow: 0 0 0 0 rgba(96,165,250,.8); } 100% { box-shadow: 0 0 0 14px rgba(96,165,250,0); } }
+.snip-side-toggle { flex: none; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 34px; border: 0; border-radius: 10px; background: rgba(255,255,255,.07); color: #e8eaed; cursor: pointer; font-size: 12px; font-weight: 700; } .snip-side-toggle b { min-width: 22px; padding: 1px 6px; border-radius: 99px; background: #3b82f6; color: #fff; font-size: 12px; } .snip-side-toggle:hover { background: rgba(255,255,255,.13); }
+.snip-side .snip-tray-list { flex: 1; min-height: 0; flex-direction: column; gap: 8px; padding: 0; overflow-x: hidden; overflow-y: auto; }
+.snip-side .snip-tray-item { min-width: 0; width: auto; padding: 4px; grid-template-columns: 1fr; border-radius: 10px; }
+.snip-side .snip-tray-item > img { grid-row: auto; width: 100%; height: 44px; }
+.snip-side:not(.open) .snip-tray-info, .snip-side:not(.open) .snip-tray-actions, .snip-side:not(.open) .snip-tray-pills { display: none; }
+.snip-side .snip-number { position: absolute; margin: 4px 0 0 4px; }
+.snip-side.open .snip-tray-item { grid-template-columns: 54px 1fr; gap: 6px 8px; padding: 6px; } .snip-side.open .snip-tray-item > img { width: 54px; height: 54px; grid-row: span 2; }
+.snip-side:not(.open) .snip-tray-item { position: relative; } .snip-side:not(.open) .snip-tray-info { display: none; }
+@media (max-width: 700px) { .snip-side.open { width: min(272px, calc(100% - 24px)); } }
+.snip-side { bottom: auto; max-height: calc(100% - 20px); }
+.snip-side .snip-number { position: static; margin: 0 6px 0 0; }
+.snip-side:not(.open) .snip-number { position: absolute; margin: 4px 0 0 4px; z-index: 1; }
