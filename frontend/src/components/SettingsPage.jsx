@@ -255,6 +255,8 @@ export default function SettingsPage({ onClose, onOpenIcons }) {
                 <Row label="Open by default"><Toggle checked={pill.open} onChange={value => update(['pills', index, 'open'], value)} label={pill.open ? 'Starts expanded' : 'Starts collapsed'} /></Row>
               </div>
             ))}
+            <Row label="Style"><select value={settings.pillStyle.style} onChange={e => update(['pillStyle', 'style'], e.target.value)}><option value="gradient">Gradient + shine</option><option value="solid">Solid</option><option value="glass">Glass</option><option value="outline">Outline</option><option value="neon">Neon</option></select></Row>
+            <Row label="Pattern" hint="A subtle texture over the pill."><select value={settings.pillStyle.pattern} onChange={e => update(['pillStyle', 'pattern'], e.target.value)}><option value="none">None</option><option value="dots">Dots</option><option value="stripes">Stripes</option><option value="grid">Grid</option><option value="zigzag">Zigzag</option></select></Row>
             <Row label="Shape"><select value={settings.pillStyle.shape} onChange={e => update(['pillStyle', 'shape'], e.target.value)}><option value="pill">Round pill</option><option value="rounded">Rounded</option><option value="square">Square</option></select></Row>
             <Row label="Size"><select value={settings.pillStyle.size} onChange={e => update(['pillStyle', 'size'], e.target.value)}><option value="sm">Small</option><option value="md">Medium</option><option value="lg">Large</option></select></Row>
             <Row label="Icons"><Toggle checked={settings.pillStyle.showIcons} onChange={value => update(['pillStyle', 'showIcons'], value)} label="Show icons on pills" /></Row>

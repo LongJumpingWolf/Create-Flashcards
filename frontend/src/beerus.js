@@ -19,6 +19,9 @@ export const SETTINGS_KEY = 'beerus-settings-v1';
 export const PILL_COUNT = 4;
 export const THEME_MEDIA_PREFIX = '_beerus_'; // leading underscore: Anki never deletes it as "unused media"
 
+export const PILL_STYLES = ['solid', 'gradient', 'glass', 'outline', 'neon'];
+export const PILL_PATTERNS = ['none', 'dots', 'stripes', 'grid', 'zigzag'];
+
 export const FONT_FAMILIES = {
   arial: { label: 'Arial (AnKing)', css: '"Arial Greek", Arial, sans-serif' },
   system: { label: 'System UI', css: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
@@ -49,7 +52,7 @@ export const DEFAULT_SETTINGS = {
     rememberPills: true,    // keep opened pills open on the next card (while the review session lasts)
     showTags: false,        // tags under the answer
   },
-  pillStyle: { shape: 'pill', size: 'md', showIcons: true },
+  pillStyle: { shape: 'pill', size: 'md', showIcons: true, style: 'gradient', pattern: 'dots' },
   pills: [
     { label: 'Reference', color: '#3B82F6', iconType: 'emoji', icon: '📖', iconData: '', iconUrl: '', open: false },
     { label: 'Compare', color: '#10B981', iconType: 'emoji', icon: '⚖️', iconData: '', iconUrl: '', open: false },
@@ -99,6 +102,9 @@ export function normalizeSettings(saved) {
     if (!['emoji', 'image', 'url', 'none'].includes(pill.iconType)) pill.iconType = 'emoji';
     if (!/^#[0-9a-f]{6}$/i.test(pill.color)) pill.color = '#3B82F6';
   });
+  const ps = settings.pillStyle;
+  if (!PILL_STYLES.includes(ps.style)) ps.style = 'gradient';
+  if (!PILL_PATTERNS.includes(ps.pattern)) ps.pattern = 'dots';
   const e = settings.export;
   e.maxImageEdge = clamp(Number(e.maxImageEdge), 600, 4000, 2000);
   e.jpegQuality = clamp(Number(e.jpegQuality), 0.5, 1, 0.86);
@@ -234,24 +240,57 @@ code { font-family: monospace; background: rgba(128, 128, 128, .2); padding: 0 4
 `;
 }
 
+function shade(hex, amount) {
+  const n = parseInt(hex.slice(1), 16);
+  const channel = (value) => Math.round(amount < 0 ? value * (1 + amount) : value + (255 - value) * amount);
+  return `#${[n >> 16, (n >> 8) & 255, n & 255].map(value => channel(value).toString(16).padStart(2, '0')).join('')}`;
+}
+
+const PATTERNS = {
+  none: '',
+  dots: 'radial-gradient(rgba(255,255,255,.28) 1.3px, transparent 1.7px) 0 0 / 8px 8px',
+  stripes: 'repeating-linear-gradient(45deg, rgba(255,255,255,.17) 0 4px, transparent 4px 9px)',
+  grid: 'linear-gradient(rgba(255,255,255,.16) 1px, transparent 1px) 0 0 / 8px 8px, linear-gradient(90deg, rgba(255,255,255,.16) 1px, transparent 1px) 0 0 / 8px 8px',
+  zigzag: 'repeating-linear-gradient(135deg, rgba(255,255,255,.15) 0 3px, transparent 3px 7px), repeating-linear-gradient(45deg, rgba(0,0,0,.08) 0 3px, transparent 3px 7px)',
+};
+
+// One rule set per visual style. --bp is the pill colour, --bpl / --bpd its lighter / darker shades.
+function pillSurface(style, pattern) {
+  const overlay = PATTERNS[pattern] ? `${PATTERNS[pattern]}, ` : '';
+  const sheen = 'linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,0) 55%)';
+  switch (style) {
+    case 'solid':
+      return `background: ${overlay}linear-gradient(var(--bp), var(--bp)); color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35);`;
+    case 'glass':
+      return `background: ${overlay}linear-gradient(180deg, rgba(255,255,255,.3), rgba(255,255,255,.06)), var(--bp); color: #fff; border: 1px solid rgba(255,255,255,.4); box-shadow: 0 2px 6px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.5);`;
+    case 'outline':
+      return `background: ${overlay}linear-gradient(var(--bpt), var(--bpt)); color: inherit; border: 2px solid var(--bp); box-shadow: none; text-shadow: none;`;
+    case 'neon':
+      return `background: ${overlay}linear-gradient(#0d0d14, #0d0d14); color: var(--bpl); border: 1.5px solid var(--bp); box-shadow: 0 0 7px var(--bp), inset 0 0 7px var(--bpt); text-shadow: 0 0 6px var(--bp);`;
+    default: // gradient
+      return `background: ${overlay}${sheen}, linear-gradient(135deg, var(--bpl), var(--bp) 55%, var(--bpd)); color: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.35), inset 0 -1px 0 rgba(0,0,0,.18); text-shadow: 0 1px 1px rgba(0,0,0,.3);`;
+  }
+}
+
 export function pillCss(settings, files = themeMedia(settings)) {
   const p = settings.pillStyle;
   const lines = [`
-#bpills { margin: 1.1rem auto 0; display: flex; flex-direction: column; align-items: center; gap: .45rem; font-size: ${SIZES[p.size] || SIZES.md}; font-style: normal; text-align: center; }
+#bpills { margin: 1.1rem auto 0; display: flex; flex-direction: column; align-items: center; gap: .5rem; font-size: ${SIZES[p.size] || SIZES.md}; font-style: normal; text-align: center; }
 .bpill { max-width: 96%; }
-.bpill > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: .45em; padding: .32em .95em; border-radius: ${RADIUS[p.shape] || RADIUS.pill}; background: var(--bp); color: #fff; font-weight: 700; font-family: Arial, sans-serif; line-height: 1.2; user-select: none; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+.bpill > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: .45em; padding: .34em 1em; border-radius: ${RADIUS[p.shape] || RADIUS.pill}; font-weight: 700; font-family: Arial, sans-serif; line-height: 1.2; letter-spacing: .01em; user-select: none; transition: filter .12s, transform .08s; ${pillSurface(p.style, p.pattern)} }
+.bpill > summary:hover { filter: brightness(1.08); }
+.bpill > summary:active { transform: scale(.97); }
 .bpill > summary::-webkit-details-marker { display: none; }
 .bpill > summary::marker { content: ""; }
 .bpill > summary::after { content: "\\25BE"; font-size: .85em; opacity: .85; transition: transform .15s; }
 .bpill[open] > summary::after { transform: rotate(180deg); }
-.bpill[open] > summary { filter: brightness(.92); }
 .bpill-ic { display: inline-block; width: 1.2em; height: 1.2em; background: center / contain no-repeat; }
 .bpill-em { font-size: 1.1em; line-height: 1; }
-.bpill-body { margin-top: .55rem; padding: .35rem .5rem; border-radius: .5em; border: 1px solid rgba(128,128,128,.4); background: rgba(128,128,128,.1); font-size: .72rem; line-height: 1.4; text-align: ${settings.appearance.align === 'left' ? 'left' : 'center'}; }
-.bpill-body img { max-width: 100%; height: auto; }
+.bpill-body { margin-top: .55rem; padding: .45rem .7rem; border-radius: .55em; border: 1px solid rgba(128,128,128,.35); border-left: 4px solid var(--bp); background: rgba(128,128,128,.1); font-size: .72rem; line-height: 1.4; text-align: ${settings.appearance.align === 'left' ? 'left' : 'center'}; }
+.bpill-body img { max-width: 100%; height: auto; border-radius: .3em; }
 `];
   settings.pills.forEach((pill, index) => {
-    lines.push(`.bpill-${index + 1} { --bp: ${pill.color}; }\n`);
+    lines.push(`.bpill-${index + 1} { --bp: ${pill.color}; --bpl: ${shade(pill.color, 0.28)}; --bpd: ${shade(pill.color, -0.3)}; --bpt: ${pill.color}2E; }\n`);
     lines.push(pillIconCss(pill, index, files));
   });
   return lines.join('');
