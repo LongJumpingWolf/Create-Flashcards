@@ -1398,3 +1398,8 @@ body { background:#202124; }
 .set-version { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .card-preview-frame-wrap { display: flex; justify-content: center; }
 .card-preview-frame-wrap iframe { border: 1px solid rgba(128,128,128,.3); border-radius: 12px; background: #272828; }
+
+.set-jump { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 20px 0; max-width: 1500px; margin: 0 auto; }
+.set-jump button { padding: 4px 12px; border-radius: 99px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.set-jump button:hover { border-color: var(--accent); color: var(--accent); }
+.set-section { scroll-margin-top: 92px; }

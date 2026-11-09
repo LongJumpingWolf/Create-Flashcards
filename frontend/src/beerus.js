@@ -66,8 +66,8 @@ export const DEFAULT_SETTINGS = {
     fontSize: 28,           // px, one number scales the whole card (AnKing default 28)
     lineHeight: 1.35,
     align: 'center',        // center | left
-    day: { bg: '#D1CFCE', text: '#000000', cloze: '#0000FF', extra: '#000080', accent: '#F39C12' },
-    night: { bg: '#272828', text: '#FFFAFA', cloze: '#4297F9', extra: '#FF00FF', accent: '#F39C12' },
+    day: { bg: '#D1CFCE', text: '#000000', cloze: '#0000FF', extra: '#000080' },
+    night: { bg: '#272828', text: '#FFFAFA', cloze: '#4297F9', extra: '#FF00FF' },
     extraItalic: true,
     imageMaxWidth: 85,      // % of the card width
     listMaxWidth: 50,       // % - bullet lists stay a compact block inside the centred card
@@ -82,7 +82,7 @@ export const DEFAULT_SETTINGS = {
     showTags: false,        // tags under the answer
   },
   // text inside an opened pill (px, so it never exceeds the card text; the card text is appearance.fontSize)
-  pillBody: { fontFamily: 'auto', customFont: '', capToCard: true, fontSize: 18, lineHeight: 1.4, align: 'auto', colorMode: 'auto', dayColor: '#1A1A1A', nightColor: '#E8E8E8', accentEdge: true, frame: true },
+  pillBody: { fontFamily: 'auto', customFont: '', capToCard: true, fontSize: 16, lineHeight: 1.4, align: 'auto', colorMode: 'auto', dayColor: '#1A1A1A', nightColor: '#E8E8E8', accentEdge: true, frame: true },
   pillStyle: { shape: 'pill', scale: 100, iconScale: 125, showIcons: true, style: 'bubble', pattern: 'none' },
   pills: [
     { label: 'Reference', color: '#3B82F6', iconType: 'emoji', icon: '📖', iconData: '', iconUrl: '', open: false, format: 'auto' },
@@ -90,7 +90,7 @@ export const DEFAULT_SETTINGS = {
     { label: 'Lecture notes', color: '#F59E0B', iconType: 'emoji', icon: '📝', iconData: '', iconUrl: '', open: false, format: 'auto' },
     { label: 'My notes', color: '#A855F7', iconType: 'emoji', icon: '⭐', iconData: '', iconUrl: '', open: false, format: 'auto' },
   ],
-  chatgpt: { followNight: false, day: { bg: '#FCFCFC', text: '#0D0D0D' }, night: { bg: '#212121', text: '#EDEDED' }, radius: 16, padding: 16 },
+  chatgpt: { sizeMode: 'content', fontSize: 16, fontFamily: 'chatgpt', followNight: false, day: { bg: '#FCFCFC', text: '#0D0D0D' }, night: { bg: '#212121', text: '#EDEDED' }, radius: 16, padding: 16 },
   watermark: { enabled: false, iconType: 'default', iconData: '', iconUrl: '', size: 22, opacity: 0.45, corner: 'bottom-right' },
   export: { maxImageEdge: 2000, jpegQuality: 0.86 },
 };
@@ -139,10 +139,13 @@ export function normalizeSettings(saved) {
   const gp = settings.chatgpt;
   ['bg', 'text'].forEach(key => { ['day', 'night'].forEach(mode => { if (!/^#[0-9a-f]{6}$/i.test(gp[mode][key])) gp[mode][key] = DEFAULT_SETTINGS.chatgpt[mode][key]; }); });
   gp.followNight = Boolean(gp.followNight);
+  gp.fontSize = clamp(Number(gp.fontSize), 10, 40, 16);
+  if (!['chatgpt', 'pill'].includes(gp.fontFamily)) gp.fontFamily = 'chatgpt';
+  if (!['content', 'custom'].includes(gp.sizeMode)) gp.sizeMode = 'content';
   gp.radius = clamp(Number(gp.radius), 0, 32, 16);
   gp.padding = clamp(Number(gp.padding), 4, 32, 16);
   const pb = settings.pillBody;
-  pb.fontSize = clamp(Number(pb.fontSize), 10, 48, 18);
+  pb.fontSize = clamp(Number(pb.fontSize), 10, 48, 16);
   if (pb.fontFamily !== 'auto' && !FONT_FAMILIES[pb.fontFamily]) pb.fontFamily = 'auto';
   pb.customFont = String(pb.customFont || '').replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 40);
   pb.capToCard = Boolean(pb.capToCard);
@@ -339,7 +342,7 @@ export function gptCss(settings) {
   // By default the panel looks exactly like ChatGPT on every card theme; night variants only when asked for.
   const night = (selector, rule) => (g.followNight ? `.nightMode ${selector}, .night_mode ${selector} { ${rule} }\n` : '');
   return `
-.gpt { display: block; box-sizing: border-box; text-align: left; font-family: ${GPT_FONT}; font-size: 16px; line-height: 1.625; font-weight: 400; font-style: normal; background: ${g.day.bg}; color: ${g.day.text}; border-radius: ${g.radius}px; padding: ${g.padding}px ${g.padding + 2}px; }
+.gpt { display: block; box-sizing: border-box; text-align: left; font-family: ${g.fontFamily === 'pill' ? (settings.pillBody.fontFamily === 'auto' ? 'inherit' : fontCss(settings.pillBody.fontFamily, settings.pillBody.customFont)) : GPT_FONT}; font-size: ${(() => { const px = g.sizeMode === 'custom' ? g.fontSize : settings.pillBody.fontSize; return settings.pillBody.capToCard ? `min(${px}px, 1rem)` : `${px}px`; })()}; line-height: 1.625; font-weight: 400; font-style: normal; background: ${g.day.bg}; color: ${g.day.text}; border-radius: ${g.radius}px; padding: ${g.padding}px ${g.padding + 2}px; }
 ${g.followNight ? `${nm} { background: ${g.night.bg}; color: ${g.night.text}; }` : ''}
 .gpt > :first-child { margin-top: 0 !important; }
 .gpt p { margin: 16px 0 0; }
