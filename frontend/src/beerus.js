@@ -52,6 +52,8 @@ export const DEFAULT_SETTINGS = {
     rememberPills: true,    // keep opened pills open on the next card (while the review session lasts)
     showTags: false,        // tags under the answer
   },
+  // text inside an opened pill (px, so it never exceeds the card text; the card text is appearance.fontSize)
+  pillBody: { fontSize: 18, lineHeight: 1.4, align: 'auto', colorMode: 'auto', dayColor: '#1A1A1A', nightColor: '#E8E8E8', accentEdge: true, frame: true },
   pillStyle: { shape: 'pill', scale: 100, iconScale: 125, showIcons: true, style: 'bubble', pattern: 'none' },
   pills: [
     { label: 'Reference', color: '#3B82F6', iconType: 'emoji', icon: '📖', iconData: '', iconUrl: '', open: false, format: 'auto' },
@@ -109,6 +111,14 @@ export function normalizeSettings(saved) {
   gp.followNight = Boolean(gp.followNight);
   gp.radius = clamp(Number(gp.radius), 0, 32, 16);
   gp.padding = clamp(Number(gp.padding), 4, 32, 16);
+  const pb = settings.pillBody;
+  pb.fontSize = clamp(Number(pb.fontSize), 10, 48, 18);
+  pb.lineHeight = clamp(Number(pb.lineHeight), 1, 2.2, 1.4);
+  if (!['auto', 'left', 'center'].includes(pb.align)) pb.align = 'auto';
+  if (!['auto', 'custom'].includes(pb.colorMode)) pb.colorMode = 'auto';
+  ['dayColor', 'nightColor'].forEach(key => { if (!/^#[0-9a-f]{6}$/i.test(pb[key])) pb[key] = DEFAULT_SETTINGS.pillBody[key]; });
+  pb.accentEdge = Boolean(pb.accentEdge);
+  pb.frame = Boolean(pb.frame);
   const ps = settings.pillStyle;
   ps.scale = clamp(Number(ps.scale), 60, 200, 100);
   ps.iconScale = clamp(Number(ps.iconScale), 70, 220, 125);
@@ -354,7 +364,10 @@ export function pillCss(settings, files = themeMedia(settings)) {
 .bpill[open] > summary::after { transform: rotate(180deg); }
 .bpill-ic { display: inline-block; width: calc(1.2em * var(--ics, 1)); height: calc(1.2em * var(--ics, 1)); background: center / contain no-repeat; }
 .bpill-em { font-size: calc(1.1em * var(--ics, 1)); line-height: 1; }
-.bpill-body { margin-top: .55rem; padding: .45rem .7rem; border-radius: .55em; border: 1px solid rgba(128,128,128,.35); border-left: 4px solid var(--bp); background: rgba(128,128,128,.1); font-size: .72rem; line-height: 1.4; text-align: ${settings.appearance.align === 'left' ? 'left' : 'center'}; }
+.bpill-body { margin-top: .55rem; padding: .45rem .7rem; border-radius: .55em; ${settings.pillBody.frame ? `border: 1px solid rgba(128,128,128,.35); ${settings.pillBody.accentEdge ? 'border-left: 4px solid var(--bp);' : ''} background: rgba(128,128,128,.1);` : 'border: 0; background: none;'} font-size: ${settings.pillBody.fontSize}px; line-height: ${settings.pillBody.lineHeight}; text-align: ${settings.pillBody.align === 'auto' ? (settings.appearance.align === 'left' ? 'left' : 'center') : settings.pillBody.align}; ${settings.pillBody.colorMode === 'custom' ? `color: ${settings.pillBody.dayColor};` : ''} }
+${settings.pillBody.colorMode === 'custom' ? `.nightMode .bpill-body, .night_mode .bpill-body { color: ${settings.pillBody.nightColor}; }
+.bpill-body b, .bpill-body i, .bpill-body u { color: inherit; }
+` : ''}
 
 .bpill-body img { max-width: 100%; height: auto; border-radius: .3em; }
 .bpill-gpt .bpill-body { padding: 0; border: 0; background: none; }

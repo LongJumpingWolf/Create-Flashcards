@@ -68,7 +68,7 @@ export function PreviewPills({ pills, night }) {
   const px = 0.6 * (settings.pillStyle.scale / 100) * 28;
   return (
     <div className={night ? 'nightMode' : ''}>
-      <style>{css}{gptKeepText('.pv-pills', settings)}{`.pv-pills .bpill-body { font-size: ${(0.72 * 28).toFixed(1)}px; } .pv-pills .bpill > summary { font-size: ${px.toFixed(1)}px; }`}</style>
+      <style>{css}{gptKeepText('.pv-pills', settings)}{`.pv-pills .bpill > summary { font-size: ${px.toFixed(1)}px; }`}</style>
       <div id="bpills" className={`pv-pills bs-${settings.pillStyle.style}`} style={{ fontSize: `${px.toFixed(1)}px` }}>
         {shown.map(({ pill, index, html }) => (
           <details key={index} className={`bpill bpill-${index + 1}${pill.format === 'chatgpt' || /^\s*<div class="gpt"/.test(html) ? ' bpill-gpt' : ''}`} open={pill.open}>
