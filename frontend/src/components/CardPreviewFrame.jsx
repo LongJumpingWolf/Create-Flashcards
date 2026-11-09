@@ -36,7 +36,7 @@ export default function CardPreviewFrame({ type, front, back, pills, sequential,
     const onMessage = (event) => {
       if (event.source !== ref.current?.contentWindow) return;
       const h = Number(event.data?.beerusPreviewHeight);
-      if (Number.isFinite(h) && h > 40) setHeight(Math.ceil(h) + 4);
+      if (Number.isFinite(h) && h > 40) setHeight(prev => (Math.abs(prev - (Math.ceil(h) + 4)) > 3 ? Math.ceil(h) + 4 : prev));
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -45,7 +45,7 @@ export default function CardPreviewFrame({ type, front, back, pills, sequential,
   const width = DEVICES[device]?.width || 860;
   return (
     <div className="card-preview-frame-wrap">
-      <iframe ref={ref} title="Card preview" sandbox="allow-scripts" srcDoc={srcDoc} style={{ width: `${width}px`, maxWidth: '100%', height: `${height}px` }} />
+      <iframe ref={ref} title="Card preview" sandbox="allow-scripts" srcDoc={srcDoc} style={{ width: `${width}px`, maxWidth: '100%', height: `${height}px`, maxHeight: 'calc(100vh - 290px)', minHeight: '240px' }} />
     </div>
   );
 }

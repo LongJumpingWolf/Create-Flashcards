@@ -693,6 +693,7 @@ export function previewDocument(model, fields, { side, night, mobile, mediaUrls 
     css = css.split(name).join(mediaUrls[name]);
     html = html.split(name).join(mediaUrls[name]);
   });
+  html = html.replace(/<img(?![^>]*decoding=)/gi, '<img decoding="async"'); // decode pictures off the main thread so scrolling stays smooth
   const classes = `card${night ? ' nightMode' : ''}${mobile ? ' mobile' : ''}`;
   return `<!doctype html><html class="${night ? 'night_mode' : ''}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0}${css}</style></head><body class="${classes}">${html}${reportHeight ? HEIGHT_SCRIPT : ''}</body></html>`;
 }
