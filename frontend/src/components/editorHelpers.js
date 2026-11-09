@@ -111,27 +111,12 @@ export function useAudioRecorder(onFinished, onError) {
 }
 
 // --- Paste handling ----------------------------------------------------------------
+import { isThemeColor } from '../beerus';
 const PASTE_TAGS = new Set(['A', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'SUB', 'SUP', 'SPAN', 'FONT', 'BR', 'P', 'DIV', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'IMG', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TD', 'TH', 'BLOCKQUOTE', 'CODE', 'PRE', 'HR', 'MARK', 'AUDIO']);
 const DROP_WITH_CONTENT = new Set(['SCRIPT', 'STYLE', 'META', 'LINK', 'IFRAME', 'OBJECT', 'EMBED', 'NOSCRIPT', 'TEMPLATE', 'FORM', 'INPUT', 'BUTTON', 'SVG', 'CANVAS']);
 // Layout classes defined by the card CSS (AnKing: left-aligned mnemonic block, centred block).
 const KEEP_CLASSES = new Set(['mnemonics', 'centerbox', 'gpt', 'gpt-badgerow', 'gpt-badge', 'gpt-badge-info', 'gpt-badge-warning', 'gpt-badge-success', 'gpt-badge-danger', 'gpt-badge-neutral']);
 const KEEP_STYLES = ['color', 'background-color', 'font-weight', 'font-style', 'text-decoration', 'text-align', 'vertical-align'];
-
-// Black, white and greys (and transparent) come from the page theme the text was copied from, not from the author:
-// pasted into a card of the other theme they turn text invisible. Real colours (red, blue ...) are kept.
-function isThemeColor(value) {
-  const v = String(value).trim().toLowerCase();
-  if (!v || /^(transparent|inherit|initial|unset|currentcolor|white|black|gr[ae]y|silver|whitesmoke|gainsboro|lightgr[ae]y|darkgr[ae]y|dimgr[ae]y)$/.test(v)) return true;
-  let r; let g; let b;
-  const rgb = v.match(/^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
-  const hex = v.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
-  if (rgb) [r, g, b] = [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
-  else if (hex) { const h = hex[1].length === 3 ? hex[1].split('').map(c => c + c).join('') : hex[1]; [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); }
-  else return false;
-  const alpha = v.match(/^rgba\(.*,\s*([\d.]+)\s*\)$/);
-  if (alpha && Number(alpha[1]) === 0) return true;
-  return Math.max(r, g, b) - Math.min(r, g, b) < 40; // low saturation = neutral
-}
 
 // Keeps meaningful formatting from a web page / Word / PDF paste but drops the junk
 // (classes, ids, scripts, fonts, sizes, event handlers) that makes cards ugly or unsafe.

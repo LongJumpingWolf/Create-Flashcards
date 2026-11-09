@@ -34,9 +34,11 @@ function showUpdateBanner(applyUpdate) {
 }
 
 if (import.meta.env.PROD) {
-  const updateSW = registerSW({
+  // The new service worker takes over by itself (skipWaiting + clientsClaim); tell the person a reload gets the new version.
+  const hadController = Boolean(navigator.serviceWorker?.controller);
+  navigator.serviceWorker?.addEventListener('controllerchange', () => { if (hadController) showUpdateBanner(() => window.location.reload()); });
+  registerSW({
     immediate: true,
-    onNeedRefresh() { showUpdateBanner(() => updateSW(true)); },
     onRegisteredSW(_url, registration) {
       if (!registration) return;
       const check = () => registration.update().catch(() => {});

@@ -342,6 +342,34 @@ ${night('.gpt tr', 'border-bottom-color: rgba(255,255,255,.12);')}.gpt code { fo
 ${night('.gpt-badge-info', 'color: #4DA6FF; background: rgba(2,133,255,.22);')}${night('.gpt-badge-warning', 'color: #FDBA8C; background: rgba(251,106,34,.24);')}${night('.gpt-badge-success', 'color: #4ADE80; background: rgba(0,200,100,.2);')}${night('.gpt-badge-danger', 'color: #FDA29B; background: rgba(240,68,56,.24);')}${night('.gpt-badge-neutral', 'color: #BDBDBD; background: rgba(255,255,255,.12);')}`;
 }
 
+// Black, white and greys (and transparent) come from the page theme the text was copied from, not from the author:
+// pasted into a card of the other theme they turn text invisible. Real colours (red, blue ...) are kept.
+export function isThemeColor(value) {
+  const v = String(value).trim().toLowerCase();
+  if (!v || /^(transparent|inherit|initial|unset|currentcolor|white|black|gr[ae]y|silver|whitesmoke|gainsboro|lightgr[ae]y|darkgr[ae]y|dimgr[ae]y)$/.test(v)) return true;
+  let r; let g; let b;
+  const rgb = v.match(/^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+  const hex = v.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
+  if (rgb) [r, g, b] = [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+  else if (hex) { const h = hex[1].length === 3 ? hex[1].split('').map(c => c + c).join('') : hex[1]; [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); }
+  else return false;
+  const alpha = v.match(/^rgba\(.*,\s*([\d.]+)\s*\)$/);
+  if (alpha && Number(alpha[1]) === 0) return true;
+  return Math.max(r, g, b) - Math.min(r, g, b) < 40; // low saturation = neutral
+}
+
+/** Removes theme-dependent neutral colours from inline styles of already stored HTML (e.g. pasted before the paste cleanup existed). */
+export function stripThemeColors(html) {
+  return String(html ?? '').replace(/ style="([^"]*)"/g, (_m, css) => {
+    const kept = css.split(';').map(part => part.trim()).filter(Boolean).filter(part => {
+      const [prop, ...rest] = part.split(':');
+      const name = prop.trim().toLowerCase();
+      return !((name === 'color' || name === 'background-color' || name === 'background') && isThemeColor(rest.join(':')));
+    });
+    return kept.length ? ` style="${kept.join('; ')}"` : '';
+  });
+}
+
 /** Anki treats a field holding only whitespace / <br> / empty <div> as empty; do the same so no empty pill ever shows. */
 export function cleanPillHtml(html) {
   const text = String(html ?? '');
@@ -562,7 +590,7 @@ export function normalizePills(pills) {
       if (match) out[Number(match[1]) - 1] = String(pills[key] ?? '');
     });
   }
-  return out.map(cleanPillHtml);
+  return out.map(html => cleanPillHtml(stripThemeColors(html)));
 }
 
 // ---------------------------------------------------------------------------------------------

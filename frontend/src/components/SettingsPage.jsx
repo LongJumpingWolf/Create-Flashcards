@@ -1,3 +1,4 @@
+/* global __APP_VERSION__ */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BEERUS_NAMES, DEFAULT_SETTINGS, FONT_FAMILIES, buildModels, loadSettings, normalizeSettings,
@@ -230,7 +231,7 @@ export default function SettingsPage({ onClose, onOpenIcons }) {
     <div className="set-page" role="dialog" aria-label="Settings">
       <header className="set-topbar">
         <button type="button" className="quiet-button" onClick={onClose}><ChevronLeft size={16} /><span>Back to editor</span></button>
-        <div className="set-title"><span className="section-eyebrow">BEERUS CARD TYPES</span><h1>Settings</h1></div>
+        <div className="set-title"><span className="section-eyebrow">BEERUS CARD TYPES</span><h1>Settings</h1><span className="set-version" title="The version of the site that is running">Version {typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev'}</span></div>
         <div className="set-top-actions">
           <button type="button" className="quiet-button" onClick={() => onOpenIcons?.()}><span>Icon maker</span></button>
           <button type="button" className="quiet-button" onClick={downloadTestDeck}><Download size={15} /><span>Test deck</span></button>

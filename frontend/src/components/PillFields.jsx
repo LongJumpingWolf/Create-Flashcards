@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PILL_COUNT, gptCss, loadSettings, saveSettings, pillCss, themeMedia, cleanPillHtml } from '../beerus';
+import { PILL_COUNT, gptCss, loadSettings, saveSettings, pillCss, themeMedia, cleanPillHtml, stripThemeColors } from '../beerus';
 import { chatgptFromClipboard, chatgptForce } from '../chatgptFormat';
 import { sanitizePastedHtml } from './editorHelpers';
 
@@ -77,7 +77,7 @@ export function PreviewPills({ pills, night }) {
               {settings.pillStyle.showIcons && (pill.iconType === 'image' || pill.iconType === 'url') ? <span className="bpill-ic" /> : null}
               <span className="bpill-label">{pill.label}</span>
             </summary>
-            <div className="bpill-body" dangerouslySetInnerHTML={{ __html: html }} />
+            <div className="bpill-body" dangerouslySetInnerHTML={{ __html: stripThemeColors(html) }} />
           </details>
         ))}
       </div>

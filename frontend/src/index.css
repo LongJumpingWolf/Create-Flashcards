@@ -1395,3 +1395,4 @@ body { background:#202124; }
 .pill-note { margin: 0 0 6px; padding: 6px 10px; border-radius: 8px; font-size: 12px; border: 1px solid var(--line-strong); background: var(--surface-raised); color: var(--muted); }
 .pill-note-converted { color: #6ee7a8; }
 .pill-note button { margin-left: 6px; padding: 2px 9px; border-radius: 7px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
+.set-version { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
