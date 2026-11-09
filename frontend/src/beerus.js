@@ -52,7 +52,7 @@ export const DEFAULT_SETTINGS = {
     rememberPills: true,    // keep opened pills open on the next card (while the review session lasts)
     showTags: false,        // tags under the answer
   },
-  pillStyle: { shape: 'pill', size: 'md', showIcons: true, style: 'bubble', pattern: 'none' },
+  pillStyle: { shape: 'pill', scale: 100, iconScale: 125, showIcons: true, style: 'bubble', pattern: 'none' },
   pills: [
     { label: 'Reference', color: '#3B82F6', iconType: 'emoji', icon: '📖', iconData: '', iconUrl: '', open: false },
     { label: 'Compare', color: '#10B981', iconType: 'emoji', icon: '⚖️', iconData: '', iconUrl: '', open: false },
@@ -103,6 +103,8 @@ export function normalizeSettings(saved) {
     if (!/^#[0-9a-f]{6}$/i.test(pill.color)) pill.color = '#3B82F6';
   });
   const ps = settings.pillStyle;
+  ps.scale = clamp(Number(ps.scale), 60, 200, 100);
+  ps.iconScale = clamp(Number(ps.iconScale), 70, 220, 125);
   if (!PILL_STYLES.includes(ps.style)) ps.style = 'bubble';
   if (!PILL_PATTERNS.includes(ps.pattern)) ps.pattern = 'none';
   const e = settings.export;
@@ -202,7 +204,6 @@ const IOE_CSS = `
 .io-field-descr { font-weight: 700; margin-bottom: .15em; }
 `;
 
-const SIZES = { sm: '.5rem', md: '.6rem', lg: '.72rem' };
 const RADIUS = { pill: '999px', rounded: '.5em', square: '.15em' };
 
 export function baseCss(settings) {
@@ -277,7 +278,7 @@ function pillSurface(style, pattern) {
 export function pillCss(settings, files = themeMedia(settings)) {
   const p = settings.pillStyle;
   const lines = [`
-#bpills { margin: 1.1rem auto 0; display: flex; flex-direction: column; align-items: center; gap: .5rem; font-size: ${SIZES[p.size] || SIZES.md}; font-style: normal; text-align: center; }
+#bpills { margin: 1.1rem auto 0; display: flex; flex-direction: column; align-items: center; gap: .5rem; font-size: ${(0.6 * p.scale / 100).toFixed(3)}rem; --ics: ${(p.iconScale / 100).toFixed(2)}; font-style: normal; text-align: center; }
 .bpill { max-width: 96%; }
 .bpill > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: .45em; padding: .34em 1em; border-radius: ${RADIUS[p.shape] || RADIUS.pill}; font-weight: 700; font-family: Arial, sans-serif; line-height: 1.2; letter-spacing: .01em; user-select: none; transition: filter .12s, transform .08s; ${pillSurface(p.style, p.pattern)} }
 .bpill > summary:hover { filter: brightness(1.08); }
@@ -286,13 +287,13 @@ export function pillCss(settings, files = themeMedia(settings)) {
 .bpill > summary::marker { content: ""; }
 .bpill > summary::after { content: "\\25BE"; font-size: .85em; opacity: .85; transition: transform .15s; }
 .bpill[open] > summary::after { transform: rotate(180deg); }
-.bpill-ic { display: inline-block; width: 1.2em; height: 1.2em; background: center / contain no-repeat; }
-.bpill-em { font-size: 1.1em; line-height: 1; }
+.bpill-ic { display: inline-block; width: calc(1.2em * var(--ics, 1)); height: calc(1.2em * var(--ics, 1)); background: center / contain no-repeat; }
+.bpill-em { font-size: calc(1.1em * var(--ics, 1)); line-height: 1; }
 .bpill-body { margin-top: .55rem; padding: .45rem .7rem; border-radius: .55em; border: 1px solid rgba(128,128,128,.35); border-left: 4px solid var(--bp); background: rgba(128,128,128,.1); font-size: .72rem; line-height: 1.4; text-align: ${settings.appearance.align === 'left' ? 'left' : 'center'}; }
 .bpill-body img { max-width: 100%; height: auto; border-radius: .3em; }
-.bs-bubble .bpill-em, .bs-bubble .bpill-ic { background-color: #fff; border-radius: 50%; width: 1.75em; height: 1.75em; display: inline-grid; place-items: center; font-size: 1em; }
-.bs-bubble .bpill-ic { background-size: 68%; }
-.bs-bubble .bpill-em { font-size: .95em; }
+.bs-bubble .bpill-em, .bs-bubble .bpill-ic { background-color: #fff; border-radius: 50%; display: inline-grid; place-items: center; overflow: hidden; }
+.bs-bubble .bpill-em { font-size: calc(.95em * var(--ics, 1)); width: 1.85em; height: 1.85em; }
+.bs-bubble .bpill-ic { width: calc(1.85em * var(--ics, 1)); height: calc(1.85em * var(--ics, 1)); background-size: cover; }
 `];
   settings.pills.forEach((pill, index) => {
     lines.push(`.bpill-${index + 1} { --bp: ${pill.color}; --bpl: ${shade(pill.color, 0.28)}; --bpd: ${shade(pill.color, -0.3)}; --bpt: ${pill.color}2E; }\n`);
