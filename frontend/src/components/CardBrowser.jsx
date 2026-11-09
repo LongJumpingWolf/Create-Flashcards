@@ -19,7 +19,7 @@ const SHORTCUTS = [
   ['Esc', 'Clear search, then close'],
 ];
 
-const flat = (text) => String(text || '').replace(/{{cd+::(.*?)(::[^}]*)?}}/g, '[$1]');
+const flat = (text) => String(text || '').replace(/\{\{c\d+::(.*?)(::[^}]*)?\}\}/g, '[$1]');
 const plain = (html) => { const d = document.createElement('div'); d.innerHTML = html || ''; return (d.textContent || '').replace(/\s+/g, ' ').trim(); };
 
 /**
