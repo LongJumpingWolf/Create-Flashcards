@@ -35,6 +35,8 @@ const readAsDataUrl = (file) => new Promise((resolve, reject) => {
 });
 
 const IMAGE_URL = /^https?:\/\/\S+\.(png|jpe?g|gif|webp|svg)(\?\S*)?$/i;
+// The editor shows pills smaller than on the card (the card size is set on the Settings page).
+const EDITOR_PILL_STYLE = { '--ics': 1, '--gs': 0.7, fontSize: '12.5px' };
 const FORMAT_LABEL = { auto: 'Auto', chatgpt: 'ChatGPT look', plain: 'Plain' };
 
 function PillChip({ pill, index, settings, dim }) {
@@ -137,9 +139,11 @@ export default function PillFields({ values, onChange, resetKey }) {
         <span>Pills <em>(toggle buttons under the answer)</em></span>
         <small>{filled ? `${filled} on the card` : 'optional'}</small>
       </button>
-      <div className={`pill-onCard bs-${settings.pillStyle.style}`} style={{ '--ics': settings.pillStyle.iconScale / 100, '--gs': settings.pillStyle.scale / 100, fontSize: `${(0.6 * settings.pillStyle.scale / 100 * 28).toFixed(1)}px` }} aria-label="Pills that will appear on the card">
-        {filled ? settings.pills.map((pill, index) => (filledFlags[index] ? <PillChip key={index} pill={pill} index={index} settings={settings} /> : null)) : <span className="pill-onCard-empty">Nothing here yet. A pill only appears on the card when its field has content.</span>}
-      </div>
+      {!open && (
+        <div className={`pill-onCard bs-${settings.pillStyle.style}`} style={EDITOR_PILL_STYLE} aria-label="Pills that will appear on the card">
+          {filled ? settings.pills.map((pill, index) => (filledFlags[index] ? <PillChip key={index} pill={pill} index={index} settings={settings} /> : null)) : <span className="pill-onCard-empty">Nothing here yet. A pill only appears on the card when its field has content.</span>}
+        </div>
+      )}
       {open && (
         <div className="pill-fields-body">
           {Array.from({ length: PILL_COUNT }, (_, index) => {
@@ -150,11 +154,13 @@ export default function PillFields({ values, onChange, resetKey }) {
                   {renaming === index ? (
                     <input className="pill-rename" autoFocus value={draft} maxLength={24} aria-label={`Name of pill ${index + 1}`} onChange={e => setDraft(e.target.value)} onBlur={commitRename} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitRename(); } else if (e.key === 'Escape') { e.preventDefault(); setRenaming(null); } }} />
                   ) : (
-                  <div role="button" tabIndex={0} className={`pill-head-chip bs-${settings.pillStyle.style}`} onClick={() => startRename(index)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startRename(index); } }} style={{ '--ics': settings.pillStyle.iconScale / 100, '--gs': settings.pillStyle.scale / 100, fontSize: `${(0.6 * settings.pillStyle.scale / 100 * 28).toFixed(1)}px` }} title="Click to rename this pill">
-                    <PillChip pill={pill} index={index} settings={settings} dim={!filledFlags[index]} />
+                  <div className="pill-head-wrap">
+                    <div className={`pill-head-chip bs-${settings.pillStyle.style}`} style={EDITOR_PILL_STYLE}>
+                      <PillChip pill={pill} index={index} settings={settings} dim={!filledFlags[index]} />
+                    </div>
+                    <button type="button" className="pill-edit" onClick={() => startRename(index)} aria-label={`Rename pill ${index + 1}`} title="Edit name">✎</button>
                   </div>
                   )}
-                  <button type="button" className="pill-field-btn pill-rename-btn" onClick={() => startRename(index)} aria-label={`Rename pill ${index + 1}`}>Rename</button>
                   <span className="pill-field-state">{filledFlags[index] ? 'on the card' : 'empty, hidden'}{pill.format !== 'auto' ? ` · ${FORMAT_LABEL[pill.format]}` : ''}</span>
                   <label className="pill-field-btn">Add image<input type="file" accept="image/*" hidden onChange={e => { addFile(index, e.target.files?.[0]); e.target.value = ''; }} /></label>
                   <button type="button" className="pill-field-btn" onClick={() => { const url = window.prompt('Image link (https://…)'); if (url && /^https?:\/\//i.test(url.trim())) insertImage(index, url.trim()); }}>Image link</button>

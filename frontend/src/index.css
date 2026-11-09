@@ -1385,7 +1385,10 @@ body { background:#202124; }
 .pill-field-box .gpt { margin: 4px 0; }
 .pill-field-head .pill-head-chip span, .pill-onCard span.bpill-label { color: inherit; }
 .pill-field-head .pill-head-chip .bpill-label { color: #fff; }
-.pill-head-chip { cursor: text; }
-.pill-fields .pill-head-chip .bpill > summary { cursor: text; }
 .pill-rename { min-height: 34px; padding: 4px 12px; border-radius: 99px; border: 2px solid var(--accent); background: var(--surface-raised); color: var(--text); font-size: 14px; font-weight: 700; width: 190px; outline: none; }
-.pill-rename-btn { margin-left: 0 !important; }
+
+.pill-head-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.pill-edit { width: 26px; height: 26px; display: inline-grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--surface-raised); color: var(--text); font-size: 13px; line-height: 1; cursor: pointer; opacity: 0; transform: scale(.85); transition: opacity .12s, transform .12s; }
+.pill-head-wrap:hover .pill-edit, .pill-head-wrap:focus-within .pill-edit, .pill-edit:focus-visible { opacity: 1; transform: none; }
+@media (hover: none) { .pill-edit { opacity: .8; transform: none; } }
+.pill-rename { min-height: 28px; width: 160px; font-size: 13px; }
