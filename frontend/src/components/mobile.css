@@ -1,0 +1,34 @@
+/* Phone shell: capture first, one hand, big targets. Colours follow the app's dark theme. */
+.m-app { min-height: 100dvh; display: flex; flex-direction: column; background: #1c1d1f; color: #e8eaed; font-size: 16px; -webkit-tap-highlight-color: transparent; }
+.m-top { position: sticky; top: 0; z-index: 20; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: max(12px, env(safe-area-inset-top)) 16px 10px; background: #1c1d1f; border-bottom: 1px solid #35373b; }
+.m-top h1 { margin: 0; font-size: 20px; font-weight: 700; } .m-top span { color: #9aa0a6; font-size: 13px; }
+.m-main { flex: 1; padding: 14px 16px calc(150px + env(safe-area-inset-bottom)); }
+.m-seg { display: flex; border: 1px solid #44464b; border-radius: 12px; overflow: hidden; margin-bottom: 14px; }
+.m-seg button { flex: 1; min-height: 46px; border: 0; background: transparent; color: inherit; font-size: 16px; font-weight: 600; }
+.m-seg button.on { background: #3b82f6; color: #fff; } .m-seg.small { margin: 0 0 12px; } .m-seg.small button { min-height: 38px; font-size: 14px; }
+.m-field { display: block; margin-bottom: 14px; } .m-field > span, .m-label { display: block; margin: 0 2px 6px; color: #aab0b6; font-size: 13px; font-weight: 600; } .m-label small { font-weight: 400; color: #80868b; margin-left: 6px; } .m-label b { float: right; color: #e8eaed; }
+.m-box, .m-input, .m-search { width: 100%; box-sizing: border-box; padding: 12px 14px; border: 1px solid #44464b; border-radius: 12px; background: #27282b; color: #f1f3f4; font-size: 16px; line-height: 1.45; outline: none; }
+.m-box:focus, .m-input:focus, .m-search:focus { border-color: #3b82f6; } .m-box:empty::before { content: attr(data-placeholder); color: #80868b; } .m-box img { max-width: 100%; height: auto; border-radius: 8px; } .m-box.tall { min-height: 220px; max-height: 46vh; overflow: auto; }
+.m-search { margin-bottom: 12px; }
+.m-cloze-bar { display: flex; gap: 8px; margin: -4px 0 14px; } .m-cloze-bar button { flex: 1; min-height: 44px; border: 1px solid #3b82f6; border-radius: 12px; background: #1f2f4a; color: #cfe0ff; font-size: 15px; font-weight: 700; }
+.m-block { margin-bottom: 16px; }
+.m-pills { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .m-pill { min-height: 48px; padding: 0 12px; border: 2px solid var(--pc, #666); border-radius: 99px; background: transparent; color: #e8eaed; font-size: 15px; font-weight: 700; } .m-pill b { margin-right: 6px; } .m-pill.has { background: var(--pc, #666); color: #fff; }
+.m-tags { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px; border: 1px solid #44464b; border-radius: 12px; background: #27282b; } .m-tags input { flex: 1; min-width: 110px; min-height: 34px; border: 0; background: transparent; color: inherit; font-size: 16px; outline: none; }
+.m-chip, .m-meta em { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 99px; background: #31343a; color: #d7dbe0; font-size: 13px; font-style: normal; } .m-chip button { border: 0; background: transparent; color: inherit; font-size: 18px; line-height: 1; padding: 0; }
+.m-savebar { position: fixed; left: 0; right: 0; bottom: calc(60px + env(safe-area-inset-bottom)); z-index: 15; display: flex; gap: 10px; padding: 10px 16px; background: linear-gradient(transparent, #1c1d1f 35%); }
+.m-primary, .m-ghost { min-height: 50px; padding: 0 18px; border-radius: 14px; font-size: 16px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #44464b; background: #2b2d31; color: #e8eaed; }
+.m-primary { flex: 1; background: #3b82f6; border-color: #3b82f6; color: #fff; } .m-primary:disabled { opacity: .5; } .m-ghost.danger { color: #ff9a9a; } .m-ghost.wide { width: 100%; margin-top: 8px; }
+.m-tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: repeat(4, 1fr); padding-bottom: env(safe-area-inset-bottom); background: #141517; border-top: 1px solid #35373b; }
+.m-tabs button { min-height: 60px; border: 0; background: transparent; color: #9aa0a6; font-size: 14px; font-weight: 700; } .m-tabs button.on { color: #60a5fa; box-shadow: inset 0 3px 0 #3b82f6; }
+.m-card { display: block; width: 100%; text-align: left; margin-bottom: 10px; padding: 12px 14px; border: 1px solid #3a3c41; border-radius: 14px; background: #25262a; color: inherit; }
+.m-card strong { display: block; font-size: 16px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } .m-card small { display: block; margin: 4px 0 8px; color: #9aa0a6; font-size: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.m-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; } .m-empty, .m-note { color: #9aa0a6; font-size: 14px; line-height: 1.5; } .m-note.small { font-size: 12.5px; } .m-empty { text-align: center; padding: 40px 10px; }
+.m-more input[type=range] { width: 100%; height: 36px; }
+.m-toast { position: fixed; left: 16px; right: 16px; bottom: calc(138px + env(safe-area-inset-bottom)); z-index: 60; padding: 12px 16px; border-radius: 12px; background: #e8eaed; color: #1c1d1f; font-weight: 600; font-size: 14px; text-align: center; box-shadow: 0 6px 20px rgba(0,0,0,.4); border: 0; } .m-toast.undo { bottom: calc(76px + env(safe-area-inset-bottom)); background: #3b82f6; color: #fff; }
+.m-sheet-wrap { position: fixed; inset: 0; z-index: 80; display: flex; align-items: flex-end; background: rgba(0,0,0,.55); }
+.m-sheet { width: 100%; max-height: 92dvh; display: flex; flex-direction: column; border-radius: 20px 20px 0 0; background: #222326; border-top: 1px solid #44464b; padding-bottom: env(safe-area-inset-bottom); }
+.m-sheet header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px; } .m-sheet header h3 { margin: 0; font-size: 17px; } .m-sheet header button { border: 0; background: transparent; color: #60a5fa; font-size: 16px; font-weight: 700; min-height: 44px; padding: 0 6px; }
+.m-sheet-body { padding: 4px 16px 12px; overflow: auto; } .m-sheet footer { display: flex; gap: 8px; padding: 10px 16px 14px; border-top: 1px solid #35373b; } .m-sheet footer .m-ghost { flex: none; }
+.m-io { max-width: 100%; border-radius: 10px; }
+.m-sheet .card-preview-frame-wrap iframe { width: 100% !important; max-height: 60dvh !important; }
+@media (prefers-reduced-motion: no-preference) { .m-sheet { animation: m-up .18s ease-out; } @keyframes m-up { from { transform: translateY(40px); opacity: 0; } } }

@@ -1,6 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import FlashcardEditor from "./components/FlashcardEditor";
+import useDevice from './useDevice';
 import './index.css'; // Make sure the styles are imported
+
+const MobileShell = lazy(() => import('./components/MobileShell'));
 
 const SettingsPage = lazy(() => import('./components/SettingsPage'));
 const IconMaker = lazy(() => import('./components/IconMaker'));
@@ -10,6 +13,7 @@ const routeFromHash = () => {
 };
 
 function App() {
+  const device = useDevice();
   const [route, setRoute] = useState(routeFromHash);
   const go = useCallback((next) => {
     if (next) window.location.hash = next;
@@ -42,6 +46,10 @@ function App() {
       document.removeEventListener('touchmove', preventPagePinchMove);
     };
   }, []);
+
+  if (device === 'phone') {
+    return <Suspense fallback={<div className="set-loading">Loading…</div>}><MobileShell /></Suspense>;
+  }
 
   return (
     <div className="min-h-screen">

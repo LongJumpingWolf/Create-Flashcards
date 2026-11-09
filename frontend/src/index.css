@@ -1453,3 +1453,14 @@ body { background:#202124; }
 .cb-undo { margin-left: auto; padding: 4px 12px; border: 1px solid #72ae80; border-radius: 8px; background: #1b2a1f; color: #dceade; font-weight: 600; cursor: pointer; }
 .cb-help { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.6); } .cb-help > div { width: min(480px, 92vw); padding: 18px 22px; border: 1px solid rgba(193,216,198,.2); border-radius: 12px; background: #151a16; } .cb-help h3 { margin: 0 0 10px; } .cb-help dl > div { display: flex; justify-content: space-between; gap: 16px; padding: 5px 0; border-bottom: 1px solid rgba(193,216,198,.07); } .cb-help dt { font-weight: 700; color: #dceade; } .cb-help dd { margin: 0; color: #9aab9e; } .cb-help p { margin: 10px 0 0; color: #7e8d82; font-size: 12px; }
 @media (max-width: 1000px) { .cb-body { grid-template-columns: minmax(0,1fr); grid-template-rows: auto 1fr 1fr; } .cb-tags { display: flex; overflow-x: auto; border-right: 0; } .cb-tags .cb-h { display: none; } .cb-tags button { width: auto; flex: none; } }
+
+/* Tablets and other touch screens: every feature stays, with finger-sized targets and no hover-only controls. */
+@media (pointer: coarse) and (min-width: 768px) {
+  button, [role="tab"], select, .pill-field-btn, .quiet-button { min-height: 40px; }
+  .set-jump button, .cb-filters button { min-height: 38px; padding-left: 14px; padding-right: 14px; }
+  .cb-row { padding-top: 14px; padding-bottom: 14px; } .cb-row input[type=checkbox] { width: 20px; height: 20px; }
+  .cb-tags button { min-height: 42px; }
+  .pill-edit { opacity: 1; transform: none; width: 34px; height: 34px; }
+  .set-row input[type=range], input[type=range] { min-height: 32px; }
+  .card-tools button, .toolbar button, .editor-toolbar button { min-width: 40px; min-height: 40px; }
+}

@@ -6,7 +6,7 @@ import { sanitizePastedHtml } from './editorHelpers';
 const MAX_EDGE = 1100;
 
 // Screenshots are shrunk on paste so a pill never adds megabytes to the deck.
-async function shrinkImageFile(file) {
+export async function shrinkImageFile(file) {
   const url = URL.createObjectURL(file);
   try {
     const image = new Image();
