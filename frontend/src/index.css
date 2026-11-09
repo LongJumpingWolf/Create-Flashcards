@@ -1464,3 +1464,17 @@ body { background:#202124; }
   .set-row input[type=range], input[type=range] { min-height: 32px; }
   .card-tools button, .toolbar button, .editor-toolbar button { min-width: 40px; min-height: 40px; }
 }
+
+/* Folders menu */
+.fm { position: relative; } .fm-btn span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; width: 300px; padding: 10px; border: 1px solid var(--line-strong, #44464b); border-radius: 12px; background: var(--surface, #25262a); box-shadow: 0 12px 32px rgba(0,0,0,.45); }
+.fm-h { display: block; margin: 2px 4px 8px; color: var(--muted, #8b9096); font-size: 10px; font-weight: 750; letter-spacing: .12em; }
+.fm-list { max-height: 260px; overflow: auto; display: grid; gap: 2px; }
+.fm-row { display: flex; align-items: center; gap: 2px; border-radius: 8px; } .fm-row.on { background: rgba(59,130,246,.18); }
+.fm-row > button:first-child { flex: 1; display: flex; justify-content: space-between; gap: 8px; min-height: 36px; padding: 0 10px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; border-radius: 8px; }
+.fm-row > button:first-child:hover { background: rgba(255,255,255,.06); } .fm-row b { color: var(--muted, #9aa0a6); font-size: 12px; font-weight: 600; }
+.fm-del { width: 32px; height: 32px; border: 0; background: transparent; color: #ff9a9a; border-radius: 8px; cursor: pointer; } .fm-del:hover { background: rgba(255,120,120,.12); }
+.fm-new { display: flex; gap: 6px; margin-top: 8px; } .fm-new input { flex: 1; min-width: 0; height: 36px; padding: 0 10px; border: 1px solid var(--line-strong, #44464b); border-radius: 8px; background: var(--surface-raised, #1d1e21); color: inherit; font-size: 14px; }
+.fm-new button { width: 38px; border: 1px solid var(--line-strong, #44464b); border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }
+.fm-note { margin: 8px 4px 2px; color: var(--muted, #8b9096); font-size: 11.5px; line-height: 1.45; }
+.cb-move { height: 34px; border: 1px solid rgba(193,216,198,.18); border-radius: 8px; background: #1a211c; color: inherit; padding: 0 8px; }

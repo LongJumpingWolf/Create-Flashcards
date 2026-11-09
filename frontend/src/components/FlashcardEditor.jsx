@@ -5,6 +5,8 @@ import DocumentationModal from './DocumentationModal';
 import ImportCardsModal from './ImportCardsModal';
 import PillFields, { PreviewPills } from './PillFields';
 import CardBrowser from './CardBrowser';
+import FolderMenu from './FolderMenu';
+import { readFolders, writeFolders, readSnapshot, writeSnapshot, removeSnapshot, newFolderId } from '../folders';
 import { installImageDrop, readDroppedImages } from '../dropImages';
 import CardPreviewFrame, { DEVICES as PREVIEW_DEVICES } from './CardPreviewFrame';
 import { buildThemePayload, loadSettings, normalizePills } from '../beerus';
@@ -865,6 +867,63 @@ export default function FlashcardEditor({ onOpenSettings }) {
       setIsExporting(false);
     }
   }, [cards, deckName]);
+
+  // ---- Folders: separate decks you can switch between ----
+  const [folders, setFolders] = useState(readFolders);
+  useEffect(() => {
+    setFolders(prev => {
+      if (!prev.list.some(f => f.id === prev.active && f.name !== deckName)) return prev;
+      const next = { ...prev, list: prev.list.map(f => (f.id === prev.active ? { ...f, name: deckName } : f)) };
+      writeFolders(next);
+      return next;
+    });
+  }, [deckName]);
+
+  const clearWorkingState = () => {
+    setCardType('Basic'); previousCardTypeRef.current = 'Basic';
+    setOcclusionImage(null); setOcclusionMasks([]);
+    setFront(''); setBack(''); setCurrentTags([]); setClozeNumber(1); setActiveClozeId(null); setEditingIndex(null);
+    setPills(['', '', '', '']); setPillsResetKey(key => key + 1);
+    if (frontRef.current) frontRef.current.innerHTML = '';
+    if (backRef.current) backRef.current.innerHTML = '';
+    try { localStorage.removeItem(FRONT_LS_KEY); localStorage.removeItem(FRONT_LS_KEY + '_back'); } catch { /* storage unavailable */ }
+  };
+
+  // Keep the open folder's cards safe, then open another folder (its cards replace the editor's cards).
+  const activateFolder = (id, nextFolders, keepCurrent = true) => {
+    if (keepCurrent) writeSnapshot(folders.active, { deck: deckName, cards });
+    const snapshot = readSnapshot(id) || { deck: nextFolders.list.find(f => f.id === id)?.name || 'Default Deck', cards: [] };
+    setCards(snapshot.cards || []);
+    setDeckName(snapshot.deck || 'Default Deck');
+    clearWorkingState();
+    const next = { ...nextFolders, active: id };
+    setFolders(next);
+    writeFolders(next);
+  };
+  const switchFolder = (id) => { if (id !== folders.active) activateFolder(id, folders); };
+  const createFolder = (name) => {
+    const id = newFolderId();
+    writeSnapshot(id, { deck: name, cards: [] });
+    activateFolder(id, { ...folders, list: [...folders.list, { id, name }] });
+  };
+  const deleteFolder = (id) => {
+    const target = folders.list.find(f => f.id === id);
+    if (!target || folders.list.length < 2) return;
+    const count = id === folders.active ? cards.length : (readSnapshot(id)?.cards?.length || 0);
+    if (!window.confirm(`Delete the folder "${target.name}" and its ${count} card${count === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    const rest = { ...folders, list: folders.list.filter(f => f.id !== id) };
+    removeSnapshot(id);
+    if (id === folders.active) activateFolder(rest.list[0].id, rest, false);
+    else { setFolders(rest); writeFolders(rest); }
+  };
+  const moveCards = (indexes, toId) => {
+    const target = readSnapshot(toId) || { deck: folders.list.find(f => f.id === toId)?.name || 'Default Deck', cards: [] };
+    const chosen = new Set(indexes);
+    const moved = cards.filter((_, i) => chosen.has(i));
+    if (!moved.length || !writeSnapshot(toId, { ...target, cards: [...moved, ...(target.cards || [])] })) return 0;
+    setCards(prev => prev.filter((_, i) => !chosen.has(i)));
+    return moved.length;
+  };
 
   const startNewDeck = () => {
     if (window.confirm(`Are you sure you want to start a new deck? All ${cards.length} unexported cards will be cleared.`)) {
@@ -2133,6 +2192,8 @@ export default function FlashcardEditor({ onOpenSettings }) {
         </div>
         <div className="header-status"><span className={`save-dot ${saveStatus === 'Storage full' ? 'save-error' : ''}`} /><span>{saveStatus === 'Saved' ? 'All changes saved' : saveStatus}</span><span className="status-divider" /><span>{cards.length} {cards.length === 1 ? 'card' : 'cards'}</span></div>
         <div className="header-actions">
+          <FolderMenu folders={folders} activeCards={cards.length} onSwitch={switchFolder} onCreate={createFolder} onDelete={deleteFolder} />
+          <button onClick={() => setShowCardBrowser(true)} title="Browse all cards (full screen)" className="icon-button"><BookOpen size={18} /><span>Browse</span></button>
           <button onClick={() => setShowImportModal(true)} title="Import cards from JSON (AI-generated)" className="icon-button"><Upload size={18} /><span>Import</span></button>
           <button onClick={() => onOpenSettings?.()} title="Card types, pills, watermark and look" className="icon-button"><Settings size={18} /><span>Settings</span></button>
           <button onClick={() => setShowDocumentationModal(true)} title="Help and keyboard shortcuts" className="icon-button"><HelpCircle size={18} /><span>Help</span></button>
@@ -2555,7 +2616,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
       )}
 
       {showCardBrowser && (
-        <CardBrowser cards={cards} setCards={setCards} deckName={deckName} onClose={() => setShowCardBrowser(false)}
+        <CardBrowser cards={cards} setCards={setCards} deckName={deckName} folders={folders} onMove={moveCards} onClose={() => setShowCardBrowser(false)}
           onEdit={(index) => { loadCardForEdit(index); setShowCardBrowser(false); }}
           helpers={{ getCardPreview, formatTag: formatTagForDisplay, pillLabel: (i) => loadSettings().pills[i]?.label || `Pill ${i + 1}` }} />
       )}

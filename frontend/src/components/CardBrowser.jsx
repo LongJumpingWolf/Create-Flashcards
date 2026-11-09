@@ -26,7 +26,7 @@ const plain = (html) => { const d = document.createElement('div'); d.innerHTML =
  * Full-screen card browser: search + filters + tags, real card preview, multi-select with bulk tag / delete,
  * duplicate, undo and a complete keyboard layout. `cards` is newest first; `setCards` replaces the deck.
  */
-export default function CardBrowser({ cards, setCards, deckName, onEdit, onClose, helpers }) {
+export default function CardBrowser({ cards, setCards, deckName, onEdit, onClose, helpers, folders, onMove }) {
   const { getCardPreview, formatTag, pillLabel } = helpers;
   const [search, setSearch] = useState('');
   const [type, setType] = useState('All');
@@ -42,6 +42,7 @@ export default function CardBrowser({ cards, setCards, deckName, onEdit, onClose
   const [tagging, setTagging] = useState(false);
   const [undo, setUndo] = useState(null);
   const [help, setHelp] = useState(false);
+  const [moveNote, setMoveNote] = useState('');
   const searchRef = useRef(null);
   const listRef = useRef(null);
   const tagRef = useRef(null);
@@ -210,6 +211,12 @@ export default function CardBrowser({ cards, setCards, deckName, onEdit, onClose
               <button type="button" className="cb-btn" onClick={() => setTagging(true)}>+ Tag (t)</button>
               <button type="button" className="cb-btn" onClick={() => duplicate(targets)}>Duplicate (d)</button>
               <button type="button" className="cb-btn cb-danger" onClick={() => remove(targets)}>Delete (x)</button>
+              {folders && folders.list.length > 1 && (
+                <select className="cb-move" value="" aria-label="Move selected cards to a folder" onChange={e => { const moved = onMove(targets, e.target.value); setPicked(new Set()); setUndo(null); if (moved) setMoveNote(`Moved ${moved} card${moved === 1 ? '' : 's'}`); }}>
+                  <option value="">Move to folder…</option>
+                  {folders.list.filter(f => f.id !== folders.active).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              )}
               <button type="button" className="cb-btn" onClick={() => setPicked(new Set())}>Unselect</button>
             </>
           )}
@@ -276,6 +283,7 @@ export default function CardBrowser({ cards, setCards, deckName, onEdit, onClose
 
       <footer className="cb-foot">
         <span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> edit</span><span><kbd>Space</kbd> select</span><span><kbd>x</kbd> delete</span><span><kbd>t</kbd> tag</span><span><kbd>a</kbd> answer</span><span><kbd>/</kbd> search</span><span><kbd>?</kbd> all keys</span>
+        {moveNote && <span className="cb-undo" role="status">{moveNote}</span>}
         {undo && <button type="button" className="cb-undo" onClick={doUndo}>{undo.note} · Undo (Ctrl+Z)</button>}
       </footer>
 
