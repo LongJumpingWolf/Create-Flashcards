@@ -117,6 +117,22 @@ const DROP_WITH_CONTENT = new Set(['SCRIPT', 'STYLE', 'META', 'LINK', 'IFRAME', 
 const KEEP_CLASSES = new Set(['mnemonics', 'centerbox', 'gpt', 'gpt-badgerow', 'gpt-badge', 'gpt-badge-info', 'gpt-badge-warning', 'gpt-badge-success', 'gpt-badge-danger', 'gpt-badge-neutral']);
 const KEEP_STYLES = ['color', 'background-color', 'font-weight', 'font-style', 'text-decoration', 'text-align', 'vertical-align'];
 
+// Black, white and greys (and transparent) come from the page theme the text was copied from, not from the author:
+// pasted into a card of the other theme they turn text invisible. Real colours (red, blue ...) are kept.
+function isThemeColor(value) {
+  const v = String(value).trim().toLowerCase();
+  if (!v || /^(transparent|inherit|initial|unset|currentcolor|white|black|gr[ae]y|silver|whitesmoke|gainsboro|lightgr[ae]y|darkgr[ae]y|dimgr[ae]y)$/.test(v)) return true;
+  let r; let g; let b;
+  const rgb = v.match(/^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+  const hex = v.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
+  if (rgb) [r, g, b] = [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+  else if (hex) { const h = hex[1].length === 3 ? hex[1].split('').map(c => c + c).join('') : hex[1]; [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); }
+  else return false;
+  const alpha = v.match(/^rgba\(.*,\s*([\d.]+)\s*\)$/);
+  if (alpha && Number(alpha[1]) === 0) return true;
+  return Math.max(r, g, b) - Math.min(r, g, b) < 40; // low saturation = neutral
+}
+
 // Keeps meaningful formatting from a web page / Word / PDF paste but drops the junk
 // (classes, ids, scripts, fonts, sizes, event handlers) that makes cards ugly or unsafe.
 export function sanitizePastedHtml(html) {
@@ -135,7 +151,7 @@ export function sanitizePastedHtml(html) {
       if (tag === 'TD' || tag === 'TH') { ['colspan', 'rowspan'].forEach(name => { const value = child.getAttribute(name); if (/^\d{1,2}$/.test(value || '')) keep[name] = value; }); }
       if (tag === 'AUDIO') { const src = child.getAttribute('src') || ''; if (/^data:audio\//i.test(src)) { keep.src = src; keep.controls = ''; } else { child.remove(); return; } }
       const style = child.style;
-      const styles = KEEP_STYLES.map(prop => [prop, style.getPropertyValue(prop)]).filter(([prop, value]) => value && !(prop === 'font-weight' && (value === '400' || value === 'normal')) && !(prop === 'font-style' && value === 'normal') && !(prop === 'background-color' && /transparent|rgba\(0, 0, 0, 0\)|rgb\(255, 255, 255\)|white/i.test(value)));
+      const styles = KEEP_STYLES.map(prop => [prop, style.getPropertyValue(prop)]).filter(([prop, value]) => value && !(prop === 'font-weight' && (value === '400' || value === 'normal')) && !(prop === 'font-style' && value === 'normal') && !((prop === 'color' || prop === 'background-color') && isThemeColor(value)));
       const keptClasses = (child.getAttribute('class') || '').split(/\s+/).filter(name => KEEP_CLASSES.has(name));
       [...child.attributes].forEach(attribute => child.removeAttribute(attribute.name));
       if (keptClasses.length && (tag === 'DIV' || tag === 'SPAN')) child.setAttribute('class', keptClasses.join(' '));
