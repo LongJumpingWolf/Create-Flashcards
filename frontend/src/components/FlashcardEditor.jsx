@@ -931,6 +931,8 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     else if (detail.type === 'create') createFolder(detail.name);
     else if (detail.type === 'delete') deleteFolder(detail.id);
     else if (detail.type === 'rename') renameFolder(detail.id, detail.name);
+    else if (detail.type === 'browse') setShowCardBrowser(true);
+    else if (detail.type === 'import') setShowImportModal(true);
     window.setTimeout(() => window.dispatchEvent(new Event('beerus-folders-changed')), 60);
   };
   useEffect(() => {

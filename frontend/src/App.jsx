@@ -57,7 +57,7 @@ function App() {
       {/* The editor stays mounted (hidden) while settings are open, so nothing in progress is lost. */}
       <div hidden={route !== ''}><FlashcardEditor onOpenSettings={() => go('settings')} onOpenFolders={() => go('folders')} /></div>
       {route === 'settings' && <Suspense fallback={<div className="set-loading">Loading settings…</div>}><SettingsPage onClose={() => go('')} onOpenIcons={() => go('icons')} /></Suspense>}
-      {route === 'folders' && <Suspense fallback={<div className="set-loading">Loading folders…</div>}><FoldersPage onClose={() => go('')} /></Suspense>}
+      {route === 'folders' && <Suspense fallback={<div className="set-loading">Loading folders…</div>}><FoldersPage onClose={() => go('')} onOpenSettings={() => go('settings')} /></Suspense>}
       {route === 'icons' && <Suspense fallback={<div className="set-loading">Loading icon maker…</div>}><IconMaker onClose={() => go('settings')} /></Suspense>}
     </div>
   );

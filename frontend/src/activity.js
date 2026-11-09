@@ -22,18 +22,20 @@ export function logAdded(count = 1) {
   window.dispatchEvent(new Event('beerus-activity'));
 }
 
-/** Weeks (columns, Sunday first) covering the last `weeks` weeks up to today, each day with its count. */
-export function buildHeatmap(log, weeks = 53, today = new Date()) {
-  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+/** Weeks (columns, Monday first like Anki) covering `weeks` weeks up to `endDate`; each day carries its count (null = future). */
+export function buildHeatmap(log, weeks = 53, endDate = new Date()) {
+  const today = new Date();
+  const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
   const start = new Date(end);
-  start.setDate(end.getDate() - end.getDay() - (weeks - 1) * 7); // the Sunday that starts the first column
+  start.setDate(end.getDate() - ((end.getDay() + 6) % 7) - (weeks - 1) * 7); // the Monday that starts the first column
   const columns = [];
   const cursor = new Date(start);
   for (let w = 0; w < weeks; w += 1) {
     const column = [];
     for (let d = 0; d < 7; d += 1) {
       const key = dayKey(cursor);
-      column.push({ key, date: new Date(cursor), count: cursor > end ? null : (log[key]?.n || 0) });
+      const future = cursor > today;
+      column.push({ key, date: new Date(cursor), count: future ? null : (log[key]?.n || 0) });
       cursor.setDate(cursor.getDate() + 1);
     }
     columns.push(column);
