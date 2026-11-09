@@ -125,6 +125,17 @@ export default function IconMaker({ onClose }) {
   const doodleRef = useRef(null);
   const dragRef = useRef(null);
 
+  // Esc leaves this page (unless a field is being typed in).
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      onClose?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   if (!doodleRef.current && typeof document !== 'undefined') {
     const canvas = document.createElement('canvas');
     canvas.width = VIEW; canvas.height = VIEW;

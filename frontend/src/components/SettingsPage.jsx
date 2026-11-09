@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BEERUS_NAMES, DEFAULT_SETTINGS, FONT_FAMILIES, buildModels, loadSettings, normalizeSettings,
   previewDocument, saveSettings, themeMedia,
@@ -135,6 +135,17 @@ export default function SettingsPage({ onClose, onOpenIcons }) {
   const [device, setDevice] = useState('phone');
   const [message, setMessage] = useState('');
   const importRef = useRef(null);
+
+  // Esc leaves this page (unless a field is being typed in).
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      onClose?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const commit = useCallback((next) => {
     const normalized = normalizeSettings(next);

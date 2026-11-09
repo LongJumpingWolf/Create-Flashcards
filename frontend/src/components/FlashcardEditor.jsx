@@ -991,7 +991,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
       if (showLinkModal) setShowLinkModal(false);
       else if (showColorPicker) { setShowColorPicker(false); setColorPickerTarget(null); }
       else if (showCardBrowser) setShowCardBrowser(false);
-      else if (showPreview) return; // the preview closes with its top-right icon only
+      else if (showPreview) setShowPreview(false);
       else if (occlusionEditorOpen) setOcclusionEditorOpen(false);
     };
     window.addEventListener('keydown', onEscape);
