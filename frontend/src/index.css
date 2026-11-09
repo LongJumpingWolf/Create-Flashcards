@@ -1609,3 +1609,12 @@ body { background:#202124; }
 .snip-send-label { display: none; font-size: 11px; opacity: .6; margin-right: 2px; } .snip-side.open .snip-send-label { display: inline; }
 .snip-side.open .snip-tray-pills { margin-top: 2px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,.12); }
 @media (max-width: 700px) { .snip-side.open { width: min(320px, 80%); position: absolute; right: 0; top: 0; bottom: 0; z-index: 8; } }
+
+/* Header buttons, toned down: neutral surface, one accent for the two key actions */
+.header-actions .hb { --hb: #9aa3af; color: #d6dae0; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); font-weight: 600; }
+.header-actions .hb:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.22); }
+.header-actions .hb svg { color: #9aa3af; }
+.header-actions .hb-deck, .header-actions .hb-pdf { --hb: #60a5fa !important; color: #bcd7fb; background: rgba(96,165,250,.13); border-color: rgba(96,165,250,.4); }
+.header-actions .hb-deck svg, .header-actions .hb-pdf svg { color: #60a5fa; }
+.header-actions .hb-deck:hover, .header-actions .hb-pdf:hover { background: rgba(96,165,250,.22); border-color: rgba(96,165,250,.65); }
+.hb-sep { background: rgba(148,163,184,.2); }
