@@ -4,6 +4,8 @@ import { createPortal } from 'react-dom';
 import DocumentationModal from './DocumentationModal';
 import ImportCardsModal from './ImportCardsModal';
 import PillFields, { PreviewPills } from './PillFields';
+import CardBrowser from './CardBrowser';
+import { installImageDrop, readDroppedImages } from '../dropImages';
 import CardPreviewFrame, { DEVICES as PREVIEW_DEVICES } from './CardPreviewFrame';
 import { buildThemePayload, loadSettings, normalizePills } from '../beerus';
 import { repairOldChatGptPaste } from '../chatgptFormat';
@@ -473,8 +475,6 @@ export default function FlashcardEditor({ onOpenSettings }) {
   const [showTagSelector, setShowTagSelector] = useState(false);
   const [tagSelectorSearch, setTagSelectorSearch] = useState("");
   const [showCardBrowser, setShowCardBrowser] = useState(false);
-  const [browserSearch, setBrowserSearch] = useState('');
-  const [browserSelectedIndex, setBrowserSelectedIndex] = useState(null);
 
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
@@ -994,18 +994,19 @@ export default function FlashcardEditor({ onOpenSettings }) {
   }, [cardType, contentInitialized, editingIndex]);
 
   useEffect(() => {
-    if (!occlusionEditorOpen && !showPreview && !showCardBrowser && !showLinkModal && !showColorPicker) return undefined;
+    if (!occlusionEditorOpen && !showPreview && !showLinkModal && !showColorPicker) return undefined;
     const onEscape = (e) => {
       if (e.key !== 'Escape') return;
       if (showLinkModal) setShowLinkModal(false);
       else if (showColorPicker) { setShowColorPicker(false); setColorPickerTarget(null); }
-      else if (showCardBrowser) setShowCardBrowser(false);
       else if (showPreview) setShowPreview(false);
       else if (occlusionEditorOpen) setOcclusionEditorOpen(false);
     };
     window.addEventListener('keydown', onEscape);
     return () => window.removeEventListener('keydown', onEscape);
-  }, [occlusionEditorOpen, showPreview, showCardBrowser, showLinkModal, showColorPicker]);
+  }, [occlusionEditorOpen, showPreview, showLinkModal, showColorPicker]);
+
+  useEffect(() => installImageDrop(), []); // pictures dropped into any other field (pills, extra...) without the links that come with them
 
   useEffect(() => { setHtmlOpen({ front: false, back: false }); }, [editingIndex, cardType]);
   useEffect(() => {
@@ -1836,9 +1837,8 @@ export default function FlashcardEditor({ onOpenSettings }) {
       return;
     }
     const imageFile = [...(event.dataTransfer.files || [])].find(file => file.type.startsWith('image/'));
-    const droppedHtml = event.dataTransfer.getData('text/html');
-    const droppedImage = droppedHtml ? new DOMParser().parseFromString(droppedHtml, 'text/html').querySelector('img') : null;
-    const imageUrl = droppedImage?.getAttribute('src') || event.dataTransfer.getData('text/uri-list').split('\n').find(line => /^https?:\/\//i.test(line.trim()))?.trim();
+    const dropped = readDroppedImages(event.dataTransfer); // pictures only: the links that travel with a dropped picture are discarded
+    const imageUrl = dropped.sources[0];
     if (!imageFile && !imageUrl) return;
     event.preventDefault();
     const dropPoint = { clientX: event.clientX, clientY: event.clientY };
@@ -1861,7 +1861,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
       reader.onload = () => placeImage(reader.result);
       reader.onerror = () => setFormMessage('That image could not be read. Try a different image.');
       reader.readAsDataURL(imageFile);
-    } else if (imageUrl && (/^data:image\//i.test(imageUrl) || /^https?:\/\//i.test(imageUrl))) placeImage(imageUrl);
+    } else dropped.sources.forEach(source => { if (/^data:image\//i.test(source) || /^https?:\/\//i.test(source)) placeImage(source); });
   };
 
   const handleCardTypeChange = (nextType) => {
@@ -1990,14 +1990,8 @@ export default function FlashcardEditor({ onOpenSettings }) {
               </article>
             ))}
     </>
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   ), [visibleCards, cards.length]);
 
-  const browserCards = useMemo(() => {
-    const query = browserSearch.trim().toLowerCase();
-    return cards.map((card, index) => ({ card, index })).filter(({ card }) => !query || `${card.type} ${getCardPreview(card.question)} ${getCardPreview(card.answer)} ${(card.masks || []).map(mask => mask.label).join(' ')} ${(card.tags || []).join(' ')}`.toLowerCase().includes(query));
-  }, [cards, browserSearch]);
-  const browserSelection = browserCards.find(({ index }) => index === browserSelectedIndex) || browserCards[0] || null;
 
   const toolbarTargetRef = activeEditor === 'back' ? backRef : frontRef;
 
@@ -2295,7 +2289,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
                 {...(!contentInitialized && { dangerouslySetInnerHTML: { __html: front } })}
               />
               {htmlOpen.front && !fieldPrefs.collapsed.front && <HtmlView field="front" label="Front HTML" value={htmlDraft.front} onChange={(value) => changeHtmlView('front', value)} />}
-              {duplicateMatches.length > 0 && <div className="field-warning" role="status"><span>This front already exists in your deck ({duplicateMatches.length} card{duplicateMatches.length > 1 ? 's' : ''}).</span><button type="button" onClick={() => { setBrowserSearch(''); setBrowserSelectedIndex(duplicateMatches[0]); setShowCardBrowser(true); }}>Show</button></div>}
+              {duplicateMatches.length > 0 && <div className="field-warning" role="status"><span>This front already exists in your deck ({duplicateMatches.length} card{duplicateMatches.length > 1 ? 's' : ''}).</span><button type="button" onClick={() => { setShowCardBrowser(true); }}>Show</button></div>}
             </section>}
 
             <section className="space-y-2 mb-4">
@@ -2333,7 +2327,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
                     <Tag size={16} />Tags
                   </span>
                   <button
-                    onClick={() => { setBrowserSearch(''); setBrowserSelectedIndex(cards[0] ? 0 : null); setShowCardBrowser(true); }}
+                    onClick={() => { setShowCardBrowser(true); }}
                     className="tag-browse-button text-xs flex items-center gap-1"
                   >
                     <BookOpen size={14} /> Browse cards
@@ -2417,7 +2411,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
         <div className={`cards-panel ${mobileView !== 'cards' ? 'mobile-hidden' : ''} ${pdfOpen ? `library-drawer ${showLibrary ? 'library-open' : ''}` : ''}`}>
           <div className="library-heading">
             <div><p className="section-eyebrow">YOUR DECK</p><h2><BookOpen size={19} /> Card library <span className="library-count">{cards.length}</span></h2></div>
-            {cards.length > 0 && <span className="library-meta">Newest first</span>}
+            {cards.length > 0 && <button type="button" className="tag-browse-button text-xs flex items-center gap-1" onClick={() => setShowCardBrowser(true)} title="Open the full-screen card browser"><BookOpen size={14} /> Browse all</button>}
           </div>
           <label className="card-search-wrap"><Search size={16} /><input ref={cardSearchRef} value={cardSearch} onChange={(e) => setCardSearch(e.target.value)} placeholder="Find a card or tag..." aria-label="Search cards and tags" /><kbd>/</kbd></label>
           <div className="card-list">
@@ -2561,21 +2555,9 @@ export default function FlashcardEditor({ onOpenSettings }) {
       )}
 
       {showCardBrowser && (
-        <div className="card-browser-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setShowCardBrowser(false); }}>
-          <section className="card-browser" role="dialog" aria-modal="true" aria-label="Browse cards">
-            <header className="card-browser-header"><div><span className="section-eyebrow">BROWSE</span><h2>Cards</h2></div><button className="card-browser-close" onClick={() => setShowCardBrowser(false)} aria-label="Close card browser"><XCircle size={21} /></button></header>
-            <div className="card-browser-search"><Search size={17} /><input autoFocus value={browserSearch} onChange={event => { setBrowserSearch(event.target.value); setBrowserSelectedIndex(null); }} placeholder="Search cards…" aria-label="Search cards" /><span>{browserCards.length} cards</span></div>
-            <div className="card-browser-body">
-              <aside className="card-browser-decks"><span className="card-browser-section-title">DECKS</span><button className="card-browser-deck active"><Layers3 size={16} /><span>{deckName || 'Default Deck'}</span><b>{cards.length}</b></button></aside>
-              <div className="card-browser-results" role="listbox" aria-label="Cards">
-                <div className="card-browser-columns"><span>Card</span><span>Type</span><span>Tags</span></div>
-                {browserCards.map(({ card, index }) => <button key={`${card.created}-${index}`} role="option" aria-selected={browserSelection?.index === index} className="card-browser-row" onClick={() => setBrowserSelectedIndex(index)}><span className="card-browser-row-content"><strong>{getCardPreview(card.question) || 'Image occlusion'}</strong><small>{card.type === 'Image Occlusion' ? `${(card.masks || []).length} hidden regions` : getCardPreview(card.answer) || 'No answer'}</small></span><span className="card-type-pill">{card.type || 'Basic'}</span><span className="card-browser-tags">{(card.tags || []).slice(0, 2).map(formatTagForDisplay).join(', ') || '—'}</span></button>)}
-                {!browserCards.length && <div className="card-browser-empty">{cards.length ? 'No cards match this search.' : 'This deck has no cards yet.'}</div>}
-              </div>
-              <aside className="card-browser-detail">{browserSelection ? <><div className="card-browser-detail-heading"><span className="card-type-pill">{browserSelection.card.type || 'Basic'}</span><span>Card {cards.length - browserSelection.index}</span></div>{browserSelection.card.type === 'Image Occlusion' ? <div className="card-browser-io"><img src={browserSelection.card.imageData} alt="Card image occlusion" /><span>{(browserSelection.card.masks || []).length} hidden regions</span></div> : <><section><span>{browserSelection.card.type === 'Cloze' ? 'TEXT' : 'FRONT'}</span><div dangerouslySetInnerHTML={{ __html: browserSelection.card.question || '(empty)' }} /></section>{browserSelection.card.type !== 'Cloze' && <section><span>BACK</span><div dangerouslySetInnerHTML={{ __html: browserSelection.card.answer || '(empty)' }} /></section>}{browserSelection.card.type === 'Cloze' && browserSelection.card.answer && <section><span>EXTRA</span><div dangerouslySetInnerHTML={{ __html: browserSelection.card.answer }} /></section>}</>}{(browserSelection.card.tags || []).length > 0 && <div className="card-browser-detail-tags">{browserSelection.card.tags.map(tag => <span key={tag}>{formatTagForDisplay(tag)}</span>)}</div>}<button className="primary-button" onClick={() => { loadCardForEdit(browserSelection.index); setShowCardBrowser(false); }}>Edit card</button></> : <div className="card-browser-placeholder"><BookOpen size={25} /><span>Select a card to preview it</span></div>}</aside>
-            </div>
-          </section>
-        </div>
+        <CardBrowser cards={cards} setCards={setCards} deckName={deckName} onClose={() => setShowCardBrowser(false)}
+          onEdit={(index) => { loadCardForEdit(index); setShowCardBrowser(false); }}
+          helpers={{ getCardPreview, formatTag: formatTagForDisplay, pillLabel: (i) => loadSettings().pills[i]?.label || `Pill ${i + 1}` }} />
       )}
       {showLinkModal && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
