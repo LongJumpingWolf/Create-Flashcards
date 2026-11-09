@@ -1528,3 +1528,9 @@ body { background:#202124; }
 .sd-btn { min-height: 38px; padding: 0 16px; border: 1px solid #44464b; border-radius: 10px; background: #2f3236; color: #e8eaed; font-size: 14px; font-weight: 600; cursor: pointer; } .sd-btn:hover { border-color: #60a5fa; }
 .sd-btn.primary { background: #3b82f6; border-color: #3b82f6; color: #fff; } .sd-btn.danger { background: #d64545; border-color: #d64545; color: #fff; }
 .set-undo { margin-left: 12px; padding: 2px 12px; border: 1px solid currentColor; border-radius: 99px; background: transparent; color: inherit; font-weight: 700; cursor: pointer; }
+
+/* drag handle: a real 2x3 dot grip in the left gutter (replaces the text glyph that rendered as stray dots) */
+.fp-name { position: relative; }
+.fp-grip { position: absolute; left: 8px; top: 50%; width: 8px; height: 14px; margin: 0; transform: translateY(-50%); letter-spacing: 0; font-size: 0; background: radial-gradient(circle, #b4bac0 1.4px, transparent 1.9px) 0 0 / 4px 4.67px; opacity: 0; pointer-events: none; transition: opacity .12s; }
+.fp-row:hover .fp-grip, .fp-row.drag .fp-grip { opacity: .9; }
+@media (hover: none) { .fp-grip { display: none; } }

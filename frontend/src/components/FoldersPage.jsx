@@ -97,8 +97,8 @@ function DeckRow({ node, depth, collapsed, toggle, active, openNode, menu, setMe
         onDragEnd={dnd.end}
         onDragOver={event => { if (!dnd.drag) return; event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = valid ? 'move' : 'none'; dnd.hover(node.path, hasChildren && isCollapsed); }}
         onDrop={event => { event.preventDefault(); event.stopPropagation(); dnd.drop(node.path); }}>
-        <td className="fp-name" style={{ paddingLeft: 10 + depth * 22 }}>
-          <span className="fp-grip" aria-hidden="true" title="Drag onto another deck to make it a subdeck">⋮⋮</span>
+        <td className="fp-name" style={{ paddingLeft: 22 + depth * 22 }}>
+          <span className="fp-grip" aria-hidden="true" title="Drag onto another deck to make it a subdeck" />
           {hasChildren
             ? <button type="button" className="fp-twist" onClick={() => toggle(node.path)} aria-label={isCollapsed ? `Expand ${node.label}` : `Collapse ${node.label}`}>{isCollapsed ? '+' : '−'}</button>
             : <span className="fp-twist none" />}
