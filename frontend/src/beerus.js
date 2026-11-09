@@ -347,6 +347,7 @@ export function gptCss(settings) {
 ${g.followNight ? `${nm} { background: ${g.night.bg}; color: ${g.night.text}; }` : ''}
 .gpt > :first-child { margin-top: 0 !important; }
 .gpt p { margin: 16px 0 0; }
+.gpt h2 + p, .gpt h3 + p, .gpt h4 + p { margin-top: 8px; }
 .gpt h2 { margin: 24px 0 0; font-size: 1.125em; line-height: 1.5556; font-weight: 600; }
 .gpt h3, .gpt h4 { margin: 24px 0 0; font-size: 1em; line-height: 1.625; font-weight: 600; }
 .gpt b, .gpt strong { font-weight: 600; color: inherit; }
@@ -359,17 +360,21 @@ ${g.followNight ? `${nm} { background: ${g.night.bg}; color: ${g.night.text}; }`
 .gpt li { margin: 0; }
 .gpt li > p { margin: 0; }
 .gpt table { width: 100%; margin: 16px 0 0; border-collapse: collapse; font-size: .875em; line-height: 1.4286; }
-.gpt th, .gpt td { border: 0; background: none; padding: 8px 12px 8px 0; text-align: left; vertical-align: top; }
+.gpt th, .gpt td { border: 0; background: none; padding: 8px 8px 8px 0; text-align: left; vertical-align: top; }
 .gpt th { font-weight: 600; }
-.gpt tr { border-bottom: 1px solid rgba(0,0,0,.06); }
+.gpt tr { border-bottom: 1px solid rgba(0,0,0,.05); }
+.gpt ol li::marker { font-weight: 600; }
 ${night('.gpt tr', 'border-bottom-color: rgba(255,255,255,.12);')}.gpt code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .875em; padding: .12em .4em; border-radius: 6px; background: rgba(128,128,128,.16); }
 .gpt pre { margin: 16px 0 0; padding: 14px 16px; border-radius: 12px; overflow-x: auto; background: rgba(128,128,128,.14); text-align: left; }
 .gpt pre code { padding: 0; background: none; }
 .gpt blockquote { display: block; margin: 16px 0 0; padding: 0 0 0 16px; border-left: 4px solid rgba(128,128,128,.4); text-align: left; }
 .gpt hr { margin: 24px 0 0; border: 0; border-top: 1px solid rgba(128,128,128,.3); opacity: 1; }
 .gpt img { display: block; max-width: 100%; margin: 16px 0 0; border-radius: 16px; }
+.gpt .gpt-img { position: relative; margin: 16px 0 0; border-radius: 16px; overflow: hidden; background: #F3F3F3; text-align: center; line-height: 0; }
+.gpt .gpt-img img { display: inline-block; margin: 0; border-radius: 0; max-width: 100%; max-height: 432px; width: auto; height: auto; object-fit: contain; }
+.gpt .gpt-src { position: absolute; left: 8px; bottom: 8px; padding: 0 8px; border-radius: 9999px; background: rgba(70,70,70,.88); color: #fff; font-size: 12px; line-height: 20px; }
 .gpt a { color: inherit; text-decoration: underline; }
-.gpt .gpt-badgerow { margin: 16px 0 0; }
+.gpt .gpt-badgerow { margin: 16px 0 0; line-height: 20px; }
 .gpt-badge { display: inline-block; padding: 0 7px; border-radius: 9999px; font-size: .75em; line-height: 1.6667; font-weight: 500; }
 .gpt-badge-info { color: #0285FF; background: rgba(2,133,255,.13); }
 .gpt-badge-warning { color: #923B0F; background: rgba(251,106,34,.16); }

@@ -9,10 +9,22 @@ const commit = (process.env.VERCEL_GIT_COMMIT_SHA || (() => { try { return execS
 const APP_VERSION = `${commit} · ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC`
 
 // https://vite.dev/config/
+// Same image proxy as the Vercel function, so pasting/exporting web images also works in `npm run dev`.
+const imageProxyDev = () => ({
+  name: 'image-proxy-dev',
+  configureServer(server) {
+    server.middlewares.use('/api/proxy-image', async (req, res) => {
+      const { default: handler } = await server.ssrLoadModule('/api/proxy-image.js');
+      await handler(req, res);
+    });
+  },
+});
+
 export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   plugins: [
     react(),
+    imageProxyDev(),
     VitePWA({
       // 'prompt' + no refresh handler: a new version installs quietly and takes
       // over on the next visit, so an update never reloads the page while a card

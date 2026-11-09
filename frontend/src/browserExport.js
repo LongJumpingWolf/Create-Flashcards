@@ -88,6 +88,15 @@ async function prepareImage(bytes, mime, { forOcclusion }) {
   }
 }
 
+// Pasted ChatGPT / web images: the picture host sends no CORS headers, so the site downloads them for us (/api/proxy-image).
+async function fetchRemoteImage(url) {
+  const response = await fetch(`/api/proxy-image?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(25_000) });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const mime = (response.headers.get('content-type') || '').split(';')[0].trim();
+  if (!mime.startsWith('image/')) throw new Error('not an image');
+  return { bytes: new Uint8Array(await response.arrayBuffer()), mime };
+}
+
 const safeFilename = (name) => name.trim().replace(/[^a-z0-9\s_-]/gi, '').replace(/\s+/g, '_').toLowerCase() || 'anki_deck';
 
 const triggerDownload = (bytes, filename) => {
@@ -114,6 +123,7 @@ export async function exportDeckLocally(payload, { onProgress } = {}) {
     settings,
     initSql: loadSql,
     prepareImage,
+    fetchRemoteImage,
     maxPartBytes: (isTouchDevice() ? 60 : 200) * 1024 * 1024,
     onProgress,
   });

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PILL_COUNT, gptCss, loadSettings, saveSettings, pillCss, themeMedia, cleanPillHtml, stripThemeColors } from '../beerus';
-import { chatgptFromClipboard, chatgptForce } from '../chatgptFormat';
+import { chatgptFromClipboard, chatgptForce, chatgptHtmlToGpt } from '../chatgptFormat';
 import { sanitizePastedHtml } from './editorHelpers';
 
 const MAX_EDGE = 1100;
@@ -139,6 +139,16 @@ export default function PillFields({ values, onChange, resetKey }) {
     setNote(prev => ({ ...prev, [index]: 'converted' }));
   };
 
+  // "Reformat": cleans the content that is already in the pill (e.g. pasted with an older version) into the ChatGPT look.
+  const reformat = (index) => {
+    const node = refs.current[index];
+    const out = node && chatgptHtmlToGpt(node.innerHTML);
+    if (!out) return;
+    node.innerHTML = out;
+    set(index, node.innerHTML);
+    setNote(prev => ({ ...prev, [index]: 'converted' }));
+  };
+
   // "Paste as ChatGPT": reads the clipboard directly (the browser asks permission once).
   const pasteAsChatGpt = async (index) => {
     try {
@@ -234,6 +244,7 @@ export default function PillFields({ values, onChange, resetKey }) {
                   </div>
                   )}
                   <span className="pill-field-state">{filledFlags[index] ? 'on the card' : 'empty, hidden'}{pill.format !== 'auto' ? ` · ${FORMAT_LABEL[pill.format]}` : ''}</span>
+                  {values[index] && <button type="button" className="pill-field-btn" onClick={() => reformat(index)} title="Clean up what is already in this pill into the ChatGPT look">Reformat</button>}
                   <button type="button" className="pill-field-btn" onClick={() => pasteAsChatGpt(index)} title="Paste what is on the clipboard as a ChatGPT-look panel">Paste as ChatGPT</button>
                   <label className="pill-field-btn">Add image<input type="file" accept="image/*" hidden onChange={e => { addFile(index, e.target.files?.[0]); e.target.value = ''; }} /></label>
                   <button type="button" className="pill-field-btn" onClick={() => { const url = window.prompt('Image link (https://…)'); if (url && /^https?:\/\//i.test(url.trim())) insertImage(index, url.trim()); }}>Image link</button>

@@ -8,6 +8,7 @@
 // from a saved ChatGPT page: 16px/26px text, 18px/28px 600 titles, 12px soft pill badges, 14px tables, 16px rounded
 // panel) draws it, so it also adapts to Anki's night mode instead of freezing the colours of the page it came from.
 import { markdownToHtml, looksLikeMarkdown } from './components/smartTyping';
+import { isImageHref } from './imageHosts';
 
 export const GPT_CLASS = 'gpt';
 const BADGE_COLORS = new Set(['info', 'warning', 'success', 'danger', 'neutral']);
@@ -70,6 +71,23 @@ export function chatgptHtmlToGpt(html) {
   // a block whose only content is a link (web-search source cards / citation chips) is not part of the answer
   const isSourceCard = (node) => node.nodeType === Node.ELEMENT_NODE && node.tagName !== 'LI' && node.querySelector('a[href]') && !/^(UL|OL|TABLE|P)$/.test(node.tagName) && [...node.querySelectorAll('a[href]')].every(a => a.closest('p, li, td, th') === null) && node.textContent.trim() === [...node.querySelectorAll('a[href]')].map(a => a.textContent.trim()).join('').trim();
 
+  // ChatGPT shows a picture as a card: a link to the image (title as text), the image and a source chip with the domain.
+  // On the clipboard the <img> is often missing, but the link to the picture is there.
+  const attr = (value) => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  const mediaBlock = (node) => {
+    if (node.nodeType !== Node.ELEMENT_NODE) return null;
+    const links = [...node.querySelectorAll('a[href]')];
+    const imageLinks = links.filter(a => isImageHref(a.getAttribute('href')));
+    const imgs = [...node.querySelectorAll('img[src]')].filter(i => /^(https?:|data:image\/)/i.test(i.getAttribute('src')));
+    if (!imageLinks.length && !imgs.length) return null;
+    const squash = (text) => text.replace(/\s+/g, '');
+    if (squash(node.textContent) !== squash(links.map(a => a.textContent).join(''))) return null; // real text around it: not a pure picture card
+    const src = imgs[0]?.getAttribute('src') || imageLinks[0].getAttribute('href');
+    const alt = imgs[0]?.getAttribute('alt') || imageLinks[0]?.textContent.trim() || '';
+    const domain = links.map(a => a.textContent.trim()).find(isDomainLike) || '';
+    return `<div class="gpt-img"><img src="${attr(src)}" alt="${attr(alt)}">${domain ? `<span class="gpt-src">${esc(domain)}</span>` : ''}</div>`;
+  };
+
   const hasBlockChild = (node) => [...node.children].some(child => /^(P|DIV|UL|OL|LI|H[1-6]|TABLE|PRE|BLOCKQUOTE|HR|SECTION|ARTICLE)$/.test(child.tagName));
 
   const listItem = (li) => {
@@ -111,12 +129,12 @@ export function chatgptHtmlToGpt(html) {
       return label ? `<div class="gpt-badgerow"><span class="gpt-badge gpt-badge-${BADGE_COLORS.has(color) ? color : 'info'}">${label}</span></div>` : '';
     }
     if (kind === 'table' || tag === 'TABLE') return table(node);
+    const media = mediaBlock(node);
+    if (media) return media;
     if (isSourceCard(node)) return '';
-    if (kind === 'box' || kind === 'image') {
-      const img = node.querySelector('img[src]');
-      const src = img?.getAttribute('src') || '';
-      return /^(https?:|data:image\/)/i.test(src) ? `<img src="${src.replace(/"/g, '&quot;')}">` : '';
-    }
+    if (kind === 'box' || kind === 'image') return '';
+    // a "heading" that wraps whole sections (it happens on the clipboard) is just a container
+    if ((/^H[1-6]$/.test(tag) || kind === 'title') && (hasBlockChild(node) || node.textContent.trim().length > 220)) return [...node.childNodes].map(block).join('');
     if (/^H[1-6]$/.test(tag) || kind === 'title') {
       // ChatGPT's rich answers mark their title size (lg = 18px, md = 16px); in classic markdown h1-h3 are the section titles.
       const sized = node.getAttribute('data-d-size');

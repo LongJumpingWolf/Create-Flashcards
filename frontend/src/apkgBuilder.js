@@ -7,6 +7,7 @@
 // backend output.
 import { zipSync } from 'fflate';
 import { buildModels, normalizeSettings, normalizePills, themeMedia } from './beerus.js';
+import { isProxyableImageUrl } from './imageHosts.js';
 
 // Problems with the user's card content (as opposed to browser/runtime failures).
 export class CardError extends Error {}
@@ -231,8 +232,32 @@ function extensionFor(mime) {
   return /^[a-z0-9]{1,4}$/.test(ext) ? ext : 'png';
 }
 
+// <img src="https://..."> from ChatGPT / the web -> downloaded once and stored in the deck (works offline), when the exporter
+// was given fetchRemoteImage. A failed download keeps the web link and warns.
+const REMOTE_IMAGE = /<img\b[^>]*?\ssrc="(https:\/\/[^"]+)"[^>]*>/gi;
+async function embedRemoteImages(html, ctx) {
+  if (!ctx.fetchRemoteImage || !/<img\b[^>]*\ssrc="https:/i.test(html)) return html;
+  let result = '';
+  let cursor = 0;
+  for (const match of html.matchAll(REMOTE_IMAGE)) {
+    result += html.slice(cursor, match.index);
+    cursor = match.index + match[0].length;
+    const url = match[1].replace(/&amp;/g, '&');
+    if (!isProxyableImageUrl(url)) { result += match[0]; continue; }
+    try {
+      const filename = await ctx.addRemoteImage(url);
+      result += match[0].replace(match[1], filename);
+    } catch (error) {
+      ctx.warn(`A pasted web image could not be saved in the deck and stays a web link (${error.message}).`);
+      result += match[0];
+    }
+  }
+  return result + html.slice(cursor);
+}
+
 async function extractMedia(html, ctx) {
   if (!html) return html;
+  html = await embedRemoteImages(html, ctx);
   // Audio first: Anki references sound files as [sound:file.mp3] inside the field text.
   if (/<audio\b/i.test(html)) {
     const audio = [...html.matchAll(EMBEDDED_AUDIO)];
@@ -363,9 +388,10 @@ function normalizeMasks(masks) {
 // --- Note planning -------------------------------------------------------------
 // Converts payload cards into notes + media without touching SQLite, so the work
 // can be split across several packages when a deck is very large.
-async function planNotes(payload, { prepareImage, warn, onProgress, models }) {
+async function planNotes(payload, { prepareImage, warn, onProgress, models, fetchRemoteImage }) {
   const planned = [];
   const imageCache = new Map();
+  const remoteCache = new Map(); // url -> data needed to add the file to any note's media
 
   for (let cardIndex = 0; cardIndex < payload.cards.length; cardIndex += 1) {
     const card = payload.cards[cardIndex];
@@ -374,6 +400,20 @@ async function planNotes(payload, { prepareImage, warn, onProgress, models }) {
     const tags = cleanTags(card.tags);
     const ctx = {
       warn,
+      fetchRemoteImage,
+      async addRemoteImage(url) {
+        let pending = remoteCache.get(url);
+        if (!pending) {
+          pending = fetchRemoteImage(url).then(({ bytes, mime }) => {
+            let binary = '';
+            for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+            return { base64: btoa(binary), mime };
+          });
+          remoteCache.set(url, pending);
+        }
+        const { base64, mime } = await pending;
+        return this.addImage(base64, mime, false);
+      },
       addAudio(base64, ext) {
         const name = `media_${randomInt(1000, 9999)}_${randomHex(4)}.${ext}`;
         media.set(name, base64ToBytes(base64));
@@ -591,7 +631,7 @@ function zipPackage(database, items, themeFiles = []) {
  * @returns Promise<{ parts: Uint8Array[], deckId, warnings: string[], noteCount, cardCount }>
  */
 export async function buildApkg(payload, options) {
-  const { initSql, prepareImage = async (bytes, mime) => ({ bytes, mime }), maxPartBytes = 200 * 1024 * 1024, onProgress } = options;
+  const { initSql, prepareImage = async (bytes, mime) => ({ bytes, mime }), maxPartBytes = 200 * 1024 * 1024, onProgress, fetchRemoteImage } = options;
   const deckName = String(payload.deck_name || '').trim();
   if (!deckName) throw new CardError('Deck name cannot be empty');
   if (deckName.length > MAX_DECK_NAME) throw new CardError(`Deck name must be ${MAX_DECK_NAME} characters or fewer`);
@@ -604,6 +644,7 @@ export async function buildApkg(payload, options) {
   const warnings = [];
   const planned = await planNotes(payload, {
     models,
+    fetchRemoteImage,
     prepareImage,
     warn: message => warnings.push(message),
     onProgress: (done, total) => onProgress?.('prepare', done, total),
