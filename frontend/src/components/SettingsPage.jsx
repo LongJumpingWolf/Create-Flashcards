@@ -130,7 +130,7 @@ function ColorField({ value, onChange, label }) {
 // --------------------------------------------------------------------------------------------
 export default function SettingsPage({ onClose, onOpenIcons }) {
   const [settings, setSettings] = useState(() => loadSettings());
-  const [tab, setTabState] = useState(() => { try { return localStorage.getItem('beerus-settings-tab') || 'set-pills'; } catch { return 'set-pills'; } });
+  const [tab, setTabState] = useState(() => { try { return (l => (l && l !== 'all' ? l : 'set-pills'))(localStorage.getItem('beerus-settings-tab')); } catch { return 'set-pills'; } });
   const setTab = (id) => { setTabState(id); try { localStorage.setItem('beerus-settings-tab', id); } catch { /* storage unavailable */ } window.scrollTo?.({ top: 0 }); };
   const [previewType, setPreviewType] = useState('cloze');
   const [side, setSide] = useState('answer');
@@ -246,7 +246,7 @@ export default function SettingsPage({ onClose, onOpenIcons }) {
       {message && <div className="set-message" role="status">{message}</div>}
 
       <nav className="set-jump" role="tablist" aria-label="Settings sections">
-        {[['set-types', 'Card types'], ['set-pills', 'Pills'], ['set-pillcontent', 'Pill content text'], ['set-chatgpt', 'ChatGPT look'], ['set-watermark', 'Watermark'], ['set-appearance', 'Appearance'], ['set-behavior', 'Review'], ['set-export', 'Export'], ['all', 'Show all']].map(([id, label]) => (
+        {[['set-types', 'Card types'], ['set-pills', 'Pills'], ['set-pillcontent', 'Pill content text'], ['set-chatgpt', 'ChatGPT look'], ['set-watermark', 'Watermark'], ['set-appearance', 'Appearance'], ['set-behavior', 'Review'], ['set-export', 'Export']].map(([id, label]) => (
           <button type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} key={id} onClick={() => setTab(id)}>{label}</button>
         ))}
       </nav>
