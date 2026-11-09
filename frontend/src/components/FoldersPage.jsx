@@ -76,15 +76,28 @@ function Heatmap({ log }) {
   );
 }
 
-function DeckRow({ node, depth, collapsed, toggle, active, openNode, menu, setMenu }) {
+const isInside = (path, ancestor) => path === ancestor || path.startsWith(`${ancestor}::`);
+const allPaths = (node, out = []) => { node.children.forEach(child => { out.push(child.path); allPaths(child, out); }); return out; };
+
+function DeckRow({ node, depth, collapsed, toggle, active, openNode, menu, setMenu, dnd, targets, moveTo }) {
   const hasChildren = node.children.size > 0;
   const isCollapsed = collapsed.has(node.path);
   const open = node.folder && node.folder.id === active;
   const isMenu = menu === node.path;
+  const [picking, setPicking] = useState(false);
+  const dragging = dnd.drag === node.path;
+  const over = dnd.over === node.path;
+  const valid = dnd.drag && dnd.canDrop(dnd.drag, node.path);
   return (
     <>
-      <tr className={`fp-row${open ? ' cur' : ''}`}>
+      <tr className={`fp-row${open ? ' cur' : ''}${dragging ? ' drag' : ''}${over && valid ? ' drop' : ''}${over && !valid ? ' nodrop' : ''}`}
+        draggable
+        onDragStart={event => { event.dataTransfer.setData('text/plain', `beerus-deck:${node.path}`); event.dataTransfer.effectAllowed = 'move'; dnd.start(node.path); }}
+        onDragEnd={dnd.end}
+        onDragOver={event => { if (!dnd.drag) return; event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = valid ? 'move' : 'none'; dnd.hover(node.path, hasChildren && isCollapsed); }}
+        onDrop={event => { event.preventDefault(); event.stopPropagation(); dnd.drop(node.path); }}>
         <td className="fp-name" style={{ paddingLeft: 10 + depth * 22 }}>
+          <span className="fp-grip" aria-hidden="true" title="Drag onto another deck to make it a subdeck">⋮⋮</span>
           {hasChildren
             ? <button type="button" className="fp-twist" onClick={() => toggle(node.path)} aria-label={isCollapsed ? `Expand ${node.label}` : `Collapse ${node.label}`}>{isCollapsed ? '+' : '−'}</button>
             : <span className="fp-twist none" />}
@@ -93,19 +106,28 @@ function DeckRow({ node, depth, collapsed, toggle, active, openNode, menu, setMe
         <td className={`fp-num${node.cards ? ' has' : ''}`}>{node.cards}</td>
         <td className={`fp-num new${node.today ? ' has' : ''}`}>{node.today}</td>
         <td className="fp-gear">
-          <button type="button" onClick={() => setMenu(isMenu ? '' : node.path)} aria-label={`Options for ${node.label}`} aria-expanded={isMenu}>⚙</button>
+          <button type="button" onClick={e => { e.stopPropagation(); setPicking(false); setMenu(isMenu ? '' : node.path); }} aria-label={`Options for ${node.label}`} aria-expanded={isMenu}>⚙</button>
           {isMenu && (
-            <div className="fp-pop" role="menu">
-              {node.folder && <button type="button" role="menuitem" onClick={() => { setMenu(''); openNode(node.folder.id); }}>Open</button>}
-              {node.folder && <button type="button" role="menuitem" onClick={() => { setMenu(''); const next = window.prompt('Deck name', node.folder.name); if (next && next.trim()) send('rename', { id: node.folder.id, name: next.trim() }); }}>Rename</button>}
-              <button type="button" role="menuitem" onClick={() => { setMenu(''); const next = window.prompt(`New subdeck under ${node.path}`, `${node.path}::`); if (next && next.trim() && next.trim() !== `${node.path}::`) { send('create', { name: next.trim() }); } }}>Add subdeck</button>
-              {node.folder && <button type="button" role="menuitem" className="danger" onClick={() => { setMenu(''); send('delete', { id: node.folder.id }); }}>Delete</button>}
+            <div className="fp-pop" role="menu" onClick={e => e.stopPropagation()}>
+              {!picking && <>
+                {node.folder && <button type="button" role="menuitem" onClick={() => { setMenu(''); openNode(node.folder.id); }}>Open</button>}
+                {node.folder && <button type="button" role="menuitem" onClick={() => { setMenu(''); const next = window.prompt('Deck name', node.folder.name); if (next && next.trim()) send('rename', { id: node.folder.id, name: next.trim() }); }}>Rename</button>}
+                <button type="button" role="menuitem" onClick={() => { setMenu(''); const next = window.prompt(`New subdeck under ${node.path}`, `${node.path}::`); if (next && next.trim() && next.trim() !== `${node.path}::`) { send('create', { name: next.trim() }); } }}>Add subdeck</button>
+                <button type="button" role="menuitem" onClick={() => setPicking(true)}>Move to…</button>
+                {node.folder && <button type="button" role="menuitem" className="danger" onClick={() => { setMenu(''); send('delete', { id: node.folder.id }); }}>Delete</button>}
+              </>}
+              {picking && <div className="fp-pick">
+                <span>Move “{node.label}” under:</span>
+                {node.path.includes('::') && <button type="button" role="menuitem" onClick={() => { setMenu(''); moveTo(node.path, ''); }}>Top level</button>}
+                {targets.filter(path => dnd.canDrop(node.path, path)).map(path => <button type="button" role="menuitem" key={path} onClick={() => { setMenu(''); moveTo(node.path, path); }}>{path.split('::').join(' › ')}</button>)}
+                <button type="button" role="menuitem" onClick={() => setPicking(false)}>‹ Back</button>
+              </div>}
             </div>
           )}
         </td>
       </tr>
       {hasChildren && !isCollapsed && [...node.children.values()].map(child => (
-        <DeckRow key={child.path} node={child} depth={depth + 1} collapsed={collapsed} toggle={toggle} active={active} openNode={openNode} menu={menu} setMenu={setMenu} />
+        <DeckRow key={child.path} node={child} depth={depth + 1} collapsed={collapsed} toggle={toggle} active={active} openNode={openNode} menu={menu} setMenu={setMenu} dnd={dnd} targets={targets} moveTo={moveTo} />
       ))}
     </>
   );
@@ -138,6 +160,47 @@ export default function FoldersPage({ onClose, onOpenSettings }) {
   // Anki-style summary under the calendar
   const year = useMemo(() => { let n = 0; let days = 0; const d = new Date(); for (let i = 0; i < 365; i += 1) { const c = log[dayKey(d)]?.n || 0; n += c; if (c) days += 1; d.setDate(d.getDate() - 1); } return { n, days }; }, [log]);
 
+  // ---- drag and drop: drop a deck on another to make it a subdeck, or on the strip below to make it top level ----
+  const [drag, setDrag] = useState('');
+  const [over, setOver] = useState('');
+  const [note, setNote] = useState('');
+  const hoverTimer = useRef(null);
+  const noteTimer = useRef(null);
+  const say = (text) => { setNote(text); window.clearTimeout(noteTimer.current); noteTimer.current = window.setTimeout(() => setNote(''), 3200); };
+  const canDrop = (from, to) => {
+    if (!from) return false;
+    if (to === '') return from.includes('::'); // top level only makes sense for a subdeck
+    if (isInside(to, from)) return false; // not into itself or its own children
+    return to !== from.split('::').slice(0, -1).join('::'); // already there
+  };
+  const moveTo = (from, to) => {
+    if (!canDrop(from, to)) return;
+    const leaf = from.split('::').pop();
+    const base = to ? `${to}::${leaf}` : leaf;
+    const affected = folders.list.filter(folder => isInside(folder.name || '', from));
+    const renames = affected.map(folder => ({ id: folder.id, name: `${base}${(folder.name || '').slice(from.length)}` }));
+    const taken = new Set(folders.list.filter(folder => !affected.includes(folder)).map(folder => folder.name));
+    if (renames.some(r => taken.has(r.name))) { say(`There is already a deck called “${base}”.`); return; }
+    if (!affected.length) { say(`“${leaf}” is only a heading; move its subdecks one by one.`); return; }
+    send('rename-many', { renames });
+    if (to) setCollapsed(prev => { const next = new Set(prev); next.delete(to); return next; });
+    say(`Moved “${leaf}” ${to ? `into ${to.split('::').join(' › ')}` : 'to the top level'}.`);
+  };
+  const dnd = {
+    drag, over, canDrop,
+    start: (path) => setDrag(path),
+    end: () => { setDrag(''); setOver(''); window.clearTimeout(hoverTimer.current); },
+    hover: (path, collapsedNode) => {
+      if (over !== path) {
+        setOver(path);
+        window.clearTimeout(hoverTimer.current);
+        if (collapsedNode) hoverTimer.current = window.setTimeout(() => setCollapsed(prev => { const next = new Set(prev); next.delete(path); return next; }), 650); // open a closed deck while you hover on it
+      }
+    },
+    drop: (path) => { const from = drag; setDrag(''); setOver(''); window.clearTimeout(hoverTimer.current); moveTo(from, path); },
+  };
+  const targets = useMemo(() => allPaths(tree), [tree]);
+
   const toggle = (path) => setCollapsed(prev => { const next = new Set(prev); if (next.has(path)) next.delete(path); else next.add(path); try { localStorage.setItem(LIST_KEY, JSON.stringify([...next])); } catch { /* storage unavailable */ } return next; });
   const openNode = (id) => { send('switch', { id }); onClose(); };
   const createDeck = () => { const name = window.prompt('Name for the new deck (use :: for a subdeck, e.g. Pathology::Anemia)'); if (name && name.trim()) { send('create', { name: name.trim() }); onClose(); } };
@@ -160,10 +223,17 @@ export default function FoldersPage({ onClose, onOpenSettings }) {
           <thead><tr><th className="fp-name">Deck</th><th>Cards</th><th className="new">New</th><th /></tr></thead>
           <tbody>
             {[...tree.children.values()].map(node => (
-              <DeckRow key={node.path} node={node} depth={0} collapsed={collapsed} toggle={toggle} active={folders.active} openNode={openNode} menu={menu} setMenu={setMenu} />
+              <DeckRow key={node.path} node={node} depth={0} collapsed={collapsed} toggle={toggle} active={folders.active} openNode={openNode} menu={menu} setMenu={setMenu} dnd={dnd} targets={targets} moveTo={moveTo} />
             ))}
           </tbody>
         </table>
+        {drag && drag.includes('::') && (
+          <div className={`fp-root${over === '' && dnd.canDrop(drag, '') ? ' drop' : ''}`}
+            onDragOver={event => { event.preventDefault(); dnd.hover('', false); }} onDrop={event => { event.preventDefault(); dnd.drop(''); }}>
+            Drop here to make “{drag.split('::').pop()}” a top-level deck
+          </div>
+        )}
+        {note && <p className="fp-toast" role="status">{note}</p>}
 
         <p className="fp-today">Added {stats.today} card{stats.today === 1 ? '' : 's'} today{stats.today ? ` in ${foldersToday} deck${foldersToday === 1 ? '' : 's'}` : ''}.</p>
 

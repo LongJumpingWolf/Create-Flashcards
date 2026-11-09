@@ -918,6 +918,15 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     if (id === folders.active) activateFolder(rest.list[0].id, rest, false);
     else { setFolders(rest); writeFolders(rest); }
   };
+  const renameMany = (renames) => {
+    const byId = new Map(renames.map(r => [r.id, r.name]));
+    const next = { ...folders, list: folders.list.map(f => (byId.has(f.id) ? { ...f, name: byId.get(f.id) } : f)) };
+    setFolders(next); writeFolders(next);
+    renames.forEach(({ id, name }) => {
+      if (id === folders.active) setDeckName(name);
+      else { const snap = readSnapshot(id); if (snap) writeSnapshot(id, { ...snap, deck: name }); }
+    });
+  };
   const renameFolder = (id, name) => {
     const next = { ...folders, list: folders.list.map(f => (f.id === id ? { ...f, name } : f)) };
     setFolders(next); writeFolders(next);
@@ -931,6 +940,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     else if (detail.type === 'create') createFolder(detail.name);
     else if (detail.type === 'delete') deleteFolder(detail.id);
     else if (detail.type === 'rename') renameFolder(detail.id, detail.name);
+    else if (detail.type === 'rename-many') renameMany(detail.renames || []);
     else if (detail.type === 'browse') setShowCardBrowser(true);
     else if (detail.type === 'import') setShowImportModal(true);
     window.setTimeout(() => window.dispatchEvent(new Event('beerus-folders-changed')), 60);
