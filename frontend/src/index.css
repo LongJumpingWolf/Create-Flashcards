@@ -1385,3 +1385,7 @@ body { background:#202124; }
 .pill-field-box .gpt { margin: 4px 0; }
 .pill-field-head .pill-head-chip span, .pill-onCard span.bpill-label { color: inherit; }
 .pill-field-head .pill-head-chip .bpill-label { color: #fff; }
+.pill-head-chip { cursor: text; }
+.pill-fields .pill-head-chip .bpill > summary { cursor: text; }
+.pill-rename { min-height: 34px; padding: 4px 12px; border-radius: 99px; border: 2px solid var(--accent); background: var(--surface-raised); color: var(--text); font-size: 14px; font-weight: 700; width: 190px; outline: none; }
+.pill-rename-btn { margin-left: 0 !important; }

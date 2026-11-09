@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PILL_COUNT, gptCss, loadSettings, pillCss, themeMedia, cleanPillHtml } from '../beerus';
+import { PILL_COUNT, gptCss, loadSettings, saveSettings, pillCss, themeMedia, cleanPillHtml } from '../beerus';
 import { chatgptFromClipboard } from '../chatgptFormat';
 import { sanitizePastedHtml } from './editorHelpers';
 
@@ -57,6 +57,8 @@ function PillChip({ pill, index, settings, dim }) {
 export default function PillFields({ values, onChange, resetKey }) {
   const refs = useRef([]);
   const [open, setOpen] = useState(false);
+  const [renaming, setRenaming] = useState(null); // index of the pill whose name is being edited
+  const [draft, setDraft] = useState('');
   const [settings, setSettings] = useState(() => loadSettings());
   useEffect(() => { setSettings(loadSettings()); }, [open, resetKey]); // pick up changes made on the Settings page
   const css = useMemo(() => {
@@ -72,6 +74,20 @@ export default function PillFields({ values, onChange, resetKey }) {
       if (node && node.innerHTML !== html) node.innerHTML = html;
     });
   }, [values, resetKey, open]);
+
+  // Renaming applies to every card of the deck (the label is part of the exported note type) and is saved in Settings.
+  const startRename = (index) => { setDraft(settings.pills[index].label); setRenaming(index); };
+  const commitRename = () => {
+    if (renaming === null) return;
+    const label = draft.trim().slice(0, 24);
+    if (label && label !== settings.pills[renaming].label) {
+      const next = loadSettings();
+      next.pills[renaming].label = label;
+      saveSettings(next);
+      setSettings(next);
+    }
+    setRenaming(null);
+  };
 
   const set = (index, html) => onChange(values.map((value, i) => (i === index ? html : value)));
   const read = (index) => refs.current[index]?.innerHTML || '';
@@ -131,9 +147,14 @@ export default function PillFields({ values, onChange, resetKey }) {
             return (
               <div className={`pill-field${filledFlags[index] ? '' : ' pill-field-empty'}`} key={index}>
                 <div className="pill-field-head">
-                  <div className={`pill-head-chip bs-${settings.pillStyle.style}`} style={{ '--ics': settings.pillStyle.iconScale / 100, '--gs': settings.pillStyle.scale / 100, fontSize: `${(0.6 * settings.pillStyle.scale / 100 * 28).toFixed(1)}px` }} title={filledFlags[index] ? 'Shown on the card' : 'Empty: this pill will not appear on the card'}>
+                  {renaming === index ? (
+                    <input className="pill-rename" autoFocus value={draft} maxLength={24} aria-label={`Name of pill ${index + 1}`} onChange={e => setDraft(e.target.value)} onBlur={commitRename} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitRename(); } else if (e.key === 'Escape') { e.preventDefault(); setRenaming(null); } }} />
+                  ) : (
+                  <div role="button" tabIndex={0} className={`pill-head-chip bs-${settings.pillStyle.style}`} onClick={() => startRename(index)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startRename(index); } }} style={{ '--ics': settings.pillStyle.iconScale / 100, '--gs': settings.pillStyle.scale / 100, fontSize: `${(0.6 * settings.pillStyle.scale / 100 * 28).toFixed(1)}px` }} title="Click to rename this pill">
                     <PillChip pill={pill} index={index} settings={settings} dim={!filledFlags[index]} />
                   </div>
+                  )}
+                  <button type="button" className="pill-field-btn pill-rename-btn" onClick={() => startRename(index)} aria-label={`Rename pill ${index + 1}`}>Rename</button>
                   <span className="pill-field-state">{filledFlags[index] ? 'on the card' : 'empty, hidden'}{pill.format !== 'auto' ? ` · ${FORMAT_LABEL[pill.format]}` : ''}</span>
                   <label className="pill-field-btn">Add image<input type="file" accept="image/*" hidden onChange={e => { addFile(index, e.target.files?.[0]); e.target.value = ''; }} /></label>
                   <button type="button" className="pill-field-btn" onClick={() => { const url = window.prompt('Image link (https://…)'); if (url && /^https?:\/\//i.test(url.trim())) insertImage(index, url.trim()); }}>Image link</button>
