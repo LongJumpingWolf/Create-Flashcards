@@ -82,7 +82,7 @@ export const DEFAULT_SETTINGS = {
     showTags: false,        // tags under the answer
   },
   // text inside an opened pill (px, so it never exceeds the card text; the card text is appearance.fontSize)
-  pillBody: { fontFamily: 'auto', customFont: '', capToCard: true, fontSize: 16, lineHeight: 1.4, align: 'auto', colorMode: 'auto', dayColor: '#1A1A1A', nightColor: '#E8E8E8', accentEdge: true, frame: true },
+  pillBody: { fontFamily: 'auto', customFont: '', capToCard: true, fontSize: 16, lineHeight: 1.3, spacing: 'compact', align: 'auto', colorMode: 'auto', dayColor: '#1A1A1A', nightColor: '#E8E8E8', accentEdge: true, frame: true },
   pillStyle: { shape: 'pill', scale: 100, iconScale: 125, showIcons: true, style: 'bubble', pattern: 'none' },
   pills: [
     { label: 'Reference', color: '#3B82F6', iconType: 'emoji', icon: '📖', iconData: '', iconUrl: '', open: false, format: 'auto' },
@@ -149,7 +149,8 @@ export function normalizeSettings(saved) {
   if (pb.fontFamily !== 'auto' && !FONT_FAMILIES[pb.fontFamily]) pb.fontFamily = 'auto';
   pb.customFont = String(pb.customFont || '').replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 40);
   pb.capToCard = Boolean(pb.capToCard);
-  pb.lineHeight = clamp(Number(pb.lineHeight), 1, 2.2, 1.4);
+  pb.lineHeight = clamp(Number(pb.lineHeight), 1, 2.2, 1.3);
+  if (!['compact', 'normal', 'roomy'].includes(pb.spacing)) pb.spacing = 'compact';
   if (!['auto', 'left', 'center'].includes(pb.align)) pb.align = 'auto';
   if (!['auto', 'custom'].includes(pb.colorMode)) pb.colorMode = 'auto';
   ['dayColor', 'nightColor'].forEach(key => { if (!/^#[0-9a-f]{6}$/i.test(pb[key])) pb[key] = DEFAULT_SETTINGS.pillBody[key]; });
@@ -414,6 +415,28 @@ export function cleanPillHtml(html) {
   return bare.replace(/<[^>]*>/g, '') === '' ? '' : text;
 }
 
+// Paragraph / list / table spacing for plain pill content. Without it, pasted <p> and table cells get the browser's
+// default 1em margins and the content looks huge.
+const BODY_SPACING = {
+  compact: { p: '.3em', li: '.1em', head: '.5em 0 .2em', cell: '2px 8px', table: '.4em' },
+  normal: { p: '.5em', li: '.2em', head: '.7em 0 .3em', cell: '4px 9px', table: '.5em' },
+  roomy: { p: '.8em', li: '.35em', head: '.9em 0 .4em', cell: '6px 12px', table: '.7em' },
+};
+function bodySpacingCss(spacing) {
+  const s = BODY_SPACING[spacing] || BODY_SPACING.compact;
+  return `.bpill-body p, .bpill-body div { margin: 0; }
+.bpill-body p { margin: ${s.p} 0; }
+.bpill-body p:first-child, .bpill-body > div:first-child { margin-top: 0; }
+.bpill-body > :last-child, .bpill-body li:last-child { margin-bottom: 0; }
+.bpill-body ul, .bpill-body ol { display: block; max-width: none; margin: ${s.p} 0; padding: 0 0 0 1.4em; text-align: left; }
+.bpill-body li { margin: ${s.li} 0; }
+.bpill-body li p, .bpill-body td p, .bpill-body th p { margin: 0; }
+.bpill-body h1, .bpill-body h2, .bpill-body h3, .bpill-body h4 { margin: ${s.head}; font-size: 1.1em; line-height: 1.25; }
+.bpill-body table { margin: ${s.table} auto; }
+.bpill-body td, .bpill-body th { padding: ${s.cell}; }
+`;
+}
+
 export function pillCss(settings, files = themeMedia(settings)) {
   const p = settings.pillStyle;
   const lines = [`
@@ -434,7 +457,7 @@ ${settings.pillBody.colorMode === 'custom' ? `.nightMode .bpill-body, .night_mod
 ` : ''}
 
 .bpill-body img { max-width: 100%; height: auto; border-radius: .3em; }
-.bpill-gpt .bpill-body { padding: 0; border: 0; background: none; }
+${bodySpacingCss(settings.pillBody.spacing)}.bpill-gpt .bpill-body { padding: 0; border: 0; background: none; }
 .bpill-gpt[open] { width: min(96%, 820px); }
 .bpill-gpt > summary { width: fit-content; margin: 0 auto; }
 .bpill-gpt .bpill-body { width: 100%; max-width: none; margin-top: .6rem; }
