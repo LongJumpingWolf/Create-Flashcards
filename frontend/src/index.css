@@ -1554,3 +1554,6 @@ body { background:#202124; }
 .snip-pill-row { margin-top: 12px; } .snip-tray-pills { margin-top: 6px; }
 .snip-tray-pills { grid-column: 1 / -1; flex-basis: 100%; width: 100%; } .snip-tray-pills .pb-group { flex-wrap: nowrap; gap: 6px; }
 .pb-btn .bpill > summary::after, .pb-btn .bpill > summary::marker { display: none; content: none; }
+
+.pill-chip-btn { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; border-radius: 99px; transition: transform .12s, filter .12s; } .pill-chip-btn:hover { transform: translateY(-1px); filter: brightness(1.08); } .pill-chip-btn:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+.pill-chip-btn .bpill, .pill-chip-btn summary { cursor: pointer; pointer-events: none; }

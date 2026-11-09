@@ -75,6 +75,7 @@ export default function PillFields({ values, onChange, resetKey }) {
   const timer = useRef(null);
   const pendingIndex = useRef(new Set());
   const [open, setOpen] = useState(false);
+  const [focusIndex, setFocusIndex] = useState(null); // a pill chip was clicked: open its editing field and put the cursor in it
   const [renaming, setRenaming] = useState(null); // index of the pill whose name is being edited
   const [draft, setDraft] = useState('');
   const [note, setNote] = useState({}); // per pill: what the last paste did
@@ -109,6 +110,22 @@ export default function PillFields({ values, onChange, resetKey }) {
   flushRef.current = flush;
   useEffect(() => () => flushRef.current(), []);
   useEffect(() => { pendingIndex.current.clear(); window.clearTimeout(timer.current); }, [resetKey]);
+
+  useEffect(() => {
+    if (focusIndex === null || !open) return undefined;
+    const timer = window.setTimeout(() => {
+      const node = refs.current[focusIndex];
+      if (node) {
+        node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        node.focus({ preventScroll: true });
+        const range = document.createRange(); range.selectNodeContents(node); range.collapse(false);
+        const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+      }
+      setFocusIndex(null);
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [focusIndex, open]);
+  const editPill = (index) => { setOpen(true); setFocusIndex(index); };
 
   // Renaming applies to every card of the deck (the label is part of the exported note type) and is saved in Settings.
   const startRename = (index) => { setDraft(settings.pills[index].label); setRenaming(index); };
@@ -234,7 +251,7 @@ export default function PillFields({ values, onChange, resetKey }) {
       </button>
       {!open && (
         <div className={`pill-onCard bs-${settings.pillStyle.style}`} style={EDITOR_PILL_STYLE} aria-label="Pills that will appear on the card">
-          {filled ? settings.pills.map((pill, index) => (filledFlags[index] ? <PillChip key={index} pill={pill} index={index} settings={settings} /> : null)) : <span className="pill-onCard-empty">Nothing here yet. A pill only appears on the card when its field has content.</span>}
+          {filled ? settings.pills.map((pill, index) => (filledFlags[index] ? <button type="button" key={index} className="pill-chip-btn" onClick={() => editPill(index)} title={`Edit the ${pill.label} pill`} aria-label={`Edit the ${pill.label} pill`}><PillChip pill={pill} index={index} settings={settings} /></button> : null)) : <span className="pill-onCard-empty">Nothing here yet. A pill only appears on the card when its field has content.</span>}
         </div>
       )}
       {open && (
@@ -249,7 +266,7 @@ export default function PillFields({ values, onChange, resetKey }) {
                   ) : (
                   <div className="pill-head-wrap">
                     <div className={`pill-head-chip bs-${settings.pillStyle.style}`} style={EDITOR_PILL_STYLE}>
-                      <PillChip pill={pill} index={index} settings={settings} dim={!filledFlags[index]} />
+                      <button type="button" className="pill-chip-btn" onClick={() => refs.current[index]?.focus()} title={`Edit the ${pill.label} pill`} aria-label={`Edit the ${pill.label} pill`}><PillChip pill={pill} index={index} settings={settings} dim={!filledFlags[index]} /></button>
                     </div>
                     <button type="button" className="pill-edit" onClick={() => startRename(index)} aria-label={`Rename pill ${index + 1}`} title="Edit name">✎</button>
                   </div>
