@@ -83,7 +83,7 @@ export const DEFAULT_SETTINGS = {
   },
   // text inside an opened pill (px, so it never exceeds the card text; the card text is appearance.fontSize)
   pillBody: { fontFamily: 'auto', customFont: '', capToCard: true, fontSize: 16, lineHeight: 1.3, spacing: 'compact', align: 'auto', colorMode: 'auto', dayColor: '#1A1A1A', nightColor: '#E8E8E8', accentEdge: true, frame: true },
-  pillStyle: { shape: 'pill', scale: 100, iconScale: 125, showIcons: true, style: 'bubble', pattern: 'none' },
+  pillStyle: { shape: 'pill', scale: 100, iconScale: 125, gap: 18, showIcons: true, style: 'bubble', pattern: 'none' },
   pills: [
     { label: 'Reference', color: '#3B82F6', iconType: 'emoji', icon: '📖', iconData: '', iconUrl: '', open: false, format: 'auto' },
     { label: 'Compare', color: '#10B981', iconType: 'emoji', icon: '⚖️', iconData: '', iconUrl: '', open: false, format: 'auto' },
@@ -159,6 +159,7 @@ export function normalizeSettings(saved) {
   const ps = settings.pillStyle;
   ps.scale = clamp(Number(ps.scale), 60, 200, 100);
   ps.iconScale = clamp(Number(ps.iconScale), 70, 220, 125);
+  ps.gap = clamp(Number(ps.gap), 0, 120, 18);
   if (!PILL_STYLES.includes(ps.style)) ps.style = 'bubble';
   if (!PILL_PATTERNS.includes(ps.pattern)) ps.pattern = 'none';
   const e = settings.export;
@@ -445,7 +446,7 @@ function bodySpacingCss(spacing) {
 export function pillCss(settings, files = themeMedia(settings)) {
   const p = settings.pillStyle;
   const lines = [`
-#bpills { margin: 1.1rem auto 0; display: flex; flex-direction: column; align-items: center; gap: .5rem; font-size: ${(0.6 * p.scale / 100).toFixed(3)}rem; --ics: ${(p.iconScale / 100).toFixed(2)}; --gs: ${(p.scale / 100).toFixed(2)}; font-style: normal; text-align: center; }
+#bpills { margin: ${p.gap}px auto 0; display: flex; flex-direction: column; align-items: center; gap: .5rem; font-size: ${(0.6 * p.scale / 100).toFixed(3)}rem; --ics: ${(p.iconScale / 100).toFixed(2)}; --gs: ${(p.scale / 100).toFixed(2)}; font-style: normal; text-align: center; }
 .bpill { max-width: 96%; }
 .bpill > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: .45em; padding: .34em 1em; border-radius: ${RADIUS[p.shape] || RADIUS.pill}; font-weight: 700; font-family: Arial, sans-serif; line-height: 1.2; letter-spacing: .01em; user-select: none; transition: filter .12s, transform .08s; ${pillSurface(p.style, p.pattern)} }
 .bpill > summary:hover { filter: brightness(1.08); }
