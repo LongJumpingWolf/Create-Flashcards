@@ -23,17 +23,46 @@ export const PILL_STYLES = ['bubble', 'solid', 'gradient', 'glass', 'outline', '
 export const PILL_PATTERNS = ['none', 'dots', 'stripes', 'grid', 'zigzag'];
 
 export const FONT_FAMILIES = {
-  arial: { label: 'Arial (AnKing)', css: '"Arial Greek", Arial, sans-serif' },
-  system: { label: 'System UI', css: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
+  // Anki shows system fonts only (nothing is downloaded), so every entry ends in generic fallbacks that exist on
+  // Windows, macOS, Linux, Android and iOS. Use "Custom" for any font you have installed.
+  arial: { label: 'Arial (AnKing default)', css: '"Arial Greek", Arial, sans-serif' },
+  helvetica: { label: 'Helvetica / Arial', css: '"Helvetica Neue", Helvetica, Arial, sans-serif' },
+  system: { label: 'System UI (Segoe UI / San Francisco / Roboto)', css: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
+  segoe: { label: 'Segoe UI', css: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif' },
+  calibri: { label: 'Calibri', css: 'Calibri, Candara, "Segoe UI", Arial, sans-serif' },
+  roboto: { label: 'Roboto', css: 'Roboto, "Helvetica Neue", Arial, sans-serif' },
+  noto: { label: 'Noto Sans', css: '"Noto Sans", "Segoe UI", Arial, sans-serif' },
   readable: { label: 'Verdana (easy to read)', css: 'Verdana, Tahoma, sans-serif' },
+  tahoma: { label: 'Tahoma', css: 'Tahoma, Verdana, sans-serif' },
+  trebuchet: { label: 'Trebuchet MS (friendly)', css: '"Trebuchet MS", "Lucida Grande", sans-serif' },
+  lucida: { label: 'Lucida Sans', css: '"Lucida Sans Unicode", "Lucida Grande", sans-serif' },
+  comic: { label: 'Comic Sans (casual)', css: '"Comic Sans MS", "Comic Neue", cursive, sans-serif' },
+  dyslexic: { label: 'OpenDyslexic (if installed)', css: 'OpenDyslexic, "Comic Sans MS", Verdana, sans-serif' },
   serif: { label: 'Georgia (serif)', css: 'Georgia, "Times New Roman", serif' },
-  mono: { label: 'Monospace', css: 'Consolas, "Courier New", monospace' },
+  times: { label: 'Times New Roman', css: '"Times New Roman", Times, serif' },
+  palatino: { label: 'Palatino', css: '"Palatino Linotype", Palatino, "Book Antiqua", serif' },
+  cambria: { label: 'Cambria', css: 'Cambria, Georgia, serif' },
+  garamond: { label: 'Garamond', css: 'Garamond, "Times New Roman", serif' },
+  charter: { label: 'Charter', css: 'Charter, "Bitstream Charter", Georgia, serif' },
+  mono: { label: 'Consolas (monospace)', css: 'Consolas, "Courier New", monospace' },
+  courier: { label: 'Courier New', css: '"Courier New", Courier, monospace' },
+  custom: { label: 'Custom (type an installed font name)', css: '' },
 };
+
+/** CSS font-family for a font key; "custom" uses the typed name (letters, digits, spaces, - and . only) with safe fallbacks. */
+export function fontCss(key, customName) {
+  if (key === 'custom') {
+    const name = String(customName || '').replace(/[^A-Za-z0-9 _.-]/g, '').trim().slice(0, 40);
+    return name ? `"${name}", Arial, sans-serif` : FONT_FAMILIES.arial.css;
+  }
+  return (FONT_FAMILIES[key] || FONT_FAMILIES.arial).css;
+}
 
 export const DEFAULT_SETTINGS = {
   version: 1,
   appearance: {
     fontFamily: 'arial',
+    customFont: '',
     fontSize: 28,           // px, one number scales the whole card (AnKing default 28)
     lineHeight: 1.35,
     align: 'center',        // center | left
@@ -53,7 +82,7 @@ export const DEFAULT_SETTINGS = {
     showTags: false,        // tags under the answer
   },
   // text inside an opened pill (px, so it never exceeds the card text; the card text is appearance.fontSize)
-  pillBody: { fontFamily: 'auto', capToCard: true, fontSize: 18, lineHeight: 1.4, align: 'auto', colorMode: 'auto', dayColor: '#1A1A1A', nightColor: '#E8E8E8', accentEdge: true, frame: true },
+  pillBody: { fontFamily: 'auto', customFont: '', capToCard: true, fontSize: 18, lineHeight: 1.4, align: 'auto', colorMode: 'auto', dayColor: '#1A1A1A', nightColor: '#E8E8E8', accentEdge: true, frame: true },
   pillStyle: { shape: 'pill', scale: 100, iconScale: 125, showIcons: true, style: 'bubble', pattern: 'none' },
   pills: [
     { label: 'Reference', color: '#3B82F6', iconType: 'emoji', icon: '📖', iconData: '', iconUrl: '', open: false, format: 'auto' },
@@ -91,6 +120,7 @@ export function normalizeSettings(saved) {
   a.imageMaxWidth = clamp(Number(a.imageMaxWidth), 20, 100, 85);
   a.listMaxWidth = clamp(Number(a.listMaxWidth), 20, 100, 50);
   if (!FONT_FAMILIES[a.fontFamily]) a.fontFamily = 'arial';
+  a.customFont = String(a.customFont || '').replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 40);
   if (!['center', 'left'].includes(a.align)) a.align = 'center';
   const b = settings.behavior;
   b.nextKey = singleKey(b.nextKey, 'n');
@@ -114,6 +144,7 @@ export function normalizeSettings(saved) {
   const pb = settings.pillBody;
   pb.fontSize = clamp(Number(pb.fontSize), 10, 48, 18);
   if (pb.fontFamily !== 'auto' && !FONT_FAMILIES[pb.fontFamily]) pb.fontFamily = 'auto';
+  pb.customFont = String(pb.customFont || '').replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 40);
   pb.capToCard = Boolean(pb.capToCard);
   pb.lineHeight = clamp(Number(pb.lineHeight), 1, 2.2, 1.4);
   if (!['auto', 'left', 'center'].includes(pb.align)) pb.align = 'auto';
@@ -227,7 +258,7 @@ const RADIUS = { pill: '999px', rounded: '.5em', square: '.15em' };
 
 export function baseCss(settings) {
   const a = settings.appearance;
-  const font = FONT_FAMILIES[a.fontFamily].css;
+  const font = fontCss(a.fontFamily, a.customFont);
   const extraStyle = a.extraItalic ? 'italic' : 'normal';
   return `
 /* BeeRus card styles - generated from the Anki Studio settings page */
@@ -394,7 +425,7 @@ export function pillCss(settings, files = themeMedia(settings)) {
 .bpill[open] > summary::after { transform: rotate(180deg); }
 .bpill-ic { display: inline-block; width: calc(1.2em * var(--ics, 1)); height: calc(1.2em * var(--ics, 1)); background: center / contain no-repeat; }
 .bpill-em { font-size: calc(1.1em * var(--ics, 1)); line-height: 1; }
-.bpill-body { margin-top: .55rem; padding: .45rem .7rem; border-radius: .55em; ${settings.pillBody.frame ? `border: 1px solid rgba(128,128,128,.35); ${settings.pillBody.accentEdge ? 'border-left: 4px solid var(--bp);' : ''} background: rgba(128,128,128,.1);` : 'border: 0; background: none;'} font-size: ${settings.pillBody.capToCard ? `min(${settings.pillBody.fontSize}px, 1rem)` : `${settings.pillBody.fontSize}px`}; ${settings.pillBody.fontFamily !== 'auto' ? `font-family: ${FONT_FAMILIES[settings.pillBody.fontFamily].css};` : ''} line-height: ${settings.pillBody.lineHeight}; text-align: ${settings.pillBody.align === 'auto' ? (settings.appearance.align === 'left' ? 'left' : 'center') : settings.pillBody.align}; ${settings.pillBody.colorMode === 'custom' ? `color: ${settings.pillBody.dayColor};` : ''} }
+.bpill-body { margin-top: .55rem; padding: .45rem .7rem; border-radius: .55em; ${settings.pillBody.frame ? `border: 1px solid rgba(128,128,128,.35); ${settings.pillBody.accentEdge ? 'border-left: 4px solid var(--bp);' : ''} background: rgba(128,128,128,.1);` : 'border: 0; background: none;'} font-size: ${settings.pillBody.capToCard ? `min(${settings.pillBody.fontSize}px, 1rem)` : `${settings.pillBody.fontSize}px`}; ${settings.pillBody.fontFamily !== 'auto' ? `font-family: ${fontCss(settings.pillBody.fontFamily, settings.pillBody.customFont)};` : ''} line-height: ${settings.pillBody.lineHeight}; text-align: ${settings.pillBody.align === 'auto' ? (settings.appearance.align === 'left' ? 'left' : 'center') : settings.pillBody.align}; ${settings.pillBody.colorMode === 'custom' ? `color: ${settings.pillBody.dayColor};` : ''} }
 ${settings.pillBody.colorMode === 'custom' ? `.nightMode .bpill-body, .night_mode .bpill-body { color: ${settings.pillBody.nightColor}; }
 .bpill-body b, .bpill-body i, .bpill-body u { color: inherit; }
 ` : ''}
