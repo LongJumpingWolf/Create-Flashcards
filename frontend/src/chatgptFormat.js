@@ -14,6 +14,21 @@ const BADGE_COLORS = new Set(['info', 'warning', 'success', 'danger', 'neutral']
 
 const esc = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/** Structured web content (several paragraphs / headings / lists / a table): worth cleaning up into the ChatGPT look. */
+export function isRichHtml(html) {
+  if (!html) return false;
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const blocks = doc.body.querySelectorAll('p, h1, h2, h3, h4, ul, ol, table, blockquote, pre');
+  return blocks.length >= 3 || doc.body.querySelectorAll('h1, h2, h3, h4, table, ul, ol').length >= 1;
+}
+
+/** Converts whatever is on the clipboard, without any detection (used by the "Convert anyway" / "Paste as ChatGPT" buttons). */
+export function chatgptForce({ html, text }) {
+  if (html) { const out = chatgptHtmlToGpt(html); if (out) return out; }
+  if (text) return looksLikeMarkdown(text) ? markdownToGpt(text) : `<div class="${GPT_CLASS}">${text.split(/\n{2,}/).map(part => `<p>${esc(part.trim()).replace(/\n/g, '<br>')}</p>`).join('')}</div>`;
+  return null;
+}
+
 /** True when clipboard HTML clearly comes from a ChatGPT answer. */
 export function isChatGptHtml(html) {
   return /data-d-component=|data-message-author-role|data-turn-id|data-start="\d+"|class="[^"]*\b(?:markdown|prose|TextBase|Badge)[\w-]*/i.test(html || '');
@@ -37,7 +52,10 @@ export function chatgptHtmlToGpt(html) {
     if (tag === 'a') return isDomainLike(node.textContent) ? '' : inner();
     if (tag === 'img') return '';
     if (tag === 'code') return `<code>${esc(node.textContent)}</code>`;
-    const bold = tag === 'b' || tag === 'strong' || node.hasAttribute('data-d-default-strong');
+    // Chrome writes the computed weight onto copied elements, so a weight >= 600 on a span/div/font outside a title means bold text.
+    const weight = parseInt(node.style?.fontWeight || '0', 10);
+    const boldByStyle = weight >= 600 && ['span', 'font', 'div', 'p'].includes(tag) && !node.closest('h1, h2, h3, h4, h5, h6, th, [data-d-component="title"]');
+    const bold = tag === 'b' || tag === 'strong' || node.hasAttribute('data-d-default-strong') || boldByStyle;
     const italic = tag === 'i' || tag === 'em' || node.style?.fontStyle === 'italic' || node.hasAttribute('data-d-default-em');
     const underline = tag === 'u' || /underline/.test(node.style?.textDecorationLine || node.style?.textDecoration || '');
     let out = inner();
@@ -48,6 +66,9 @@ export function chatgptHtmlToGpt(html) {
     if (underline) out = `<u>${out}</u>`;
     return out;
   };
+
+  // a block whose only content is a link (web-search source cards / citation chips) is not part of the answer
+  const isSourceCard = (node) => node.nodeType === Node.ELEMENT_NODE && node.tagName !== 'LI' && node.querySelector('a[href]') && !/^(UL|OL|TABLE|P)$/.test(node.tagName) && [...node.querySelectorAll('a[href]')].every(a => a.closest('p, li, td, th') === null) && node.textContent.trim() === [...node.querySelectorAll('a[href]')].map(a => a.textContent.trim()).join('').trim();
 
   const hasBlockChild = (node) => [...node.children].some(child => /^(P|DIV|UL|OL|LI|H[1-6]|TABLE|PRE|BLOCKQUOTE|HR|SECTION|ARTICLE)$/.test(child.tagName));
 
@@ -90,6 +111,7 @@ export function chatgptHtmlToGpt(html) {
       return label ? `<div class="gpt-badgerow"><span class="gpt-badge gpt-badge-${BADGE_COLORS.has(color) ? color : 'info'}">${label}</span></div>` : '';
     }
     if (kind === 'table' || tag === 'TABLE') return table(node);
+    if (isSourceCard(node)) return '';
     if (kind === 'box' || kind === 'image') {
       const img = node.querySelector('img[src]');
       const src = img?.getAttribute('src') || '';
@@ -110,6 +132,11 @@ export function chatgptHtmlToGpt(html) {
     if (tag === 'BLOCKQUOTE') { const body = [...node.childNodes].map(block).join('').replace(/<\/?p>/g, ' ').trim(); return `<blockquote>${body}</blockquote>`; }
     if (tag === 'HR') return '<hr>';
     if (tag === 'IMG') { const src = node.getAttribute('src') || ''; return /^(https?:|data:image\/)/i.test(src) ? `<img src="${src.replace(/"/g, '&quot;')}">` : ''; }
+    // a short, large, bold line that is not marked up as a heading (classic ChatGPT section titles) is a title
+    if ((tag === 'DIV' || tag === 'P' || tag === 'SPAN') && !hasBlockChild(node) && parseInt(node.style?.fontWeight || '0', 10) >= 600 && parseFloat(node.style?.fontSize || '0') >= 17.5 && node.textContent.trim().length < 110 && !node.closest('li, td, th')) {
+      const title = [...node.childNodes].map(inline).join('').replace(/<\/?b>/g, '').trim();
+      if (title) return `<h2>${title}</h2>`;
+    }
     if (tag === 'P' || (kind === 'text' && !hasBlockChild(node))) {
       const text = [...node.childNodes].map(inline).join('').trim();
       return text ? `<p>${text}</p>` : '';
@@ -124,7 +151,11 @@ export function chatgptHtmlToGpt(html) {
   }
 
   const body = [...doc.body.childNodes].map(block).join('');
-  const cleaned = body.replace(/<p>\s*<\/p>/g, '').replace(/(<br>)+<\/(p|li)>/g, '</$2>');
+  let cleaned = body.replace(/<p>\s*<\/p>/g, '').replace(/(<br>)+<\/(p|li)>/g, '</$2>');
+  if (!cleaned.trim()) {
+    const plain = (doc.body.innerText || doc.body.textContent || '').split(/\n{1,}/).map(line => line.trim()).filter(Boolean);
+    cleaned = plain.map(line => `<p>${esc(line)}</p>`).join('');
+  }
   return cleaned ? `<div class="${GPT_CLASS}">${cleaned}</div>` : '';
 }
 
@@ -149,8 +180,8 @@ export function markdownToGpt(markdown) {
  */
 export function chatgptFromClipboard({ html, text }, format = 'auto') {
   if (format === 'plain') return null;
-  // 'ChatGPT look (always)' converts any pasted HTML, so it still works when the clipboard lacks ChatGPT's markers.
-  if (html && (format === 'chatgpt' || isChatGptHtml(html))) {
+  // 'auto' converts ChatGPT's markup and any other rich (headings / lists / tables) web paste; 'ChatGPT look (always)' converts every pasted HTML.
+  if (html && (format === 'chatgpt' || isChatGptHtml(html) || isRichHtml(html))) {
     const out = chatgptHtmlToGpt(html);
     if (out) return out;
   }

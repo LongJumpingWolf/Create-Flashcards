@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PILL_COUNT, gptCss, loadSettings, saveSettings, pillCss, themeMedia, cleanPillHtml } from '../beerus';
-import { chatgptFromClipboard } from '../chatgptFormat';
+import { chatgptFromClipboard, chatgptForce } from '../chatgptFormat';
 import { sanitizePastedHtml } from './editorHelpers';
 
 const MAX_EDGE = 1100;
@@ -96,6 +96,8 @@ export default function PillFields({ values, onChange, resetKey }) {
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(null); // index of the pill whose name is being edited
   const [draft, setDraft] = useState('');
+  const [note, setNote] = useState({}); // per pill: what the last paste did
+  const lastPaste = useRef({});
   const [settings, setSettings] = useState(() => loadSettings());
   useEffect(() => { setSettings(loadSettings()); }, [open, resetKey]); // pick up changes made on the Settings page
   const css = useMemo(() => {
@@ -124,6 +126,39 @@ export default function PillFields({ values, onChange, resetKey }) {
       setSettings(next);
     }
     setRenaming(null);
+  };
+
+  // "Convert anyway": redo the last paste in this pill as ChatGPT look, whatever the clipboard looked like.
+  const convertLast = (index) => {
+    const last = lastPaste.current[index];
+    const out = last && chatgptForce(last);
+    if (!out) return;
+    const node = refs.current[index];
+    node.innerHTML = (last.before || '') + out;
+    set(index, node.innerHTML);
+    setNote(prev => ({ ...prev, [index]: 'converted' }));
+  };
+
+  // "Paste as ChatGPT": reads the clipboard directly (the browser asks permission once).
+  const pasteAsChatGpt = async (index) => {
+    try {
+      const items = await navigator.clipboard.read();
+      let html = '';
+      let text = '';
+      for (const item of items) {
+        if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+        if (item.types.includes('text/plain')) text = await (await item.getType('text/plain')).text();
+      }
+      const out = chatgptForce({ html, text });
+      if (!out) { setNote(prev => ({ ...prev, [index]: 'empty' })); return; }
+      lastPaste.current[index] = { html, text, before: read(index) };
+      const node = refs.current[index];
+      node.insertAdjacentHTML('beforeend', out);
+      set(index, node.innerHTML);
+      setNote(prev => ({ ...prev, [index]: 'converted' }));
+    } catch {
+      setNote(prev => ({ ...prev, [index]: 'blocked' }));
+    }
   };
 
   const set = (index, html) => onChange(values.map((value, i) => (i === index ? html : value)));
@@ -159,9 +194,11 @@ export default function PillFields({ values, onChange, resetKey }) {
       return;
     }
     event.preventDefault();
+    lastPaste.current[index] = { html, text, before: read(index) };
     const gpt = chatgptFromClipboard({ html, text }, settings.pills[index].format);
     document.execCommand('insertHTML', false, gpt || (html ? sanitizePastedHtml(html) : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')));
     set(index, read(index));
+    setNote(prev => ({ ...prev, [index]: gpt ? 'converted' : (html || text.length > 40 ? 'plain' : null) }));
   };
 
   const filledFlags = values.map(value => cleanPillHtml(value) !== '');
@@ -197,10 +234,19 @@ export default function PillFields({ values, onChange, resetKey }) {
                   </div>
                   )}
                   <span className="pill-field-state">{filledFlags[index] ? 'on the card' : 'empty, hidden'}{pill.format !== 'auto' ? ` · ${FORMAT_LABEL[pill.format]}` : ''}</span>
+                  <button type="button" className="pill-field-btn" onClick={() => pasteAsChatGpt(index)} title="Paste what is on the clipboard as a ChatGPT-look panel">Paste as ChatGPT</button>
                   <label className="pill-field-btn">Add image<input type="file" accept="image/*" hidden onChange={e => { addFile(index, e.target.files?.[0]); e.target.value = ''; }} /></label>
                   <button type="button" className="pill-field-btn" onClick={() => { const url = window.prompt('Image link (https://…)'); if (url && /^https?:\/\//i.test(url.trim())) insertImage(index, url.trim()); }}>Image link</button>
                   {values[index] && <button type="button" className="pill-field-btn" onClick={() => set(index, '')}>Clear</button>}
                 </div>
+                {note[index] && (
+                  <div className={`pill-note pill-note-${note[index]}`} role="status">
+                    {note[index] === 'converted' && 'Converted to the ChatGPT look.'}
+                    {note[index] === 'plain' && <>Kept as plain formatting. <button type="button" onClick={() => convertLast(index)}>Convert to ChatGPT look</button></>}
+                    {note[index] === 'blocked' && 'The browser did not allow reading the clipboard. Allow it in the address bar, or paste with Ctrl+V.'}
+                    {note[index] === 'empty' && 'Nothing to paste: the clipboard is empty.'}
+                  </div>
+                )}
                 <div>
                   <div
                     ref={node => { refs.current[index] = node; }}

@@ -1392,3 +1392,6 @@ body { background:#202124; }
 .pill-head-wrap:hover .pill-edit, .pill-head-wrap:focus-within .pill-edit, .pill-edit:focus-visible { opacity: 1; transform: none; }
 @media (hover: none) { .pill-edit { opacity: .8; transform: none; } }
 .pill-rename { min-height: 28px; width: 160px; font-size: 13px; }
+.pill-note { margin: 0 0 6px; padding: 6px 10px; border-radius: 8px; font-size: 12px; border: 1px solid var(--line-strong); background: var(--surface-raised); color: var(--muted); }
+.pill-note-converted { color: #6ee7a8; }
+.pill-note button { margin-left: 6px; padding: 2px 9px; border-radius: 7px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
