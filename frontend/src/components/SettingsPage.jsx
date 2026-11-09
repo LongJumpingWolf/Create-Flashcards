@@ -6,6 +6,8 @@ import {
 } from '../beerus';
 import { clozeToSequentialHtml, ioeMaskSvg, sequentialMasksSvg } from '../apkgBuilder';
 import { ChevronLeft, Download, Upload, Rotate } from './Icons';
+import { ConfirmDialog, ShareDialog } from './SettingsDialogs';
+import { decodeSettings } from '../shareSettings';
 
 // --------------------------------------------------------------------------------------------
 // Sample content for the preview (identical field layout to a real exported note)
@@ -132,6 +134,9 @@ export default function SettingsPage({ onClose, onOpenIcons }) {
   const [settings, setSettings] = useState(() => loadSettings());
   const [tab, setTabState] = useState(() => { try { return (l => (l && l !== 'all' ? l : 'set-pills'))(localStorage.getItem('beerus-settings-tab')); } catch { return 'set-pills'; } });
   const setTab = (id) => { setTabState(id); try { localStorage.setItem('beerus-settings-tab', id); } catch { /* storage unavailable */ } window.scrollTo?.({ top: 0 }); };
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [undoReset, setUndoReset] = useState(null);
   const [previewType, setPreviewType] = useState('cloze');
   const [side, setSide] = useState('answer');
   const [night, setNight] = useState(true);
@@ -221,8 +226,18 @@ export default function SettingsPage({ onClose, onOpenIcons }) {
     }
   };
 
-  const reset = () => {
-    if (window.confirm('Reset every setting on this page to its default?')) { commit(DEFAULT_SETTINGS); setMessage('Defaults restored.'); }
+  const reset = () => setConfirmReset(true);
+  const doReset = () => {
+    setUndoReset(settings);
+    commit(DEFAULT_SETTINGS);
+    setConfirmReset(false);
+    setMessage('Defaults restored.');
+  };
+  const pasteCode = () => {
+    const text = window.prompt('Paste a settings code or a share link');
+    if (!text) return;
+    try { commit(decodeSettings(text)); setMessage('Shared settings applied.'); }
+    catch (error) { setMessage(error.message || 'That code could not be read.'); }
   };
 
   const a = settings.appearance;
@@ -238,12 +253,22 @@ export default function SettingsPage({ onClose, onOpenIcons }) {
           <button type="button" className="quiet-button" onClick={() => onOpenIcons?.()}><span>Icon maker</span></button>
           <button type="button" className="quiet-button" onClick={downloadTestDeck}><Download size={15} /><span>Test deck</span></button>
           <button type="button" className="quiet-button" onClick={() => downloadJson(settings, 'beerus-settings.json')}><Download size={15} /><span>Export settings</span></button>
+          <button type="button" className="quiet-button" onClick={() => setSharing(true)} title="Send your card look to someone as a link, a code or a file"><span>Share</span></button>
           <button type="button" className="quiet-button" onClick={() => importRef.current?.click()}><Upload size={15} /><span>Import</span></button>
+          <button type="button" className="quiet-button" onClick={pasteCode} title="Paste a code or link someone sent you"><span>Paste code</span></button>
           <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={e => { importSettings(e.target.files?.[0]); e.target.value = ''; }} />
           <button type="button" className="quiet-button" onClick={reset}><Rotate size={15} /><span>Reset</span></button>
         </div>
       </header>
-      {message && <div className="set-message" role="status">{message}</div>}
+      {message && <div className="set-message" role="status">{message}{undoReset && message === 'Defaults restored.' && <button type="button" className="set-undo" onClick={() => { commit(undoReset); setUndoReset(null); setMessage('Your settings are back.'); }}>Undo</button>}</div>}
+      {confirmReset && (
+        <ConfirmDialog title="Reset all settings?" confirmLabel="Reset everything" onConfirm={doReset} onCancel={() => setConfirmReset(false)}
+          extra={<button type="button" className="sd-btn" onClick={() => downloadJson(settings, 'beerus-settings-backup.json')}>Save a backup first</button>}>
+          <p>Fonts, sizes, colours, pill names and icons, watermark and review behaviour all go back to the defaults. Your cards are not touched.</p>
+          <p className="sd-small">You can still press Undo right after, or save a backup file first.</p>
+        </ConfirmDialog>
+      )}
+      {sharing && <ShareDialog settings={settings} onClose={() => setSharing(false)} />}
 
       <nav className="set-jump" role="tablist" aria-label="Settings sections">
         {[['set-types', 'Card types'], ['set-pills', 'Pills'], ['set-pillcontent', 'Pill content text'], ['set-chatgpt', 'ChatGPT look'], ['set-watermark', 'Watermark'], ['set-appearance', 'Appearance'], ['set-behavior', 'Review'], ['set-export', 'Export']].map(([id, label]) => (

@@ -1517,3 +1517,14 @@ body { background:#202124; }
 .fp-root { margin-top: 10px; padding: 14px; border: 2px dashed #5a5e65; border-radius: 12px; text-align: center; color: #9aa0a6; font-size: 14px; } .fp-root.drop { border-color: #ec7fbd; color: #f3c0dc; background: rgba(236,127,189,.1); }
 .fp-toast { align-self: center; margin: 12px 0 0; padding: 8px 16px; border-radius: 99px; background: #e8eaed; color: #1b1c1e; font-size: 14px; font-weight: 600; }
 .fp-pick { max-height: 280px; overflow: auto; min-width: 220px; } .fp-pick > span { display: block; padding: 6px 12px; color: #9aa0a6; font-size: 12px; }
+
+/* Dialogs (confirm reset, share settings, shared link) */
+.sd-back { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.6); }
+.sd { width: min(520px, 100%); max-height: 90dvh; overflow: auto; padding: 20px 22px; border: 1px solid #44464b; border-radius: 16px; background: #26282b; color: #e8eaed; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
+.sd h2 { margin: 0 0 10px; font-size: 18px; } .sd p { margin: 8px 0; font-size: 14px; line-height: 1.5; color: #d2d6da; } .sd .sd-small { color: #8b9096; font-size: 12.5px; } .sd .sd-warn { color: #ffd479; font-size: 13px; } .sd .sd-note { color: #7ee0a1; }
+.sd-list { margin: 8px 0 4px; padding-left: 20px; font-size: 14px; line-height: 1.7; color: #d2d6da; }
+.sd-field { width: 100%; box-sizing: border-box; margin: 6px 0 10px; padding: 10px 12px; border: 1px solid #44464b; border-radius: 10px; background: #1d1e21; color: #e8eaed; font-size: 12.5px; }
+.sd-row { display: flex; flex-wrap: wrap; gap: 8px; } .sd-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.sd-btn { min-height: 38px; padding: 0 16px; border: 1px solid #44464b; border-radius: 10px; background: #2f3236; color: #e8eaed; font-size: 14px; font-weight: 600; cursor: pointer; } .sd-btn:hover { border-color: #60a5fa; }
+.sd-btn.primary { background: #3b82f6; border-color: #3b82f6; color: #fff; } .sd-btn.danger { background: #d64545; border-color: #d64545; color: #fff; }
+.set-undo { margin-left: 12px; padding: 2px 12px; border: 1px solid currentColor; border-radius: 99px; background: transparent; color: inherit; font-weight: 700; cursor: pointer; }

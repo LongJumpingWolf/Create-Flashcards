@@ -85,6 +85,7 @@ function DeckRow({ node, depth, collapsed, toggle, active, openNode, menu, setMe
   const open = node.folder && node.folder.id === active;
   const isMenu = menu === node.path;
   const [picking, setPicking] = useState(false);
+  const [pos, setPos] = useState(null);
   const dragging = dnd.drag === node.path;
   const over = dnd.over === node.path;
   const valid = dnd.drag && dnd.canDrop(dnd.drag, node.path);
@@ -106,9 +107,9 @@ function DeckRow({ node, depth, collapsed, toggle, active, openNode, menu, setMe
         <td className={`fp-num${node.cards ? ' has' : ''}`}>{node.cards}</td>
         <td className={`fp-num new${node.today ? ' has' : ''}`}>{node.today}</td>
         <td className="fp-gear">
-          <button type="button" onClick={e => { e.stopPropagation(); setPicking(false); setMenu(isMenu ? '' : node.path); }} aria-label={`Options for ${node.label}`} aria-expanded={isMenu}>⚙</button>
+          <button type="button" onClick={e => { e.stopPropagation(); setPicking(false); const r = e.currentTarget.getBoundingClientRect(); setPos({ right: Math.max(8, window.innerWidth - r.right), below: r.bottom + 4, above: window.innerHeight - r.top + 4, flip: r.bottom > window.innerHeight - 300 }); setMenu(isMenu ? '' : node.path); }} aria-label={`Options for ${node.label}`} aria-expanded={isMenu}>⚙</button>
           {isMenu && (
-            <div className="fp-pop" role="menu" onClick={e => e.stopPropagation()}>
+            <div className="fp-pop" role="menu" style={pos ? { position: 'fixed', right: pos.right, ...(pos.flip ? { bottom: pos.above, maxHeight: Math.max(160, window.innerHeight - 40 - (window.innerHeight - pos.above)) } : { top: pos.below, maxHeight: window.innerHeight - pos.below - 12 }), overflowY: 'auto' } : undefined} onClick={e => e.stopPropagation()}>
               {!picking && <>
                 {node.folder && <button type="button" role="menuitem" onClick={() => { setMenu(''); openNode(node.folder.id); }}>Open</button>}
                 {node.folder && <button type="button" role="menuitem" onClick={() => { setMenu(''); const next = window.prompt('Deck name', node.folder.name); if (next && next.trim()) send('rename', { id: node.folder.id, name: next.trim() }); }}>Rename</button>}
