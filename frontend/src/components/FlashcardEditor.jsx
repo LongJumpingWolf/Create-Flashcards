@@ -1962,6 +1962,37 @@ export default function FlashcardEditor({ onOpenSettings }) {
     const query = cardSearch.trim().toLowerCase();
     return cards.map((card, index) => ({ card, index })).filter(({ card }) => !query || `${card.type} ${getCardPreview(card.question)} ${getCardPreview(card.answer)} ${(card.masks || []).map(mask => mask.label).join(' ')} ${(card.tags || []).join(' ')}`.toLowerCase().includes(query));
   }, [cards, cardSearch]);
+  // The saved-card list is only redrawn when the cards change, not on every keystroke in the editor.
+  const editRef = useRef(null); const deleteRef = useRef(null);
+  editRef.current = loadCardForEdit; deleteRef.current = deleteCard;
+  const cardListItems = useMemo(() => (
+    <>
+      {visibleCards.map(({ card, index }) => (
+              <article key={`${card.created}-${index}`} className="card-item">
+                <div className="card-item-top">
+                  <span className="card-index">{String(cards.length - index).padStart(2, '0')}</span>
+                  <span className="card-type-pill">{cardPillLabel(card)}</span>
+                  <span className="card-created">{card.created}</span>
+                </div>
+                <button className="card-content-button" onClick={() => editRef.current(index)} aria-label={`Edit card ${cards.length - index}`}>
+                  {card.type === 'Image Occlusion' ? <div className="io-library-preview"><img src={card.imageData} alt=""/><span>{(card.masks || []).length} occlusion region{(card.masks || []).length === 1 ? '' : 's'}</span></div> : <div className="card-preview-line"><strong>{card.type === "Cloze" ? "Text" : "Front"}</strong><span>{getCardPreview(card.question) || 'Empty card content'}</span></div>}
+                  {card.type !== "Cloze" && card.type !== 'Image Occlusion' && <div className="card-preview-line answer-line"><strong>Back</strong><span>{getCardPreview(card.answer) || 'No answer added'}</span></div>}
+                  {card.type === "Cloze" && card.answer && <div className="card-preview-line answer-line"><strong>Extra</strong><span>{getCardPreview(card.answer)}</span></div>}
+                  {card.type === 'Image Occlusion' && card.answer && <div className="card-preview-line answer-line"><strong>Extra</strong><span>{getCardPreview(card.answer)}</span></div>}
+                </button>
+                <div className="card-item-bottom">
+                  <div className="card-tags">{(card.tags || []).map((tag, tagIndex) => <span key={tagIndex}>{formatTagForDisplay(tag)}</span>)}</div>
+                  <div className="card-tools">
+                    <button onClick={() => editRef.current(index)} aria-label="Edit card" title="Edit card"><Edit size={15} /></button>
+                    <button onClick={() => deleteRef.current(index)} aria-label="Delete card" title="Delete card"><Trash2 size={15} /></button>
+                  </div>
+                </div>
+              </article>
+            ))}
+    </>
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [visibleCards, cards.length]);
+
   const browserCards = useMemo(() => {
     const query = browserSearch.trim().toLowerCase();
     return cards.map((card, index) => ({ card, index })).filter(({ card }) => !query || `${card.type} ${getCardPreview(card.question)} ${getCardPreview(card.answer)} ${(card.masks || []).map(mask => mask.label).join(' ')} ${(card.tags || []).join(' ')}`.toLowerCase().includes(query));
@@ -2390,28 +2421,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
           </div>
           <label className="card-search-wrap"><Search size={16} /><input ref={cardSearchRef} value={cardSearch} onChange={(e) => setCardSearch(e.target.value)} placeholder="Find a card or tag..." aria-label="Search cards and tags" /><kbd>/</kbd></label>
           <div className="card-list">
-            {visibleCards.map(({ card, index }) => (
-              <article key={`${card.created}-${index}`} className="card-item">
-                <div className="card-item-top">
-                  <span className="card-index">{String(cards.length - index).padStart(2, '0')}</span>
-                  <span className="card-type-pill">{cardPillLabel(card)}</span>
-                  <span className="card-created">{card.created}</span>
-                </div>
-                <button className="card-content-button" onClick={() => loadCardForEdit(index)} aria-label={`Edit card ${cards.length - index}`}>
-                  {card.type === 'Image Occlusion' ? <div className="io-library-preview"><img src={card.imageData} alt=""/><span>{(card.masks || []).length} occlusion region{(card.masks || []).length === 1 ? '' : 's'}</span></div> : <div className="card-preview-line"><strong>{card.type === "Cloze" ? "Text" : "Front"}</strong><span>{getCardPreview(card.question) || 'Empty card content'}</span></div>}
-                  {card.type !== "Cloze" && card.type !== 'Image Occlusion' && <div className="card-preview-line answer-line"><strong>Back</strong><span>{getCardPreview(card.answer) || 'No answer added'}</span></div>}
-                  {card.type === "Cloze" && card.answer && <div className="card-preview-line answer-line"><strong>Extra</strong><span>{getCardPreview(card.answer)}</span></div>}
-                  {card.type === 'Image Occlusion' && card.answer && <div className="card-preview-line answer-line"><strong>Extra</strong><span>{getCardPreview(card.answer)}</span></div>}
-                </button>
-                <div className="card-item-bottom">
-                  <div className="card-tags">{(card.tags || []).map((tag, tagIndex) => <span key={tagIndex}>{formatTagForDisplay(tag)}</span>)}</div>
-                  <div className="card-tools">
-                    <button onClick={() => loadCardForEdit(index)} aria-label="Edit card" title="Edit card"><Edit size={15} /></button>
-                    <button onClick={() => deleteCard(index)} aria-label="Delete card" title="Delete card"><Trash2 size={15} /></button>
-                  </div>
-                </div>
-              </article>
-            ))}
+            {cardListItems}
             {cards.length === 0 && <div className="empty-library"><div className="empty-icon"><Sparkles size={19} /></div><h3>Your deck starts here</h3><p>Add your first card and it will appear here.</p><button onClick={() => setMobileView('editor')}>Create a card <ChevronRight size={15} /></button></div>}
             {cards.length > 0 && visibleCards.length === 0 && <div className="empty-library"><Search size={18} /><p>No cards match "{cardSearch}".</p></div>}
           </div>

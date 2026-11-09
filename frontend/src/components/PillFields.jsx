@@ -93,6 +93,10 @@ export function PreviewPills({ pills, night }) {
  */
 export default function PillFields({ values, onChange, resetKey }) {
   const refs = useRef([]);
+  const valuesRef = useRef(values);
+  valuesRef.current = values;
+  const timer = useRef(null);
+  const pendingIndex = useRef(new Set());
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(null); // index of the pill whose name is being edited
   const [draft, setDraft] = useState('');
@@ -110,9 +114,24 @@ export default function PillFields({ values, onChange, resetKey }) {
   useEffect(() => {
     values.forEach((html, index) => {
       const node = refs.current[index];
-      if (node && node.innerHTML !== html) node.innerHTML = html;
+      if (!node || pendingIndex.current.has(index)) return; // typing in progress: the box is newer than the saved value
+      if (node.innerHTML !== html) node.innerHTML = html;
     });
   }, [values, resetKey, open]);
+
+  // Typing is sent to the editor in one go after a short pause (re-drawing the whole editor on every key made big
+  // ChatGPT pills laggy). It is also sent on blur, Ctrl/Cmd+Enter and unmount, so nothing is ever lost.
+  const flush = () => {
+    window.clearTimeout(timer.current);
+    if (!pendingIndex.current.size) return;
+    const next = valuesRef.current.map((value, i) => (pendingIndex.current.has(i) ? (refs.current[i]?.innerHTML ?? value) : value));
+    pendingIndex.current.clear();
+    onChange(next);
+  };
+  const flushRef = useRef(flush);
+  flushRef.current = flush;
+  useEffect(() => () => flushRef.current(), []);
+  useEffect(() => { pendingIndex.current.clear(); window.clearTimeout(timer.current); }, [resetKey]);
 
   // Renaming applies to every card of the deck (the label is part of the exported note type) and is saved in Settings.
   const startRename = (index) => { setDraft(settings.pills[index].label); setRenaming(index); };
@@ -171,7 +190,8 @@ export default function PillFields({ values, onChange, resetKey }) {
     }
   };
 
-  const set = (index, html) => onChange(values.map((value, i) => (i === index ? html : value)));
+  const set = (index, html) => { pendingIndex.current.delete(index); window.clearTimeout(timer.current); onChange(valuesRef.current.map((value, i) => (i === index ? html : value))); };
+  const typed = (index) => { pendingIndex.current.add(index); window.clearTimeout(timer.current); timer.current = window.setTimeout(flush, 350); };
   const read = (index) => refs.current[index]?.innerHTML || '';
 
   const insertImage = async (index, source) => {
@@ -267,7 +287,9 @@ export default function PillFields({ values, onChange, resetKey }) {
                     aria-label={`Pill ${index + 1} content`}
                     data-placeholder="Paste a screenshot, an image link, a ChatGPT answer or type notes…"
                     suppressContentEditableWarning
-                    onInput={() => set(index, read(index))}
+                    onInput={() => typed(index)}
+                    onBlur={flush}
+                    onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') flush(); }}
                     onPaste={event => onPaste(event, index)}
                     onDrop={event => {
                       const file = [...(event.dataTransfer?.files || [])].find(item => item.type.startsWith('image/'));
