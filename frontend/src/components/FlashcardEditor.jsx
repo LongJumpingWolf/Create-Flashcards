@@ -4,11 +4,12 @@ import { createPortal } from 'react-dom';
 import DocumentationModal from './DocumentationModal';
 import ImportCardsModal from './ImportCardsModal';
 import PillFields, { PreviewPills } from './PillFields';
+import CardPreviewFrame, { DEVICES as PREVIEW_DEVICES } from './CardPreviewFrame';
 import { buildThemePayload, loadSettings, normalizePills } from '../beerus';
 import { hasSavedPdf } from '../pdfResumeStorage';
 import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView, TableGridPicker } from './editorTools';
 import { smartTyping, smartEnter, listTab, markdownToHtml, looksLikeMarkdown, isPlainHtml, tidyHtml, SMART_DEFAULTS } from './smartTyping';
-import { MATH_WRAPPERS, wrapSelection, audioHtml, fileToDataUrl, useAudioRecorder, MAX_AUDIO_BYTES, sanitizePastedHtml, plainTextToHtml, duplicateKey, buildTableHtml, findCell, tableAction, tableTab, placeCaretInCell, renderClozePreview, clozeNumbers } from './editorHelpers';
+import { MATH_WRAPPERS, wrapSelection, audioHtml, fileToDataUrl, useAudioRecorder, MAX_AUDIO_BYTES, sanitizePastedHtml, plainTextToHtml, duplicateKey, buildTableHtml, findCell, tableAction, tableTab, placeCaretInCell, clozeNumbers } from './editorHelpers';
 
 let pdfStudyPanelPromise;
 const preloadPdfStudyPanel = () => {
@@ -398,6 +399,7 @@ export default function FlashcardEditor({ onOpenSettings }) {
   const [currentTags, setCurrentTags] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
   const [previewNight, setPreviewNight] = useState(true);
+  const [previewDevice, setPreviewDevice] = useState('desktop');
   const [previewAnswerSide, setPreviewAnswerSide] = useState(false);
   const [previewOcclusionIndex, setPreviewOcclusionIndex] = useState(0);
   const [cards, setCards] = useState([]);
@@ -2438,9 +2440,6 @@ export default function FlashcardEditor({ onOpenSettings }) {
                     const activeNumber = numbers[Math.min(previewOcclusionIndex, Math.max(0, numbers.length - 1))] || 1;
                     const sequentialPreview = cardType === 'Cloze' && clozeSequential;
                     const cardCount = sequentialPreview ? 1 : Math.max(1, numbers.length);
-                    const frontHtml = cardType === 'Cloze'
-                      ? renderClozePreview(cleanColorSpans(front) || '(empty)', activeNumber, previewAnswerSide, sequentialPreview)
-                      : (cleanColorSpans(front) || '(empty)');
                     return <>
                       <div className="io-reviewer-controls">
                         {cardType === 'Cloze' && <><button type="button" aria-label="Previous cloze card" disabled={previewOcclusionIndex <= 0 || sequentialPreview} onClick={() => setPreviewOcclusionIndex(index => Math.max(0, index - 1))}>‹</button>
@@ -2449,12 +2448,11 @@ export default function FlashcardEditor({ onOpenSettings }) {
                         <div className="io-reviewer-flip"><button type="button" aria-pressed={!previewAnswerSide} onClick={() => setPreviewAnswerSide(false)}>Question</button><button type="button" aria-pressed={previewAnswerSide} onClick={() => setPreviewAnswerSide(true)}>Show answer</button></div>
                         <div className="io-reviewer-flip"><button type="button" aria-pressed={previewNight} onClick={() => setPreviewNight(true)}>Night</button><button type="button" aria-pressed={!previewNight} onClick={() => setPreviewNight(false)}>Day</button></div>
                       </div>
-                      <div className={`anki-card ${previewNight ? 'night' : 'day'}`}>
-                        <div dangerouslySetInnerHTML={{ __html: frontHtml }} />
-                        {previewAnswerSide && cardType === 'Basic' && <><hr /><div dangerouslySetInnerHTML={{ __html: back || '(empty)' }} /></>}
-                        {previewAnswerSide && cardType === 'Cloze' && back && <><hr /><div className="anki-extra" dangerouslySetInnerHTML={{ __html: back }} /></>}
-                        {previewAnswerSide && <PreviewPills pills={pills} night={previewNight} />}
+                      <div className="io-reviewer-controls">
+                        <div className="io-reviewer-flip">{Object.entries(PREVIEW_DEVICES).map(([key, item]) => <button type="button" key={key} aria-pressed={previewDevice === key} onClick={() => setPreviewDevice(key)}>{item.label}</button>)}</div>
                       </div>
+                      <CardPreviewFrame type={cardType} front={cleanColorSpans(front)} back={back} pills={pills} sequential={sequentialPreview} side={previewAnswerSide ? 'answer' : 'question'} night={previewNight} clozeOrd={activeNumber} device={previewDevice} />
+                      <p className="text-xs text-neutral-400">Exactly as the exported card renders, using your Settings (text size, pill size, colours, fonts).</p>
                     </>;
                   })()}
                 </>}

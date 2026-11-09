@@ -616,17 +616,20 @@ function renderCloze(html, side, ord) {
   });
 }
 
+// Lets a preview iframe tell its parent how tall the card is (the iframe is sandboxed, so postMessage is the only channel).
+const HEIGHT_SCRIPT = '<script>(function(){function r(){parent.postMessage({beerusPreviewHeight:document.documentElement.scrollHeight},"*")}addEventListener("load",r);addEventListener("click",function(){setTimeout(r,80)});document.addEventListener("toggle",function(){setTimeout(r,30)},true);if(window.ResizeObserver)new ResizeObserver(r).observe(document.body);setTimeout(r,50);})()</' + 'script>';
+
 /** A complete HTML document that shows one card side exactly as the exported note type will render it. */
-export function previewDocument(model, fields, { side, night, mobile, mediaUrls = {} }) {
+export function previewDocument(model, fields, { side, night, mobile, mediaUrls = {}, clozeOrd = 1, reportHeight = false }) {
   const template = model.templates[0];
-  let html = renderTemplate(side === 'question' ? template.qfmt : template.afmt, fields, { side });
+  let html = renderTemplate(side === 'question' ? template.qfmt : template.afmt, fields, { side, clozeOrd });
   let css = model.css;
   Object.keys(mediaUrls).forEach(name => {
     css = css.split(name).join(mediaUrls[name]);
     html = html.split(name).join(mediaUrls[name]);
   });
   const classes = `card${night ? ' nightMode' : ''}${mobile ? ' mobile' : ''}`;
-  return `<!doctype html><html class="${night ? 'night_mode' : ''}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0}${css}</style></head><body class="${classes}">${html}</body></html>`;
+  return `<!doctype html><html class="${night ? 'night_mode' : ''}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0}${css}</style></head><body class="${classes}">${html}${reportHeight ? HEIGHT_SCRIPT : ''}</body></html>`;
 }
 
 export { IOE_FIELDS };

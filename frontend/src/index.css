@@ -1396,3 +1396,5 @@ body { background:#202124; }
 .pill-note-converted { color: #6ee7a8; }
 .pill-note button { margin-left: 6px; padding: 2px 9px; border-radius: 7px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
 .set-version { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.card-preview-frame-wrap { display: flex; justify-content: center; }
+.card-preview-frame-wrap iframe { border: 1px solid rgba(128,128,128,.3); border-radius: 12px; background: #272828; }
