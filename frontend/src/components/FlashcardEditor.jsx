@@ -430,6 +430,8 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
   const [cardSearch, setCardSearch] = useState('');
   const [mobileView, setMobileView] = useState('editor');
   const [pdfOpen, setPdfOpen] = useState(false);
+  const [incomingPdf, setIncomingPdf] = useState(null);
+  const [pdfDragging, setPdfDragging] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [occlusionImage, setOcclusionImage] = useState(null);
   const [occlusionImageWidth, setOcclusionImageWidth] = useState(720);
@@ -1980,6 +1982,37 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     setCardType(nextType);
   };
 
+  // Drop a PDF anywhere on the page to open it in the study panel.
+  const pdfOpenRef = useRef(false);
+  pdfOpenRef.current = pdfOpen;
+  useEffect(() => {
+    const hasPdf = (dt) => {
+      if (!dt || ![...(dt.types || [])].includes('Files')) return false;
+      const items = [...(dt.items || [])].filter(item => item.kind === 'file');
+      return items.length > 0 && items.some(item => item.type === 'application/pdf' || item.type === '');
+    };
+    let depth = 0;
+    const onEnter = (event) => { if (hasPdf(event.dataTransfer)) { depth += 1; setPdfDragging(true); } };
+    const onOver = (event) => { if (hasPdf(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } };
+    const onLeave = (event) => { if (hasPdf(event.dataTransfer)) { depth = Math.max(0, depth - 1); if (!depth) setPdfDragging(false); } };
+    const onDrop = (event) => {
+      depth = 0; setPdfDragging(false);
+      const file = [...(event.dataTransfer?.files || [])].find(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+      if (!file) return;
+      event.preventDefault(); event.stopPropagation();
+      if (pdfOpenRef.current && !window.confirm(`Open “${file.name}” in the PDF panel? It replaces the PDF that is open now.`)) return;
+      setIncomingPdf({ file, key: Date.now() });
+      preloadPdfStudyPanel().catch(() => {});
+      setPdfOpen(true); setShowLibrary(false); setMobileView('pdf');
+    };
+    window.addEventListener('dragenter', onEnter);
+    window.addEventListener('dragover', onOver);
+    window.addEventListener('dragleave', onLeave);
+    window.addEventListener('drop', onDrop, true); // before the image-drop handlers
+    window.addEventListener('dragend', () => { depth = 0; setPdfDragging(false); });
+    return () => { window.removeEventListener('dragenter', onEnter); window.removeEventListener('dragover', onOver); window.removeEventListener('dragleave', onLeave); window.removeEventListener('drop', onDrop, true); };
+  }, []);
+
   const openPdfWorkspace = () => {
     preloadPdfStudyPanel().catch(() => {});
     setPdfOpen(true); setShowLibrary(false); setMobileView('pdf');
@@ -2220,6 +2253,8 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
             🎯 Cloze Mode Active (c{activeClozeId || clozeNumber}) - Select text to create deletion
           </div>
       )}
+
+      {pdfDragging && <div className="pdf-drop-overlay" role="presentation"><div><strong>Drop the PDF to open it</strong><span>It opens in the study panel next to your card editor</span></div></div>}
 
       <header className="app-header">
         <div className="brand-lockup">
@@ -2504,7 +2539,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
 
         </div>
 
-        {pdfOpen && <div className={mobileView === 'pdf' ? '' : 'pdf-panel-mobile-hidden'}><PdfPanelErrorBoundary onClose={closePdfWorkspace}><Suspense fallback={<section className="pdf-study-panel pdf-loading-state">Loading PDF tools…</section>}><PdfStudyPanel fieldOptions={cardType === 'Basic' ? [{ target: 'front', label: 'Front' }, { target: 'back', label: 'Back' }] : cardType === 'Cloze' ? [{ target: 'front', label: 'Text' }, { target: 'back', label: 'Extra' }] : [{ target: 'front', label: 'Image' }, { target: 'back', label: 'Extra' }]} onInsertSnippet={insertStudySnippet} isSmallScreen={false} onMobileView={setMobileView} /></Suspense></PdfPanelErrorBoundary></div>}
+        {pdfOpen && <div className={mobileView === 'pdf' ? '' : 'pdf-panel-mobile-hidden'}><PdfPanelErrorBoundary onClose={closePdfWorkspace}><Suspense fallback={<section className="pdf-study-panel pdf-loading-state">Loading PDF tools…</section>}><PdfStudyPanel fieldOptions={cardType === 'Basic' ? [{ target: 'front', label: 'Front' }, { target: 'back', label: 'Back' }] : cardType === 'Cloze' ? [{ target: 'front', label: 'Text' }, { target: 'back', label: 'Extra' }] : [{ target: 'front', label: 'Image' }, { target: 'back', label: 'Extra' }]} onInsertSnippet={insertStudySnippet} isSmallScreen={false} onMobileView={setMobileView} incomingFile={incomingPdf} /></Suspense></PdfPanelErrorBoundary></div>}
         <div className={`cards-panel ${mobileView !== 'cards' ? 'mobile-hidden' : ''} ${pdfOpen ? `library-drawer ${showLibrary ? 'library-open' : ''}` : ''}`}>
           <div className="library-heading">
             <div><p className="section-eyebrow">YOUR DECK</p><h2><BookOpen size={19} /> Card library <span className="library-count">{cards.length}</span></h2></div>

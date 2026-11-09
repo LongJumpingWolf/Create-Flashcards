@@ -36,7 +36,7 @@ const INSERT_PROMPT_STYLE = {
   occlusion: { width: 43, minWidth: 43, minHeight: 43, display: 'grid', placeItems: 'center', border: '1px solid rgba(129,190,144,.28)', borderRadius: 9, background: '#1e3425', color: '#b9dfc1', cursor: 'pointer' },
 };
 
-export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ target: 'front', label: 'Front' }, { target: 'back', label: 'Back' }], isSmallScreen = false, onMobileView }) {
+export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ target: 'front', label: 'Front' }, { target: 'back', label: 'Back' }], isSmallScreen = false, onMobileView, incomingFile = null }) {
   const fileInputRef = useRef(null);
   const hostRef = useRef(null);
   const pagePositionRef = useRef(null);
@@ -702,6 +702,9 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
     finally { if (loadTokenRef.current === loadToken) setLoading(false); }
   };
   loadPdfFileRef.current = loadPdfFile;
+
+  // A PDF dropped anywhere on the site arrives here (the panel may only have just been opened).
+  useEffect(() => { if (incomingFile?.file) loadPdfFileRef.current?.(incomingFile.file); }, [incomingFile]);
 
   const openFile = (event) => {
     const file = event.target.files?.[0];

@@ -1534,3 +1534,8 @@ body { background:#202124; }
 .fp-grip { position: absolute; left: 8px; top: 50%; width: 8px; height: 14px; margin: 0; transform: translateY(-50%); letter-spacing: 0; font-size: 0; background: radial-gradient(circle, #b4bac0 1.4px, transparent 1.9px) 0 0 / 4px 4.67px; opacity: 0; pointer-events: none; transition: opacity .12s; }
 .fp-row:hover .fp-grip, .fp-row.drag .fp-grip { opacity: .9; }
 @media (hover: none) { .fp-grip { display: none; } }
+
+/* Drop a PDF anywhere */
+.pdf-drop-overlay { position: fixed; inset: 0; z-index: 500; display: grid; place-items: center; background: rgba(20,24,30,.82); pointer-events: none; }
+.pdf-drop-overlay > div { display: grid; gap: 6px; padding: 42px 56px; border: 3px dashed #60a5fa; border-radius: 22px; background: rgba(59,130,246,.12); text-align: center; color: #e8eaed; }
+.pdf-drop-overlay strong { font-size: 24px; } .pdf-drop-overlay span { color: #9fb4d6; font-size: 14px; }
