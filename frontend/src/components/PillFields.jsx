@@ -37,6 +37,11 @@ const readAsDataUrl = (file) => new Promise((resolve, reject) => {
 const IMAGE_URL = /^https?:\/\/\S+\.(png|jpe?g|gif|webp|svg)(\?\S*)?$/i;
 // The editor shows pills smaller than on the card (the card size is set on the Settings page).
 const EDITOR_PILL_STYLE = { '--ics': 1, '--gs': 0.7, fontSize: '12.5px' };
+// The editor's own stylesheet sets text colours on everything inside previews; keep the ChatGPT panel's text colour intact.
+const gptKeepText = (scope, settings) => {
+  const color = settings.chatgpt.day.text;
+  return `${scope} .gpt, ${scope} .gpt *:not(.gpt-badge) { color: ${color} !important; } ${scope} .gpt ul { list-style: disc outside !important; } ${scope} .gpt ol { list-style: decimal outside !important; } ${scope} .gpt li { display: list-item !important; }`;
+};
 const FORMAT_LABEL = { auto: 'Auto', chatgpt: 'ChatGPT look', plain: 'Plain' };
 
 function PillChip({ pill, index, settings, dim }) {
@@ -63,10 +68,10 @@ export function PreviewPills({ pills, night }) {
   const px = 0.6 * (settings.pillStyle.scale / 100) * 28;
   return (
     <div className={night ? 'nightMode' : ''}>
-      <style>{css}{`.pv-pills .bpill-body { font-size: ${(0.72 * 28).toFixed(1)}px; } .pv-pills .bpill > summary { font-size: ${px.toFixed(1)}px; }`}</style>
+      <style>{css}{gptKeepText('.pv-pills', settings)}{`.pv-pills .bpill-body { font-size: ${(0.72 * 28).toFixed(1)}px; } .pv-pills .bpill > summary { font-size: ${px.toFixed(1)}px; }`}</style>
       <div id="bpills" className={`pv-pills bs-${settings.pillStyle.style}`} style={{ fontSize: `${px.toFixed(1)}px` }}>
         {shown.map(({ pill, index, html }) => (
-          <details key={index} className={`bpill bpill-${index + 1}${pill.format === 'chatgpt' ? ' bpill-gpt' : ''}`} open={pill.open}>
+          <details key={index} className={`bpill bpill-${index + 1}${pill.format === 'chatgpt' || /^\s*<div class="gpt"/.test(html) ? ' bpill-gpt' : ''}`} open={pill.open}>
             <summary>
               {settings.pillStyle.showIcons && pill.iconType === 'emoji' && pill.icon ? <span className="bpill-em">{pill.icon}</span> : null}
               {settings.pillStyle.showIcons && (pill.iconType === 'image' || pill.iconType === 'url') ? <span className="bpill-ic" /> : null}
@@ -164,7 +169,7 @@ export default function PillFields({ values, onChange, resetKey }) {
 
   return (
     <section className="pill-fields">
-      <style>{css}</style>
+      <style>{css}{gptKeepText('.pill-field-box', settings)}</style>
       <button type="button" className="pill-fields-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
         <span>Pills <em>(toggle buttons under the answer)</em></span>
         <small>{filled ? `${filled} on the card` : 'optional'}</small>
@@ -196,7 +201,7 @@ export default function PillFields({ values, onChange, resetKey }) {
                   <button type="button" className="pill-field-btn" onClick={() => { const url = window.prompt('Image link (https://…)'); if (url && /^https?:\/\//i.test(url.trim())) insertImage(index, url.trim()); }}>Image link</button>
                   {values[index] && <button type="button" className="pill-field-btn" onClick={() => set(index, '')}>Clear</button>}
                 </div>
-                <div className="nightMode">
+                <div>
                   <div
                     ref={node => { refs.current[index] = node; }}
                     className="pill-field-box editable-content"

@@ -96,7 +96,9 @@ export function chatgptHtmlToGpt(html) {
       return /^(https?:|data:image\/)/i.test(src) ? `<img src="${src.replace(/"/g, '&quot;')}">` : '';
     }
     if (/^H[1-6]$/.test(tag) || kind === 'title') {
-      const level = /^H[1-6]$/.test(tag) ? Number(tag[1]) : (node.getAttribute('data-d-size') === 'lg' ? 2 : 3);
+      // ChatGPT's rich answers mark their title size (lg = 18px, md = 16px); in classic markdown h1-h3 are the section titles.
+      const sized = node.getAttribute('data-d-size');
+      const level = sized ? (sized === 'lg' ? 2 : 3) : (/^H[1-6]$/.test(tag) ? (Number(tag[1]) <= 3 ? 2 : 3) : 3);
       const text = [...node.childNodes].map(inline).join('').trim();
       return text ? `<${level <= 2 ? 'h2' : 'h3'}>${text}</${level <= 2 ? 'h2' : 'h3'}>` : '';
     }
@@ -147,7 +149,8 @@ export function markdownToGpt(markdown) {
  */
 export function chatgptFromClipboard({ html, text }, format = 'auto') {
   if (format === 'plain') return null;
-  if (html && isChatGptHtml(html)) {
+  // 'ChatGPT look (always)' converts any pasted HTML, so it still works when the clipboard lacks ChatGPT's markers.
+  if (html && (format === 'chatgpt' || isChatGptHtml(html))) {
     const out = chatgptHtmlToGpt(html);
     if (out) return out;
   }

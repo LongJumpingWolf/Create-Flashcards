@@ -59,7 +59,7 @@ export const DEFAULT_SETTINGS = {
     { label: 'Lecture notes', color: '#F59E0B', iconType: 'emoji', icon: '📝', iconData: '', iconUrl: '', open: false, format: 'auto' },
     { label: 'My notes', color: '#A855F7', iconType: 'emoji', icon: '⭐', iconData: '', iconUrl: '', open: false, format: 'auto' },
   ],
-  chatgpt: { day: { bg: '#FCFCFC', text: '#0D0D0D' }, night: { bg: '#212121', text: '#EDEDED' }, radius: 16, padding: 16 },
+  chatgpt: { followNight: false, day: { bg: '#FCFCFC', text: '#0D0D0D' }, night: { bg: '#212121', text: '#EDEDED' }, radius: 16, padding: 16 },
   watermark: { enabled: false, iconType: 'default', iconData: '', iconUrl: '', size: 22, opacity: 0.45, corner: 'bottom-right' },
   export: { maxImageEdge: 2000, jpegQuality: 0.86 },
 };
@@ -106,6 +106,7 @@ export function normalizeSettings(saved) {
   });
   const gp = settings.chatgpt;
   ['bg', 'text'].forEach(key => { ['day', 'night'].forEach(mode => { if (!/^#[0-9a-f]{6}$/i.test(gp[mode][key])) gp[mode][key] = DEFAULT_SETTINGS.chatgpt[mode][key]; }); });
+  gp.followNight = Boolean(gp.followNight);
   gp.radius = clamp(Number(gp.radius), 0, 32, 16);
   gp.padding = clamp(Number(gp.padding), 4, 32, 16);
   const ps = settings.pillStyle;
@@ -292,10 +293,11 @@ const GPT_FONT = '-apple-system-body, ui-sans-serif, -apple-system, system-ui, "
 export function gptCss(settings) {
   const g = settings.chatgpt;
   const nm = '.nightMode .gpt, .night_mode .gpt';
-  const night = (selector, rule) => `.nightMode ${selector}, .night_mode ${selector} { ${rule} }\n`;
+  // By default the panel looks exactly like ChatGPT on every card theme; night variants only when asked for.
+  const night = (selector, rule) => (g.followNight ? `.nightMode ${selector}, .night_mode ${selector} { ${rule} }\n` : '');
   return `
-.gpt { display: block; box-sizing: border-box; text-align: left; font-family: ${GPT_FONT}; font-size: calc(16px * var(--gs, 1)); line-height: 1.625; font-weight: 400; font-style: normal; background: ${g.day.bg}; color: ${g.day.text}; border-radius: ${g.radius}px; padding: ${g.padding}px ${g.padding + 2}px; }
-${nm} { background: ${g.night.bg}; color: ${g.night.text}; }
+.gpt { display: block; box-sizing: border-box; text-align: left; font-family: ${GPT_FONT}; font-size: 16px; line-height: 1.625; font-weight: 400; font-style: normal; background: ${g.day.bg}; color: ${g.day.text}; border-radius: ${g.radius}px; padding: ${g.padding}px ${g.padding + 2}px; }
+${g.followNight ? `${nm} { background: ${g.night.bg}; color: ${g.night.text}; }` : ''}
 .gpt > :first-child { margin-top: 0 !important; }
 .gpt p { margin: 16px 0 0; }
 .gpt h2 { margin: 24px 0 0; font-size: 1.125em; line-height: 1.5556; font-weight: 600; }
@@ -303,6 +305,10 @@ ${nm} { background: ${g.night.bg}; color: ${g.night.text}; }
 .gpt b, .gpt strong { font-weight: 600; color: inherit; }
 .gpt i, .gpt em { color: inherit; }
 .gpt ul, .gpt ol { display: block; max-width: none; margin: 8px 0 0; padding: 0 0 0 32px; text-align: left; }
+.gpt ul { list-style: disc outside; }
+.gpt ol { list-style: decimal outside; }
+.gpt ul ul { list-style: circle outside; }
+.gpt li { display: list-item; }
 .gpt li { margin: 0; }
 .gpt li > p { margin: 0; }
 .gpt table { width: 100%; margin: 16px 0 0; border-collapse: collapse; font-size: .875em; line-height: 1.4286; }
@@ -352,6 +358,9 @@ export function pillCss(settings, files = themeMedia(settings)) {
 
 .bpill-body img { max-width: 100%; height: auto; border-radius: .3em; }
 .bpill-gpt .bpill-body { padding: 0; border: 0; background: none; }
+.bpill-gpt[open] { width: min(96%, 820px); }
+.bpill-gpt > summary { width: fit-content; margin: 0 auto; }
+.bpill-gpt .bpill-body { width: 100%; max-width: none; margin-top: .6rem; }
 .bs-bubble .bpill-em, .bs-bubble .bpill-ic { background-color: #fff; border-radius: 50%; display: inline-grid; place-items: center; overflow: hidden; }
 .bs-bubble .bpill-em { font-size: calc(.95em * var(--ics, 1)); width: 1.85em; height: 1.85em; }
 .bs-bubble .bpill-ic { width: calc(1.85em * var(--ics, 1)); height: calc(1.85em * var(--ics, 1)); background-size: cover; }
@@ -392,6 +401,7 @@ function pillsScript(settings) {
   var state = window.__bpState = window.__bpState || {};
   var items = Array.prototype.slice.call(document.querySelectorAll('#bpills details'));
   items.forEach(function (item) {
+    if (item.querySelector('.bpill-body > .gpt')) item.className += ' bpill-gpt';
     var i = Number(item.getAttribute('data-i'));
     if (remember && state[i] !== undefined) item.open = state[i];
     else item.open = !!open[i - 1];
