@@ -1160,6 +1160,8 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
         if (event.key === 'Tab' && !event.altKey && smart.prefs.markdown && smart.listTab(editor, event.shiftKey)) { event.preventDefault(); api.syncAfterEdit(ref); return; }
       }
       const exec = (command) => { event.preventDefault(); document.execCommand(command, false, null); api.syncAfterEdit(ref); };
+      // Ctrl+B / I / U are taken by some browsers (Brave opens Leo / the sidebar on Ctrl+B), so handle them here and stop the browser.
+      if (mod && !event.altKey && !event.shiftKey && ['b', 'i', 'u'].includes(key) && field !== 'html') { event.preventDefault(); event.stopPropagation(); api.applyFormat(key === 'b' ? 'bold' : key === 'i' ? 'italic' : 'underline', ref); return; }
       const chord = chordRef.current;
       if (chord.key === 'm' && Date.now() - chord.at < 1500) {
         chordRef.current = { key: null, at: 0 };
@@ -1575,6 +1577,11 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
 
   const restoreSavedSelection = (targetRef) => {
     if (!targetRef?.current) return false;
+    // The toolbar never takes focus, so when the field still has it the live selection is the truth: a selection made
+    // with the mouse is not in savedRangeRef yet, and restoring the older saved caret would drop it (that is what
+    // made the colour / format buttons need a second click).
+    const live = window.getSelection();
+    if (document.activeElement === targetRef.current && live.rangeCount && targetRef.current.contains(live.anchorNode)) return true;
     targetRef.current.focus();
     const range = savedRangeRef.current;
     if (!range || !targetRef.current.contains(range.commonAncestorContainer)) return false;
@@ -2271,7 +2278,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
 
   // Latest tool handlers for the keyboard-shortcut effect (declared earlier in the component).
   toolsRef.current.insertAudio = insertAudio;
-  toolsRef.current.api = { insertMath, insertCloze, toggleHtmlView, openAudioPicker, toggleRecording, syncAfterEdit, cardType };
+  toolsRef.current.api = { applyFormat, insertMath, insertCloze, toggleHtmlView, openAudioPicker, toggleRecording, syncAfterEdit, cardType };
   toolsRef.current.table = { tableTab, findCell };
   toolsRef.current.smart = { prefs: smartPrefs, lastSmartRef, smartEnter, listTab };
 
