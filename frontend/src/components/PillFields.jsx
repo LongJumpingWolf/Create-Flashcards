@@ -20,7 +20,7 @@ const EDITOR_PILL_STYLE = { '--ics': 1, '--gs': 0.7, fontSize: '12.5px' };
 const gptKeepText = (scope, settings) => {
   const color = settings.chatgpt.day.text;
   // Text you colour with the toolbar (inline colour) keeps its colour; everything else stays the panel's text colour.
-  const plain = ':not(.gpt-badge):not([color]):not([style*="color:"]):not([color] *):not([style*="color:"] *)';
+  const plain = ':not(.gpt-badge):not([class*="gpt-c-"]):not([color]):not([style*="color:"]):not([color] *):not([style*="color:"] *)';
   return `${scope} .gpt, ${scope} .gpt *${plain} { color: ${color} !important; } ${scope} .gpt ul { list-style: disc outside !important; } ${scope} .gpt ol { list-style: decimal outside !important; } ${scope} .gpt li { display: list-item !important; }`;
 };
 const FORMAT_LABEL = { auto: 'Auto', chatgpt: 'ChatGPT look', plain: 'Plain' };

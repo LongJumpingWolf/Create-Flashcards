@@ -48,6 +48,8 @@ export function isChatGptHtml(html) {
   return /data-d-component=|data-message-author-role|data-turn-id|data-start="\d+"|class="[^"]*\b(?:markdown|prose|TextBase|Badge)[\w-]*/i.test(html || '');
 }
 
+// ChatGPT colours text with theme variables (danger = red, success = green ...); keep that meaning as a class the card CSS draws.
+const colorClass = (node) => { const m = /--color-text-(danger|success|warning|info)/.exec(node.getAttribute?.('style') || ''); return m ? `gpt-c-${m[1]}` : ''; };
 const isDomainLike = (text) => /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(text.trim());
 
 export function chatgptHtmlToGpt(html) {
@@ -74,6 +76,8 @@ export function chatgptHtmlToGpt(html) {
     const underline = tag === 'u' || /underline/.test(node.style?.textDecorationLine || node.style?.textDecoration || '');
     let out = inner();
     if (!out.trim() && !/<br>/.test(out)) return out;
+    const tone = colorClass(node);
+    if (tone && !/^H[1-6]$/.test(node.tagName) && kind !== 'title') out = `<span class="${tone}">${out}</span>`;
     if (tag === 'sub' || tag === 'sup') out = `<${tag}>${out}</${tag}>`;
     if (bold) out = `<b>${out}</b>`;
     if (italic) out = `<i>${out}</i>`;
@@ -129,6 +133,16 @@ export function chatgptHtmlToGpt(html) {
     return rows.length ? `<table><tbody>${rows.join('')}</tbody></table>` : '';
   };
 
+  // ChatGPT's boxed diagrams (a bordered, centred column of lines with arrow icons between them, maybe a coloured title)
+  const flowBox = (node) => {
+    if (!node.textContent.trim()) return '';
+    const bordered = node.hasAttribute('data-d-has-border') || /border:/.test(node.getAttribute('style') || '');
+    if (!bordered) return [...node.children].map(block).join('');
+    const arrow = node.getAttribute('data-d-direction') === 'row' ? '→' : '↓';
+    const parts = [...node.children].map(child => (comp(child) === 'icon' || child.tagName.toLowerCase() === 'svg' ? `<p class="gpt-arrow">${arrow}</p>` : block(child))).join('');
+    return parts ? `<div class="gpt-flow">${parts.replace(/<(\/?)h3/g, '<$1h2')}</div>` : '';
+  };
+
   function block(node) {
     if (node.nodeType === Node.TEXT_NODE) { const t = node.textContent.replace(/\s+/g, ' ').trim(); return t ? `<p>${esc(t)}</p>` : ''; }
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
@@ -145,7 +159,9 @@ export function chatgptHtmlToGpt(html) {
     const media = mediaBlock(node);
     if (media) return media;
     if (isSourceCard(node)) return '';
-    if (kind === 'box' || kind === 'image') return '';
+    if (kind === 'image') return '';
+    if (kind === 'box') return flowBox(node);
+    if (node.classList?.contains('gpt-flow')) return node.outerHTML; // an already converted diagram box
     // a "heading" that wraps whole sections (it happens on the clipboard) is just a container
     if ((/^H[1-6]$/.test(tag) || kind === 'title') && (hasBlockChild(node) || node.textContent.trim().length > 220)) return [...node.childNodes].map(block).join('');
     if (/^H[1-6]$/.test(tag) || kind === 'title') {
@@ -153,7 +169,8 @@ export function chatgptHtmlToGpt(html) {
       const sized = node.getAttribute('data-d-size');
       const level = sized ? (sized === 'lg' ? 2 : 3) : (/^H[1-6]$/.test(tag) ? (Number(tag[1]) <= 3 ? 2 : 3) : 3);
       const text = [...node.childNodes].map(inline).join('').trim();
-      return text ? `<${level <= 2 ? 'h2' : 'h3'}>${text}</${level <= 2 ? 'h2' : 'h3'}>` : '';
+      const tone = colorClass(node);
+      return text ? `<${level <= 2 ? 'h2' : 'h3'}${tone ? ` class="${tone}"` : ''}>${text}</${level <= 2 ? 'h2' : 'h3'}>` : '';
     }
     if (tag === 'UL' || tag === 'OL') {
       const items = [...node.children].filter(child => child.tagName === 'LI').map(listItem).join('');
