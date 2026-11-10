@@ -178,10 +178,30 @@ export function chatgptHtmlToGpt(html) {
     return bolds.map(el => el.textContent.replace(/\s+/g, '')).join('') === text;
   };
   const isColoredTitle = (n) => n && n.nodeType === Node.ELEMENT_NODE && (/^H[1-4]$/.test(n.tagName) || comp(n) === 'title') && n.textContent.trim().length <= 80 && Boolean(inkColor(n) || [...n.querySelectorAll('[style*="--d-stream-ink"]')].some(inkColor) || colorClass(n));
+  // What ChatGPT really puts on the clipboard when you copy (checked with a paste saved from the live site): every class, style, data-*
+  // attribute, arrow icon and colour is gone and the box is just a bare <div> holding the steps as short <p> lines, maybe ending with a
+  // heading. A bare div of three or more short, unpunctuated lines is a flowchart.
+  const isStepDiv = (n) => {
+    if (!n || n.nodeType !== Node.ELEMENT_NODE || n.tagName !== 'DIV' || n.getAttribute('class') || n.hasAttribute('data-d-component')) return false;
+    const kids = [...n.children];
+    const last = kids[kids.length - 1];
+    const steps = last && /^H[1-4]$/.test(last.tagName) ? kids.slice(0, -1) : kids;
+    if (steps.length < 3 || kids.length > 12) return false;
+    const line = (el) => el.tagName === 'P' && !el.querySelector('p, ul, ol, table, pre, img, a[href]') && el.textContent.trim().length > 0 && el.textContent.trim().length <= 70 && !/[.?!:;]$/.test(el.textContent.trim());
+    return steps.every(line) && (steps.length === kids.length || (last.textContent.trim().length <= 70 && !/[.?!:;]$/.test(last.textContent.trim())));
+  };
   function blocks(nodes) {
     const list = nodes.filter(n => !(n.nodeType === Node.TEXT_NODE && !n.textContent.trim()));
     const out = [];
     for (let i = 0; i < list.length; i += 1) {
+      if (isStepDiv(list[i])) {
+        const kids = [...list[i].children];
+        const items = kids.map(block);
+        // The clipboard carries no colour, but a flow ends in its conclusion, which ChatGPT shows in red: do the same (easy to recolour).
+        if (/^H[1-4]$/.test(kids[kids.length - 1].tagName)) items[items.length - 1] = items[items.length - 1].replace(/^<h[23]>/, '<h2 class="gpt-c-danger">');
+        out.push(`<div class="gpt-flow">${items.join('<p class="gpt-arrow">↓</p>').replace(/<(\/?)h3/g, '<$1h2')}</div>`);
+        continue;
+      }
       // Guard rails: three or more bold-only short lines in a row, with no text between them, are a flow whose arrows and box
       // frame did not come along (the last step may be a coloured title).
       if (isBoldLine(list[i]) && isBoldLine(list[i + 1]) && isBoldLine(list[i + 2])) {
