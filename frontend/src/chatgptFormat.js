@@ -150,7 +150,13 @@ export function chatgptHtmlToGpt(html) {
     const bordered = node.hasAttribute('data-d-has-border') || /border:/.test(node.getAttribute('style') || '');
     if (!bordered) return [...node.children].map(block).join('');
     const arrow = node.getAttribute('data-d-direction') === 'row' ? '→' : '↓';
-    const parts = [...node.children].map(child => (isIcon(child) ? (isArrowIcon(child) ? `<p class="gpt-arrow">${arrow}</p>` : '') : block(child))).join('');
+    const kids = [...node.children];
+    let parts;
+    if (kids.some(isIcon)) parts = kids.map(child => (isIcon(child) ? (isArrowIcon(child) ? `<p class="gpt-arrow">${arrow}</p>` : '') : block(child))).join('');
+    else { // the arrows did not make it onto the clipboard: a bordered column of short lines is a flow, so put the arrows back
+      const items = kids.map(block).filter(Boolean);
+      parts = items.length >= 3 && kids.every(hasText) ? items.join(`<p class="gpt-arrow">${arrow}</p>`) : items.join('');
+    }
     return parts ? `<div class="gpt-flow">${parts.replace(/<(\/?)h3/g, '<$1h2')}</div>` : '';
   };
 

@@ -395,9 +395,9 @@ ${g.followNight ? `${nm} { background: ${g.night.bg}; color: ${g.night.text}; }`
 .gpt li { display: list-item; }
 .gpt li { margin: 0; }
 .gpt li > p { margin: 0; }
-.gpt .gpt-flow { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 16px 0 0; padding: 12px; border: 1px solid rgba(128,128,128,.3); border-radius: 16px; text-align: center; }
-.gpt .gpt-flow p, .gpt .gpt-flow h2, .gpt .gpt-flow h3 { margin: 0; text-align: center; }
-.gpt .gpt-flow .gpt-arrow { opacity: .6; line-height: 1; }
+.gpt-flow { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 16px 0 0; padding: 12px; border: 1px solid rgba(128,128,128,.3); border-radius: 16px; text-align: center; }
+.gpt-flow p, .gpt-flow h2, .gpt-flow h3 { margin: 0; text-align: center; }
+.gpt-flow .gpt-arrow { opacity: .6; line-height: 1; }
 .gpt .gpt-c-danger { color: #F93E3E; } .gpt .gpt-c-success { color: #00A240; } .gpt .gpt-c-warning { color: #E25507; } .gpt .gpt-c-info { color: #2F7BFF; }
 .gpt table { width: 100%; margin: 16px 0 0; border-collapse: collapse; font-size: .875em; line-height: 1.4286; }
 .gpt th, .gpt td { border: 0; background: none; padding: 8px 8px 8px 0; text-align: left; vertical-align: top; }

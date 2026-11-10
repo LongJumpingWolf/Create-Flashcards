@@ -173,6 +173,36 @@ export default function PillFields({ values, onChange, resetKey, collapseKey = 0
     setNote(prev => ({ ...prev, [index]: 'converted' }));
   };
 
+  // "Flowchart": turns the selected lines into a boxed flow with arrows between them (or back into plain lines when the cursor is
+  // inside a flowchart). A workaround for copies where ChatGPT's arrows did not come along.
+  const flowchart = (index) => {
+    const node = refs.current[index];
+    const selection = window.getSelection();
+    let range = selection.rangeCount && node.contains(selection.anchorNode) ? selection.getRangeAt(0) : lastRange.current[index];
+    if (!node || !range || !node.contains(range.commonAncestorContainer)) { setNote(prev => ({ ...prev, [index]: 'flowneed' })); return; }
+    const start = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+    const existing = start.closest('.gpt-flow');
+    node.focus({ preventScroll: true });
+    setActionLabel('Flowchart');
+    if (existing && node.contains(existing)) {
+      const lines = [...existing.children].filter(child => !child.classList.contains('gpt-arrow'));
+      existing.replaceWith(...lines);
+      set(index, node.innerHTML); setNote(prev => ({ ...prev, [index]: null })); return;
+    }
+    const lines = [...node.querySelectorAll('p, h1, h2, h3, h4, div')].filter(el => !el.classList.contains('gpt') && !el.classList.contains('gpt-flow') && range.intersectsNode(el) && !el.querySelector('p, h1, h2, h3, h4, div, ul, ol, table') && !el.closest('table, ul, ol, .gpt-flow') && el.textContent.trim());
+    const parent = lines[0]?.parentElement;
+    const same = lines.filter(line => line.parentElement === parent);
+    if (same.length < 2) { setNote(prev => ({ ...prev, [index]: 'flowneed' })); return; }
+    const box = document.createElement('div'); box.className = 'gpt-flow';
+    parent.insertBefore(box, same[0]);
+    same.forEach((line, position) => {
+      if (position) { const arrow = document.createElement('p'); arrow.className = 'gpt-arrow'; arrow.textContent = '↓'; box.appendChild(arrow); }
+      if (line.tagName === 'P' && !line.querySelector('b, strong')) line.innerHTML = `<b>${line.innerHTML}</b>`;
+      box.appendChild(line);
+    });
+    set(index, node.innerHTML); setNote(prev => ({ ...prev, [index]: 'flowdone' }));
+  };
+
   // "Reformat": cleans the content that is already in the pill (e.g. pasted with an older version) into the ChatGPT look.
   const reformat = (index) => {
     const node = refs.current[index];
@@ -326,6 +356,7 @@ export default function PillFields({ values, onChange, resetKey, collapseKey = 0
                   )}
                   <span className="pill-field-state">{filledFlags[index] ? 'on the card' : 'empty, hidden'}{pill.format !== 'auto' ? ` · ${FORMAT_LABEL[pill.format]}` : ''}</span>
                   <button type="button" className={`pill-field-btn pill-pin${pinned[`pill${index + 1}`] ? ' is-on' : ''}`} onClick={() => onTogglePin?.(index)} aria-pressed={Boolean(pinned[`pill${index + 1}`])} title={pinned[`pill${index + 1}`] ? 'Pinned: this pill keeps its content after you add a card' : 'Pin pill: keep its content after adding a card'}><Pin size={13} /></button>
+                  <button type="button" className="pill-field-btn" onMouseDown={event => event.preventDefault()} onClick={() => flowchart(index)} title="Select the lines of a flowchart in this pill, then press this: boxes them with arrows between (press again inside the box to undo)">Flowchart</button>
                   {values[index] && <button type="button" className="pill-field-btn" onClick={() => reformat(index)} title="Clean up what is already in this pill into the ChatGPT look">Reformat</button>}
                   <button type="button" className="pill-field-btn" onClick={() => pasteAsChatGpt(index)} title="Paste what is on the clipboard as a ChatGPT-look panel">Paste as ChatGPT</button>
                   <label className="pill-field-btn">Add image<input type="file" accept="image/*" hidden onChange={e => { addFile(index, e.target.files?.[0]); e.target.value = ''; }} /></label>
@@ -339,6 +370,8 @@ export default function PillFields({ values, onChange, resetKey, collapseKey = 0
                     {note[index] === 'plain' && <>Kept as plain formatting. <button type="button" onClick={() => convertLast(index)}>Convert to ChatGPT look</button></>}
                     {note[index] === 'blocked' && 'The browser did not allow reading the clipboard. Allow it in the address bar, or paste with Ctrl+V.'}
                     {note[index] === 'empty' && 'Nothing to paste: the clipboard is empty.'}
+                    {note[index] === 'flowneed' && 'Select two or more lines (click and drag over them), then press Flowchart.'}
+                    {note[index] === 'flowdone' && 'Made a flowchart. Press Flowchart again with the cursor inside it to turn it back into lines.'}
                   </div>
                 )}
                 <div>
