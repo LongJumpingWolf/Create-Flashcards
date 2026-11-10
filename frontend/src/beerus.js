@@ -644,7 +644,10 @@ ${tail}
   const seqIoA = SEQ_IO_AFMT.replace('{{/Image}}', `${tail}\n{{/Image}}`);
   const seqIoQ = sequentialTweaks(SEQ_IO_QFMT, settings).replace('{{/Image}}', `${mark}\n{{/Image}}`);
 
-  const model = (key, spec) => ({ id: MODEL_IDS[key], name: BEERUS_NAMES[key], ...spec });
+  // A deck with more than the default four pills has more fields. Anki matches note types by id, so it gets its own id and name
+  // (otherwise importing it next to an older four-pill deck would clash and drop or shift the extra pill fields).
+  const extraPills = Math.max(0, settings.pills.length - PILL_COUNT);
+  const model = (key, spec) => ({ id: MODEL_IDS[key] + extraPills * 100, name: `${BEERUS_NAMES[key]}${extraPills ? ` (${PILL_COUNT + extraPills} pills)` : ''}`, ...spec });
   return {
     basic: model('basic', {
       type: 0, fields: ['Question', 'Answer', ...PILL_FIELDS],
