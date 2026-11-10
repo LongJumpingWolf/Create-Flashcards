@@ -140,7 +140,7 @@ export function chatgptHtmlToGpt(html) {
     if (!bordered) return [...node.children].map(block).join('');
     const arrow = node.getAttribute('data-d-direction') === 'row' ? '→' : '↓';
     const parts = [...node.children].map(child => (comp(child) === 'icon' || child.tagName.toLowerCase() === 'svg' ? `<p class="gpt-arrow">${arrow}</p>` : block(child))).join('');
-    return parts ? `<div class="gpt-flow">${parts.replace(/<(\/?)h3/g, '<$1h2')}</div>` : '';
+    return parts ? `<div class="gpt-flow">${parts.replace(/<(\/?)h3/g, '<$1h2')}</div>` : '';
   };
 
   function block(node) {
