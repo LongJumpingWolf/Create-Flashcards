@@ -3,6 +3,8 @@
 // paints a ragged stripe through every row. The highlight is drawn by overlay boxes, so nothing is written into the
 // card's HTML. Toolbar formatting applies to every selected cell; Delete empties them; Ctrl+C copies them as a table.
 
+import { setActionLabel } from './fieldHistory';
+
 let cells = [];
 let overlays = [];
 let anchor = null;
@@ -100,6 +102,7 @@ export function installTableSelection() {
     if (event.key === 'Escape') { clearCellSelection(); return; }
     if ((event.key === 'Delete' || event.key === 'Backspace') && !event.ctrlKey && !event.metaKey) {
       event.preventDefault(); event.stopPropagation();
+      setActionLabel('Delete cells');
       live.forEach(cell => { cell.innerHTML = '<br>'; });
       editor?.dispatchEvent(new Event('input', { bubbles: true }));
       draw();

@@ -4,6 +4,7 @@ import { chatgptFromClipboard, chatgptForce, chatgptHtmlToGpt } from '../chatgpt
 import { sanitizePastedHtml } from './editorHelpers';
 import { shrinkImageFile } from '../imageUtils';
 import { Pin } from './Icons';
+import { setActionLabel } from '../fieldHistory';
 
 const readAsDataUrl = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
@@ -227,6 +228,7 @@ export default function PillFields({ values, onChange, resetKey, pinned = {}, on
     if (!range) { range = document.createRange(); range.selectNodeContents(node); range.collapse(false); }
     node.focus({ preventScroll: true });
     selection.removeAllRanges(); selection.addRange(range);
+    setActionLabel(/<img/i.test(html) ? 'Image' : 'Insert');
     document.execCommand('insertHTML', false, html);
     set(index, node.innerHTML);
   };
@@ -236,6 +238,7 @@ export default function PillFields({ values, onChange, resetKey, pinned = {}, on
     node.focus({ preventScroll: true });
     const range = document.createRange(); range.selectNodeContents(node);
     const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    setActionLabel('Reformat');
     document.execCommand('insertHTML', false, html);
     set(index, node.innerHTML);
   };

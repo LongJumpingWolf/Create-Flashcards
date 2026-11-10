@@ -15,12 +15,14 @@ import { repairOldChatGptPaste } from '../chatgptFormat';
 // Pills of saved cards: content pasted from ChatGPT by an older version is rebuilt in the ChatGPT look (pills set to Plain are left alone).
 // Empty pill list (one slot per pill); pinned pills keep their content after a card is added.
 const blankPills = (pinned = {}, keep = []) => Array.from({ length: Math.max(4, loadSettings().pills.length) }, (_, i) => (pinned[`pill${i + 1}`] ? (keep[i] ?? '') : ''));
+const FORMAT_LABELS = { bold: 'Bold', italic: 'Italic', underline: 'Underline', strikeThrough: 'Strikethrough', superscript: 'Superscript', subscript: 'Subscript', foreColor: 'Text colour', hiliteColor: 'Highlight', removeFormat: 'Clear formatting', insertUnorderedList: 'Bulleted list', insertOrderedList: 'Numbered list', indent: 'Indent', outdent: 'Outdent', justifyLeft: 'Align left', justifyCenter: 'Center', justifyRight: 'Align right', justifyFull: 'Justify' };
 const repairPills = (pills) => {
   const formats = loadSettings().pills.map(pill => pill.format);
   return normalizePills(pills).map((html, index) => (formats[index] === 'plain' ? html : repairOldChatGptPaste(html)));
 };
 import { hasSavedPdf } from '../pdfResumeStorage';
 import { getSelectedCells, installTableSelection } from '../tableSelect';
+import { installFieldHistory, setActionLabel } from '../fieldHistory';
 import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView, TableGridPicker, WordColorTool } from './editorTools';
 import { smartTyping, smartEnter, listTab, markdownToHtml, looksLikeMarkdown, isPlainHtml, tidyHtml, SMART_DEFAULTS } from './smartTyping';
 import { MATH_WRAPPERS, wrapSelection, audioHtml, fileToDataUrl, useAudioRecorder, MAX_AUDIO_BYTES, sanitizePastedHtml, plainTextToHtml, duplicateKey, buildTableHtml, findCell, tableAction, tableTab, placeCaretInCell, clozeNumbers } from './editorHelpers';
@@ -1107,6 +1109,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     return () => window.removeEventListener('keydown', onEscape);
   }, [occlusionEditorOpen, showPreview, showLinkModal, showColorPicker]);
 
+  useEffect(() => installFieldHistory(), []); // Ctrl+Z / Ctrl+Y that follow your actions, with a toast naming what was undone
   useEffect(() => installTableSelection(), []); // Word-style selection of a block of table cells
   useEffect(() => installImageDrop(), []); // pictures dropped into any other field (pills, extra...) without the links that come with them
 
@@ -1520,6 +1523,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
             return;
           }
           restoreSavedSelection(targetRef);
+          setActionLabel('Image');
           const imgHtml = `<img src="${base64Image}" alt="uploaded-image" style="display: inline-block; max-width:${BASE_IMAGE_WIDTH}px; height:auto; vertical-align: middle;">`;
           const finalHtml = imgHtml + '&nbsp;';
 
@@ -1550,6 +1554,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     const selectedText = selection.toString().trim();
     if (!selectedText) return;
   
+    setActionLabel('Cloze');
     range.deleteContents();
   
     const span = document.createElement('span');
@@ -1597,6 +1602,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     window.setTimeout(() => {
       const root = targetRef.current;
       if (!root) return;
+      setActionLabel('Text colour');
       root.querySelectorAll('font[color="#010203"]').forEach(node => { node.replaceWith(...node.childNodes); });
       root.querySelectorAll('[style*="rgb(1, 2, 3)"]').forEach(node => { node.style.removeProperty('color'); if (!node.getAttribute('style')) node.removeAttribute('style'); });
       if (targetRef === pillBoxRef) pillSyncRef.current?.();
@@ -1607,6 +1613,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
 
   const applyFormat = (type, targetRef, value = null) => {
     if (targetRef.current) {
+        setActionLabel(FORMAT_LABELS[type] || 'Formatting');
         const selectedCells = getSelectedCells(targetRef.current);
         if (selectedCells.length) { // a block of table cells is selected: format every cell, like Word
           targetRef.current.focus();
@@ -1821,6 +1828,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
       selection.addRange(range);
     }
   
+    setActionLabel('Cloze');
     const selectedText = selection.toString().trim();
     const placeholderText = selectedText || 'text';
     const isPlaceholder = !selectedText;
@@ -1967,6 +1975,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
       } else restoreSavedSelection(targetRef);
     }
     const html = snippet.text ? `${snippet.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}&nbsp;` : `<img src="${snippet.image}" alt="PDF capture" style="max-width: min(100%, 480px); height:auto; border-radius:6px;">&nbsp;`;
+    setActionLabel(snippet.text ? 'PDF text' : 'PDF capture');
     document.execCommand('insertHTML', false, html);
     if (targetRef === frontRef) syncFrontContent(targetRef.current.innerHTML);
     else syncBackContent(targetRef.current.innerHTML);
@@ -2196,6 +2205,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
 
   // Wraps the selection in MathJax / LaTeX delimiters (Anki's fx menu).
   const insertMath = (kind, targetRef = toolbarTargetRef, live = false) => {
+    setActionLabel('Math');
     const [before, after] = MATH_WRAPPERS[kind];
     if (!live) restoreSavedSelection(targetRef);
     targetRef.current?.focus();
@@ -2241,6 +2251,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
   };
 
   const insertTable = (rows, cols, targetRef = toolbarTargetRef) => {
+    setActionLabel('Table');
     const editor = targetRef.current;
     if (!editor) return;
     restoreSavedSelection(targetRef);
@@ -2251,6 +2262,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
   };
 
   const runTableAction = (action, targetRef = toolbarTargetRef) => {
+    setActionLabel('Table');
     restoreSavedSelection(targetRef);
     if (tableAction(targetRef.current, action)) syncAfterEdit(targetRef);
   };
