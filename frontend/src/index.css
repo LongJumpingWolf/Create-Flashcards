@@ -1649,3 +1649,9 @@ body { background:#202124; }
 .wc-auto, .wc-more { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 4px; border: 0; border-radius: 4px; background: transparent; color: inherit; font-size: 12.5px; cursor: pointer; text-align: left; } .wc-auto:hover, .wc-more:hover { background: rgba(128,128,128,.2); }
 .wc-auto-chip { width: 16px; height: 16px; border: 1px solid rgba(128,128,128,.6); border-radius: 2px; } .wc-more { margin-top: 8px; border-top: 1px solid rgba(128,128,128,.3); padding-top: 8px; }
 .wc-more-chip { width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); }
+
+/* Table cells selected like in Word: a blue block over the cells, no ragged text stripes */
+.cell-sel-box { z-index: 40; pointer-events: none; background: rgba(59,130,246,.28); outline: 1px solid rgba(59,130,246,.9); outline-offset: -1px; }
+table.cell-selecting, table.cell-selecting * { user-select: none !important; }
+/* editing only: a little room inside table cells so a selected block of cells does not hug the text */
+.pill-field-box .gpt th, .pill-field-box .gpt td { padding-left: 8px !important; }

@@ -20,6 +20,7 @@ const repairPills = (pills) => {
   return normalizePills(pills).map((html, index) => (formats[index] === 'plain' ? html : repairOldChatGptPaste(html)));
 };
 import { hasSavedPdf } from '../pdfResumeStorage';
+import { getSelectedCells, installTableSelection } from '../tableSelect';
 import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView, TableGridPicker, WordColorTool } from './editorTools';
 import { smartTyping, smartEnter, listTab, markdownToHtml, looksLikeMarkdown, isPlainHtml, tidyHtml, SMART_DEFAULTS } from './smartTyping';
 import { MATH_WRAPPERS, wrapSelection, audioHtml, fileToDataUrl, useAudioRecorder, MAX_AUDIO_BYTES, sanitizePastedHtml, plainTextToHtml, duplicateKey, buildTableHtml, findCell, tableAction, tableTab, placeCaretInCell, clozeNumbers } from './editorHelpers';
@@ -1106,6 +1107,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     return () => window.removeEventListener('keydown', onEscape);
   }, [occlusionEditorOpen, showPreview, showLinkModal, showColorPicker]);
 
+  useEffect(() => installTableSelection(), []); // Word-style selection of a block of table cells
   useEffect(() => installImageDrop(), []); // pictures dropped into any other field (pills, extra...) without the links that come with them
 
   useEffect(() => { setHtmlOpen({ front: false, back: false }); }, [editingIndex, cardType]);
@@ -1598,8 +1600,15 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
 
   const applyFormat = (type, targetRef, value = null) => {
     if (targetRef.current) {
-        restoreSavedSelection(targetRef);
-        document.execCommand(type, false, value);
+        const selectedCells = getSelectedCells(targetRef.current);
+        if (selectedCells.length) { // a block of table cells is selected: format every cell, like Word
+          targetRef.current.focus();
+          const selection = window.getSelection();
+          selectedCells.forEach(cell => { const range = document.createRange(); range.selectNodeContents(cell); selection.removeAllRanges(); selection.addRange(range); document.execCommand(type, false, value); });
+        } else {
+          restoreSavedSelection(targetRef);
+          document.execCommand(type, false, value);
+        }
 
         setTimeout(() => {
             if (targetRef === frontRef) {
