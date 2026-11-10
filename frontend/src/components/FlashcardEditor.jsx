@@ -1931,10 +1931,11 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     const pillMatch = /^pill([1-8])$/.exec(target);
     if (pillMatch) { // a PDF capture sent to a pill
       const n = Number(pillMatch[1]) - 1;
-      const picture = `<img src="${snippet.image}" alt="PDF capture" style="max-width:100%;height:auto;">`;
+      const escapeText = (value) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const picture = snippet.text ? `<p>${escapeText(snippet.text)}</p>` : `<img src="${snippet.image}" alt="PDF capture" style="max-width:100%;height:auto;">`;
       setPills(prev => prev.map((html, i) => (i === n ? `${html || ''}${picture}` : html)));
       setPillsResetKey(key => key + 1);
-      setFormMessage(`Capture added to the “${loadSettings().pills[n]?.label || `Pill ${n + 1}`}” pill.`);
+      setFormMessage(`${snippet.text ? 'Text' : 'Capture'} added to the “${loadSettings().pills[n]?.label || `Pill ${n + 1}`}” pill.`);
       window.setTimeout(() => setFormMessage(''), 2500);
       return;
     }
@@ -1965,7 +1966,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
         const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); savedRangeRef.current = range.cloneRange();
       } else restoreSavedSelection(targetRef);
     }
-    const html = `<img src="${snippet.image}" alt="PDF capture" style="max-width: min(100%, 480px); height:auto; border-radius:6px;">&nbsp;`;
+    const html = snippet.text ? `${snippet.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}&nbsp;` : `<img src="${snippet.image}" alt="PDF capture" style="max-width: min(100%, 480px); height:auto; border-radius:6px;">&nbsp;`;
     document.execCommand('insertHTML', false, html);
     if (targetRef === frontRef) syncFrontContent(targetRef.current.innerHTML);
     else syncBackContent(targetRef.current.innerHTML);

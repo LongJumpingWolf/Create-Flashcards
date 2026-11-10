@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as pdfjs from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { BookOpen, ChevronLeft, ChevronRight, Crop, FileText, Minus, PlusCircle, XCircle } from './Icons';
@@ -80,6 +81,14 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
   const [pendingSnip, setPendingSnip] = useState(null);
   const [targetPromptSnip, setTargetPromptSnip] = useState(null);
   // The captures live in a slim side bar over the page (it no longer takes height away from the PDF).
+  // Select text: a real text layer over the page (when the PDF has text) with a bar to send the selection to a field or pill.
+  const [selectText, setSelectText] = useState(false);
+  const selectTextRef = useRef(false);
+  selectTextRef.current = selectText;
+  const [textSel, setTextSel] = useState(null);
+  const [noText, setNoText] = useState(false);
+  const [renderTick, setRenderTick] = useState(0);
+  const textLayerRef = useRef(null);
   const [sideOpen, setSideOpen] = useState(() => { try { return localStorage.getItem('beerus-snip-side') !== '0'; } catch { return true; } });
   useEffect(() => { try { localStorage.setItem('beerus-snip-side', sideOpen ? '1' : '0'); } catch { /* ignore */ } }, [sideOpen]);
   const [sidePulse, setSidePulse] = useState(false);
@@ -302,6 +311,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
         canvas.style.height = `${viewport.height}px`;
         canvas.getContext('2d', { alpha: false }).drawImage(buffer, 0, 0);
         displayedPageRef.current = { pageNumber, viewport };
+        setRenderTick(tick => tick + 1);
         // Swap the bitmap and the view in the same frame so the page never jumps.
         // The live pinch scale (relative to the old bitmap) folds into the new one.
         const previousZoom = renderedZoomRef.current;
@@ -412,7 +422,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
         };
         return;
       }
-      if (event.touches.length === 1 && !snipping) beginPan(event.touches[0]);
+      if (event.touches.length === 1 && !snipping && !selectTextRef.current) beginPan(event.touches[0]);
     };
 
     const onTouchMove = (event) => {
@@ -453,7 +463,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
       if (pinch && event.touches.length < 2) {
         pinch = null;
         commitZoom();
-        if (event.touches.length === 1 && !snipping) beginPan(event.touches[0]);
+        if (event.touches.length === 1 && !snipping && !selectTextRef.current) beginPan(event.touches[0]);
         return;
       }
       if (pan && event.touches.length === 0) {
@@ -516,7 +526,7 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
     };
 
     const onPointerDown = (event) => {
-      if (snipping || event.pointerType === 'touch' || event.button !== 0) return;
+      if (snipping || selectTextRef.current || event.pointerType === 'touch' || event.button !== 0) return;
       stopInertia();
       // Double-click toggles fit-width and 2x around the cursor. Detected from
       // pointer timing because pointer capture can swallow native dblclick events.
@@ -625,6 +635,8 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
   useEffect(() => {
     const onKeyDown = (event) => {
       if (event.key === 'Escape' && snipping) { setSnipping(false); setSelection(null); return; }
+      if (event.key === 'Escape' && selectTextRef.current) { window.getSelection()?.removeAllRanges(); setSelectText(false); return; }
+      if (!event.repeat && event.key.toLowerCase() === 't' && !event.ctrlKey && !event.metaKey && !event.altKey && pdfDoc && pdfInteractionActiveRef.current && !event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) { event.preventDefault(); setSelectText(value => !value); return; }
       if (event.repeat || event.key.toLowerCase() !== 's' || event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target;
       if (!pdfDoc || !pdfInteractionActiveRef.current || target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
@@ -639,6 +651,64 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [pdfDoc, snipping]);
+
+  useEffect(() => { if (snipping) setSelectText(false); }, [snipping]);
+
+  // Build the text layer for the page that is on screen (only while Select text is on).
+  useEffect(() => {
+    const container = textLayerRef.current;
+    if (!container) return undefined;
+    container.replaceChildren();
+    const shown = displayedPageRef.current;
+    if (!selectText || !pdfDoc || !shown || shown.pageNumber !== pageNumber) return undefined;
+    let canceled = false;
+    let layer = null;
+    (async () => {
+      const page = await pdfDoc.getPage(pageNumber);
+      if (canceled) return;
+      container.style.width = `${shown.viewport.width}px`;
+      container.style.height = `${shown.viewport.height}px`;
+      container.style.setProperty('--total-scale-factor', String(shown.viewport.scale));
+      layer = new pdfjs.TextLayer({ textContentSource: page.streamTextContent(), container, viewport: shown.viewport });
+      await layer.render();
+      if (!canceled) setNoText(container.querySelectorAll('span').length === 0);
+    })().catch(() => {});
+    return () => { canceled = true; layer?.cancel(); };
+  }, [selectText, pdfDoc, pageNumber, renderTick]);
+
+  // Show the "send to…" bar next to a text selection made in the text layer.
+  useEffect(() => {
+    if (!selectText) { setTextSel(null); return undefined; }
+    const tidy = (raw) => raw.replace(/\u00ad/g, '').replace(/([a-z])-\s*\n\s*([a-z])/g, '$1$2').replace(/\s*\n\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    const read = () => {
+      const selected = window.getSelection();
+      const layer = textLayerRef.current;
+      if (!layer || !selected || selected.isCollapsed || !selected.rangeCount || !layer.contains(selected.anchorNode)) { setTextSel(null); return; }
+      const text = tidy(selected.toString());
+      if (!text) { setTextSel(null); return; }
+      const rect = selected.getRangeAt(0).getBoundingClientRect();
+      setTextSel({ text, x: rect.left + rect.width / 2, top: rect.top, bottom: rect.bottom });
+    };
+    const onUp = () => window.setTimeout(read, 0);
+    const onChange = () => { const selected = window.getSelection(); if (!selected || selected.isCollapsed) setTextSel(null); };
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('keyup', onUp);
+    document.addEventListener('selectionchange', onChange);
+    return () => { document.removeEventListener('mouseup', onUp); document.removeEventListener('keyup', onUp); document.removeEventListener('selectionchange', onChange); };
+  }, [selectText]);
+
+  const sendSelectedText = (target) => {
+    if (!textSel?.text) return;
+    onInsertSnippet({ id: `text-${Date.now()}`, text: textSel.text, name: 'PDF text', masks: [] }, target);
+    window.getSelection()?.removeAllRanges();
+    setTextSel(null);
+  };
+  const copySelectedText = () => {
+    if (!textSel?.text) return;
+    navigator.clipboard?.writeText(textSel.text).catch(() => {});
+    window.getSelection()?.removeAllRanges();
+    setTextSel(null);
+  };
 
   const loadPdfFile = async (file, { restorePage = 1, restoreZoom = 1, fromRestore = false } = {}) => {
     if (!file) return;
@@ -948,14 +1018,16 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
         <div className="pdf-page-controls"><button className="pdf-icon-button" onClick={() => setPageNumber(page => Math.max(1, page - 1))} disabled={pageNumber <= 1 || captureLoading} title="Previous page"><ChevronLeft size={17} /></button><label><input aria-label="PDF page number" inputMode="numeric" value={pageDraft ?? pageNumber} disabled={captureLoading} onFocus={event => event.target.select()} onChange={event => setPageDraft(event.target.value.replace(/\D/g, '').slice(0, 5))} onBlur={commitPageDraft} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commitPageDraft(); event.currentTarget.blur(); } }} /> <span>/ {pdfDoc.numPages}</span></label><button className="pdf-icon-button" onClick={() => setPageNumber(page => Math.min(pdfDoc.numPages, page + 1))} disabled={pageNumber >= pdfDoc.numPages || captureLoading} title="Next page"><ChevronRight size={17} /></button></div>
         <div className="pdf-zoom-controls"><button className="pdf-icon-button" onClick={() => stepZoom(.8)} disabled={captureLoading} title="Zoom out (Ctrl −)"><Minus size={16} /></button><button className="pdf-zoom-readout" onClick={fitZoom} disabled={captureLoading} title="Fit width, then fit page (Ctrl 0) · double-click the page to zoom">{Math.round(zoom * 100)}%</button><button className="pdf-icon-button" onClick={() => stepZoom(1.25)} disabled={captureLoading} title="Zoom in (Ctrl +)"><PlusCircle size={16} /></button></div>
         <button className={`snip-toggle ${snipping ? 'snip-active' : ''}`} title="Snip: S · Snip for image occlusion: Shift+S" onClick={() => { captureIntentRef.current = 'normal'; setSnipIntent('normal'); setSnipping(value => !value); setSelection(null); setSnipStart(null); }} disabled={!pdfDoc || rendering || captureLoading}>{captureLoading ? 'Preparing capture…' : snipping ? snipIntent === 'occlusion' ? 'Select an occlusion image…' : 'Select a region…' : <><Crop size={15} /> Snip region</>}</button>
+        <button className={`snip-toggle ${selectText ? 'snip-active' : ''}`} title="Select text from the page and send it to a field (T)" aria-pressed={selectText} onClick={() => { setSnipping(false); setSelection(null); setSelectText(value => !value); }} disabled={!pdfDoc || captureLoading}><FileText size={15} /> {selectText ? 'Selecting text…' : 'Select text'}</button>
         {pillOptions.length > 0 && <label className="snip-quick" title="Where a snip goes right after you capture it"><span>After snip</span><select value={quickTarget} onChange={e => setQuickTarget(e.target.value)} aria-label="After snipping, send the capture to"><option value="ask">Ask me</option><option value="front">{fieldOptions[0]?.label || 'Front'}</option><option value="back">{fieldOptions[1]?.label || 'Back'}</option>{pillOptions.map(pill => <option key={pill.target} value={pill.target}>{pill.label} pill</option>)}</select></label>}
       </div>}
 
       {error && <div className="pdf-error" role="alert"><span>{error}</span><button onClick={() => setError('')}><XCircle size={15} /></button></div>}
       {loading && <div className="pdf-loading-progress" role="status"><span>Reading PDF ranges… {loadProgress}%</span><div><i style={{width:`${loadProgress}%`}} /></div><button onClick={cancelLoading}>Cancel</button></div>}
       {!pdfDoc ? <div className="pdf-empty-state"><div className="pdf-empty-icon"><FileText size={23} /></div><h3>{loading ? 'Opening your PDF…' : 'Bring your source into view'}</h3><p>Open a PDF and snip a diagram, definition, or worked example. Your document stays in this browser.</p><button onClick={() => fileInputRef.current?.click()} disabled={loading}>{loading ? 'Loading…' : 'Choose a PDF'} <ChevronRight size={15} /></button></div> : <>
-        <div className="pdf-view-wrap"><div ref={hostRef} className={`pdf-page-viewport ${snipping ? 'is-snipping' : ''}`} onPointerDown={onSnipPointerDown} onPointerMove={onSnipPointerMove} onPointerUp={onSnipPointerUp} onPointerCancel={onSnipPointerUp}>
-          <div ref={pagePositionRef} className="pdf-page-position"><div ref={pageStageRef} className="pdf-page-stage"><canvas ref={pageCanvasRef} aria-label={`PDF page ${pageNumber}`} />{(pageWidth < 80 || (rendering && displayedPageRef.current?.pageNumber !== pageNumber) || captureLoading) && <div className="pdf-page-rendering">{captureLoading ? 'Rendering high resolution capture…' : pageWidth < 80 ? 'Preparing page view…' : 'Rendering page…'}</div>}{selection && <div className="pdf-selection-box" style={{ left: selection.x, top: selection.y, width: selection.width, height: selection.height }} />}</div></div>
+        <div className="pdf-view-wrap"><div ref={hostRef} className={`pdf-page-viewport ${snipping ? 'is-snipping' : ''} ${selectText ? 'is-selecting-text' : ''}`} onPointerDown={onSnipPointerDown} onPointerMove={onSnipPointerMove} onPointerUp={onSnipPointerUp} onPointerCancel={onSnipPointerUp}>
+          <div ref={pagePositionRef} className="pdf-page-position"><div ref={pageStageRef} className="pdf-page-stage"><canvas ref={pageCanvasRef} aria-label={`PDF page ${pageNumber}`} />{selectText && <div ref={textLayerRef} className="pdf-text-layer" aria-label="Selectable page text" />}{(pageWidth < 80 || (rendering && displayedPageRef.current?.pageNumber !== pageNumber) || captureLoading) && <div className="pdf-page-rendering">{captureLoading ? 'Rendering high resolution capture…' : pageWidth < 80 ? 'Preparing page view…' : 'Rendering page…'}</div>}{selection && <div className="pdf-selection-box" style={{ left: selection.x, top: selection.y, width: selection.width, height: selection.height }} />}</div></div>
+          {selectText && !snipping && <div className="snip-instruction">{noText ? 'No selectable text on this page (it may be a scan). Use Snip region instead.' : 'Drag over the text to select it, then send it to a field'} <kbd>Esc</kbd> to stop</div>}
           {snipping && <div className="snip-instruction">{snipIntent === 'occlusion' ? 'Capture image for occlusion' : 'Drag to capture'} <kbd>Esc</kbd> to cancel</div>}
         </div>
         {snippets.length > 0 && <aside className={`snip-side${sideOpen ? ' open' : ''}${sidePulse ? ' pulse' : ''}`} aria-label="Captures"><button type="button" className="snip-side-toggle" onClick={() => setSideOpen(value => !value)} aria-expanded={sideOpen} title={sideOpen ? 'Collapse captures' : 'Show captures'}><b>{snippets.length}</b><span className="snip-side-title">Captures<small>Newest first · drag onto a field</small></span><i aria-hidden="true">{sideOpen ? '›' : '‹'}</i></button><div className="snip-tray-list">{snippets.map((snippet, index) => <article key={snippet.id} className="snip-tray-item" onClick={() => { if (!sideOpen) setSideOpen(true); }} draggable={nativeDragEnabled} onDragStart={event => onDragStart(event, snippet)} onPointerDown={event => onTouchSnippetPointerDown(event, snippet)}>
@@ -964,6 +1036,12 @@ export default function PdfStudyPanel({ onInsertSnippet, fieldOptions = [{ targe
           <div className="snip-tray-actions"><span className="snip-send-label">Send to</span><button onClick={() => onInsertSnippet(snippet, 'front')} title="Insert into front/text">Front</button><button onClick={() => onInsertSnippet(snippet, 'back')} title="Insert into back/extra">Back</button></div>{pillOptions.length > 0 && <div className="snip-tray-pills"><PillButtons variant="icon" onPick={target => onInsertSnippet(snippet, target)} /></div>}
         </article>)}</div></aside>}</div>
       </>}
+      {selectText && textSel && createPortal(
+        <div className="pdf-textsel-bar" role="toolbar" aria-label="Send the selected text" style={{ left: Math.max(8, Math.min(textSel.x - 150, window.innerWidth - 316)), top: textSel.top > 64 ? textSel.top - 52 : textSel.bottom + 8 }} onPointerDown={event => event.preventDefault()} onMouseDown={event => event.preventDefault()}>
+          <button type="button" onClick={copySelectedText}>Copy</button>
+          {fieldOptions.map(option => <button key={option.target} type="button" onClick={() => sendSelectedText(option.target)}>{option.label}</button>)}
+          {pillOptions.length > 0 && <PillButtons variant="icon" onPick={target => sendSelectedText(target)} />}
+        </div>, document.body)}
       {pendingSnip && <PdfAnnotationEditor snip={pendingSnip} initialTool={pendingSnip.intent === 'occlusion' ? 'mask-rect' : 'select'} onClose={() => setPendingSnip(null)} onSave={saveSnippet} />}
       {targetPromptSnip && <div className="snip-modal-backdrop snip-target-backdrop" style={INSERT_PROMPT_STYLE.backdrop} role="dialog" aria-modal="true" aria-label="Choose where to insert the capture"><section className="snip-target-dialog" style={INSERT_PROMPT_STYLE.panel}><header style={INSERT_PROMPT_STYLE.header}><div><span className="section-eyebrow" style={INSERT_PROMPT_STYLE.eyebrow}>CAPTURE READY · PAGE {targetPromptSnip.page}</span><h2 style={INSERT_PROMPT_STYLE.title}>Insert image into…</h2></div><button type="button" className="snip-close" style={INSERT_PROMPT_STYLE.close} aria-label="Cancel capture" onClick={() => { saveSnippet(targetPromptSnip); setTargetPromptSnip(null); }}><XCircle size={19} /></button></header><img style={INSERT_PROMPT_STYLE.image} src={targetPromptSnip.image} alt="Captured PDF region preview"/><p style={INSERT_PROMPT_STYLE.description}>Press 1 for Front, 3 for Back, 4–7 for a pill, or 2 to make an image occlusion card.</p><div className="snip-target-options" style={{ ...INSERT_PROMPT_STYLE.options, display: 'flex' }}>{fieldOptions[0] && <button style={{ ...INSERT_PROMPT_STYLE.option, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} type="button" onClick={() => insertCapturedSnippet(fieldOptions[0].target)}><kbd style={INSERT_PROMPT_STYLE.key}>1</kbd>{fieldOptions[0].label}</button>}{fieldOptions[0] && <button style={{ ...INSERT_PROMPT_STYLE.occlusion, display: 'flex', gap: 6, padding: '0 10px', width: 'auto' }} type="button" aria-label="Use as image occlusion and open editor" title="Use field 1 as the image occlusion source (2)" onClick={() => insertCapturedSnippet(fieldOptions[0].target, true)}><kbd style={INSERT_PROMPT_STYLE.key}>2</kbd><Crop size={18} /></button>}{fieldOptions[1] && <button style={{ ...INSERT_PROMPT_STYLE.option, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} type="button" onClick={() => insertCapturedSnippet(fieldOptions[1].target)}><kbd style={INSERT_PROMPT_STYLE.key}>3</kbd>{fieldOptions[1].label}</button>}</div>{pillOptions.length > 0 && <div className="snip-pill-row"><PillButtons showKeys onPick={target => insertCapturedSnippet(target)} /></div>}</section></div>}
     </section>

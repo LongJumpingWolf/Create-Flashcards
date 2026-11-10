@@ -1655,3 +1655,13 @@ body { background:#202124; }
 table.cell-selecting, table.cell-selecting * { user-select: none !important; }
 /* editing only: a little room inside table cells so a selected block of cells does not hug the text */
 .pill-field-box .gpt th, .pill-field-box .gpt td { padding-left: 8px !important; }
+
+/* Select text from the PDF: invisible text layer over the page + a "send to" bar */
+.pdf-page-viewport.is-selecting-text { cursor: text; touch-action: manipulation; }
+.pdf-text-layer { position: absolute; inset: 0; overflow: clip; line-height: 1; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; z-index: 3; user-select: text; -webkit-user-select: text; cursor: text; }
+.pdf-text-layer :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+.pdf-text-layer span.markedContent { top: 0; height: 0; }
+.pdf-text-layer ::selection { background: rgba(0, 90, 255, .32); color: transparent; }
+.pdf-textsel-bar { position: fixed; z-index: 3000; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid rgba(255,255,255,.16); border-radius: 12px; background: #2b2d31; box-shadow: 0 10px 30px rgba(0,0,0,.5); font-family: Arial, sans-serif; }
+.pdf-textsel-bar > button { padding: 5px 10px; border: 0; border-radius: 8px; background: rgba(255,255,255,.1); color: #e8eaed; font-size: 12.5px; font-weight: 650; cursor: pointer; }
+.pdf-textsel-bar > button:hover { background: rgba(255,255,255,.2); }
