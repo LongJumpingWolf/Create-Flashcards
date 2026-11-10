@@ -462,6 +462,9 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
   const [occlusionEditorOpen, setOcclusionEditorOpen] = useState(false);
   const [occlusionMasks, setOcclusionMasks] = useState([]);
   const [occlusionMode, setOcclusionMode] = useState('hide-all');
+  const [ioHeader, setIoHeader] = useState(''); // text written above the image on an occlusion card
+  const headerRef = useRef(null);
+  useEffect(() => { if (headerRef.current && headerRef.current.innerHTML !== ioHeader) headerRef.current.innerHTML = ioHeader; }, [ioHeader, cardType]);
   // AnKing-style "One by One": every cloze on a single card, revealed in number order.
   const [clozeSequential, setClozeSequential] = useState(() => { try { return localStorage.getItem('ankiClozeSequential') === '1'; } catch { return false; } });
   useEffect(() => { try { localStorage.setItem('ankiClozeSequential', clozeSequential ? '1' : '0'); } catch { /* storage unavailable */ } }, [clozeSequential]);
@@ -681,7 +684,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
           tags: currentTags,
           pills,
           ...(cardType === 'Cloze' ? { sequential: clozeSequential } : {}),
-          ...(cardType === 'Image Occlusion' ? { imageData: finalOcclusionImage, imageWidth: occlusionImageWidth, masks: occlusionMasks, occlusionMode, restoreType: card.restoreType || previousCardTypeRef.current } : {}),
+          ...(cardType === 'Image Occlusion' ? { header: normalizeHtml(ioHeader), headerHtml: true, imageData: finalOcclusionImage, imageWidth: occlusionImageWidth, masks: occlusionMasks, occlusionMode, restoreType: card.restoreType || previousCardTypeRef.current } : {}),
       } : card));
 
       const nextType = cardType === 'Image Occlusion' ? previousCardTypeRef.current : cardType;
@@ -731,14 +734,14 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
         setFormMessage('This card is set to Image Occlusion, but no hidden regions were made. Draw at least one mask or switch back to the previous card type.');
         return;
       }
-      const ioCard = { type: cardType, question: '', answer: finalBack, tags: currentTags, pills, created: new Date().toLocaleTimeString(), imageData: finalOcclusionImage, imageWidth: occlusionImageWidth, masks: occlusionMasks, occlusionMode, restoreType: previousCardTypeRef.current };
+      const ioCard = { type: cardType, question: '', answer: finalBack, header: normalizeHtml(ioHeader), headerHtml: true, tags: currentTags, pills, created: new Date().toLocaleTimeString(), imageData: finalOcclusionImage, imageWidth: occlusionImageWidth, masks: occlusionMasks, occlusionMode, restoreType: previousCardTypeRef.current };
       if (editingIndex !== null) return updateCard();
       setCards(prev => [ioCard, ...prev]);
       logAdded(1);
       window.clearTimeout(frontSaveTimerRef.current); window.clearTimeout(backSaveTimerRef.current);
       setFormMessage('');
       if (!fieldPrefs.pinned.back) { setBack(''); if (backRef.current) backRef.current.innerHTML = ''; }
-      setFront(''); setCurrentTags([]);
+      setFront(''); setCurrentTags([]); setIoHeader('');
       setPills(blankPills(fieldPrefs.pinned, pills)); setPillsResetKey(key => key + 1); setPillsCollapseKey(key => key + 1);
       setCardType(previousCardTypeRef.current);
       setOcclusionImage(null); setOcclusionMasks([]);
@@ -812,7 +815,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
         tags: c.tags,
         pills: repairPills(c.pills),
         ...(c.type === 'Cloze' ? { sequential: Boolean(c.sequential) } : {}),
-        ...(c.type === 'Image Occlusion' ? { image_data: c.imageData, image_width: c.imageWidth, masks: c.masks, occlusion_mode: c.occlusionMode, header: c.header || '' } : {}),
+        ...(c.type === 'Image Occlusion' ? { image_data: c.imageData, image_width: c.imageWidth, masks: c.masks, occlusion_mode: c.occlusionMode, header: c.header || '', header_html: Boolean(c.headerHtml) } : {}),
       }))
     };
 
@@ -912,7 +915,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
   const clearWorkingState = () => {
     setCardType('Basic'); previousCardTypeRef.current = 'Basic';
     setOcclusionImage(null); setOcclusionMasks([]);
-    setFront(''); setBack(''); setCurrentTags([]); setClozeNumber(1); setActiveClozeId(null); setEditingIndex(null);
+    setFront(''); setBack(''); setIoHeader(''); setCurrentTags([]); setClozeNumber(1); setActiveClozeId(null); setEditingIndex(null);
     setPills(blankPills()); setPillsResetKey(key => key + 1);
     if (frontRef.current) frontRef.current.innerHTML = '';
     if (backRef.current) backRef.current.innerHTML = '';
@@ -1026,6 +1029,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
       setOcclusionImageWidth(card.imageWidth || 720);
       setOcclusionMasks(card.masks || []);
       setOcclusionMode(card.occlusionMode || 'hide-all');
+      setIoHeader(card.headerHtml ? (card.header || '') : String(card.header || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
     } else {
       setOcclusionImage(null); setOcclusionMasks([]);
       if (card.type === 'Cloze') setClozeSequential(Boolean(card.sequential));
@@ -1153,7 +1157,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
         return;
       }
       const htmlField = active?.dataset?.htmlField;
-      const inPill = !htmlField && Boolean(active?.classList?.contains('pill-field-box'));
+      const inPill = !htmlField && Boolean(active?.classList?.contains('pill-field-box') || (headerRef.current && active === headerRef.current));
       const field = htmlField || (active === frontRef.current ? 'front' : active === backRef.current ? 'back' : inPill ? 'pill' : null);
       if (!field) return;
       if (inPill) pillBoxRef.current = active;
@@ -2201,7 +2205,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
   ), [visibleCards, cards.length]);
 
 
-  const toolbarTargetRef = activeEditor === 'pill' ? pillBoxRef : activeEditor === 'back' ? backRef : frontRef;
+  const toolbarTargetRef = activeEditor === 'pill' ? pillBoxRef : activeEditor === 'back' || cardType === 'Image Occlusion' ? backRef : frontRef;
 
   const oneByOneOcclusion = occlusionMode === 'sequential' || occlusionMode === 'random';
   const occlusionCardCount = oneByOneOcclusion ? 1 : new Set(occlusionMasks.map((mask, index) => mask.group || mask.id || `mask-${index + 1}`)).size;
@@ -2401,7 +2405,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
 
             {cardType === 'Cloze' && <label className="seq-toggle"><input type="checkbox" checked={clozeSequential} onChange={event => setClozeSequential(event.target.checked)} /><span><strong>Reveal one by one</strong><small>Puts every cloze on a single card and reveals them in number order: click a cloze or press N, and comma reveals all. Clozes sharing a number appear together.</small></span></label>}
 
-            {cardType !== 'Image Occlusion' && <div className="editor-toolbar" role="toolbar" aria-label="Card formatting" onPointerDown={(e) => e.preventDefault()}>
+            {<div className="editor-toolbar" role="toolbar" aria-label="Card formatting" onPointerDown={(e) => e.preventDefault()}>
               <div className="flex w-max min-w-full flex-nowrap items-center gap-1">
               <WordColorTool kind="text" onApply={(color) => applyFormat('foreColor', toolbarTargetRef, color)} onClear={() => clearTextColor(toolbarTargetRef)} />
               {cardType === 'Cloze' && <button onClick={() => { setColorPickerTarget('cloze'); setShowColorPicker(true); }} title="Cloze color (the colour of the hidden answer)" aria-label="Cloze color" className="mx-1 h-5 w-5 flex-none rounded-full border border-neutral-500" style={{ backgroundColor: clozeColor }} />}
@@ -2467,6 +2471,14 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
               </ToolbarMenu>
               </div>
             </div>}
+
+            {cardType === 'Image Occlusion' && <section className="space-y-2 mb-4">
+              <label className="field-label" htmlFor="io-header-text">Text above the image <small>(optional)</small></label>
+              <div id="io-header-text" ref={headerRef} contentEditable="true" role="textbox" aria-multiline="true" aria-label="Text shown above the occlusion image" data-placeholder="Add a title or a question shown above the image..." suppressContentEditableWarning
+                onFocus={(e) => { const node = e.currentTarget; pillBoxRef.current = node; pillSyncRef.current = () => setIoHeader(node.innerHTML); setActiveEditor('pill'); }}
+                onInput={(e) => setIoHeader(e.currentTarget.innerHTML)}
+                className={`${baseInputStyle} min-h-[64px] p-3 editable-content inline-block min-w-full align-top focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20`} style={{ whiteSpace: 'pre-wrap' }} />
+            </section>}
 
             {cardType === 'Image Occlusion' && <section className="io-source-card" data-editor-drop-target="front" tabIndex={0} aria-label="Image occlusion source image. Focus here and paste an image, or choose one." onPaste={pasteImageIntoOcclusion} onDragOver={e => e.preventDefault()} onDrop={e => handleSnippetDrop(e, 'front')}>
               <div className="io-source-heading"><div><span className="section-eyebrow">IMAGE OCCLUSION</span><h3>Choose an image, then add masks</h3></div><div className="io-source-actions">{occlusionImage && <><div className="io-region-count"><strong>{occlusionMasks.length}</strong><span>regions</span></div><button className="quiet-button" type="button" onClick={() => setOcclusionEditorOpen(true)}>Open editor</button></>}<button className="quiet-button" type="button" onClick={() => openImagePicker(frontRef)}><Upload size={16} /> Choose image</button></div></div>

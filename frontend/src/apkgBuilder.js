@@ -349,9 +349,11 @@ export function clozeToSequentialHtml(html) {
 }
 
 const escHeader = (text) => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-function ioHeader(cardHeader, group = []) {
+function ioHeader(cardHeader, group = [], rawHeader = null) {
   const hint = group.find(mask => mask.hint)?.hint;
-  return [cardHeader, hint].filter(part => part && String(part).trim()).map(part => escHeader(String(part).trim())).join('<br>');
+  const parts = [rawHeader === null ? cardHeader : null, hint].filter(part => part && String(part).trim()).map(part => escHeader(String(part).trim()));
+  if (rawHeader !== null && String(rawHeader).trim()) parts.unshift(rawHeader); // written in the editor: already HTML
+  return parts.join('<br>');
 }
 
 function normalizeMasks(masks) {
@@ -456,13 +458,14 @@ async function planNotes(payload, { prepareImage, warn, onProgress, models, fetc
       if (image.width * image.height > 40_000_000) throw new CardError('Image Occlusion source image is too large');
 
       const { groups } = normalizeMasks(card.masks);
+      const rawHeader = card.header_html ? await extractMedia(newlinesToBreaks(card.header || ''), ctx) : null;
       const oneByOne = card.occlusion_mode === 'sequential' || card.occlusion_mode === 'random';
       if (oneByOne) {
         const widthSetting = Number.isFinite(card.image_width) ? Math.min(1800, Math.max(180, Math.round(card.image_width))) : 720;
         const answerHtml = await extractMedia(card.answer || '', ctx);
         notes.push({
           model: card.occlusion_mode === 'random' ? models.ioRandom : models.ioSeq,
-          fields: [ioHeader(card.header), `<img src="${imageName}" style="width:${widthSetting}px;max-width:100%;height:auto">`, sequentialMasksSvg(image.width, image.height, groups), answerHtml, card.occlusion_mode, ...pills],
+          fields: [ioHeader(card.header, [], rawHeader), `<img src="${imageName}" style="width:${widthSetting}px;max-width:100%;height:auto">`, sequentialMasksSvg(image.width, image.height, groups), answerHtml, card.occlusion_mode, ...pills],
           tags,
           cards: [0],
         });
@@ -483,7 +486,7 @@ async function planNotes(payload, { prepareImage, warn, onProgress, models, fetc
         notes.push({
           model: models.io,
           fields: [
-            noteId, ioHeader(card.header, groups[targetIndex]),
+            noteId, ioHeader(card.header, groups[targetIndex], rawHeader),
             `<img src="${imageName}" style="width:${imageWidth}px;max-width:100%;height:auto">`,
             `<img src="${questionMaskName}" ${maskStyle}>`,
             '', '', '',
