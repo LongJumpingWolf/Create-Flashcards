@@ -84,6 +84,18 @@ export default function PillFields({ values, onChange, resetKey, collapseKey = 0
   const [draft, setDraft] = useState('');
   const [note, setNote] = useState({}); // per pill: what the last paste did
   const lastPaste = useRef({});
+  const lastPasteAny = useRef(null); // the raw clipboard of the latest paste, so it can be saved for debugging
+  const saveClipboardDebug = () => {
+    const last = lastPasteAny.current;
+    if (!last) return;
+    const body = last.html || `<pre>${String(last.text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre>`;
+    const blob = new Blob([`<!-- clipboard text/html saved by Anki Studio; browser: ${navigator.userAgent} -->
+${body}`], { type: 'text/html' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob); link.download = 'clipboard-debug.html';
+    document.body.appendChild(link); link.click(); link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+  };
   const [settings, setSettings] = useState(() => loadSettings());
   useEffect(() => { setSettings(loadSettings()); }, [open, resetKey]); // pick up changes made on the Settings page
   const css = useMemo(() => {
@@ -313,6 +325,7 @@ export default function PillFields({ values, onChange, resetKey, collapseKey = 0
     }
     event.preventDefault();
     lastPaste.current[index] = { html, text, before: read(index) };
+    lastPasteAny.current = { html, text };
     const gpt = chatgptFromClipboard({ html, text }, settings.pills[index].format);
     document.execCommand('insertHTML', false, gpt || (html ? sanitizePastedHtml(html) : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')));
     set(index, read(index));
@@ -366,7 +379,7 @@ export default function PillFields({ values, onChange, resetKey, collapseKey = 0
                 </div>
                 {note[index] && (
                   <div className={`pill-note pill-note-${note[index]}`} role="status">
-                    {note[index] === 'converted' && 'Converted to the ChatGPT look.'}
+                    {note[index] === 'converted' && <>Converted to the ChatGPT look. <button type="button" onClick={saveClipboardDebug} title="Downloads what was on the clipboard, so a paste that came out wrong can be investigated">Save what I pasted (debug)</button></>}
                     {note[index] === 'plain' && <>Kept as plain formatting. <button type="button" onClick={() => convertLast(index)}>Convert to ChatGPT look</button></>}
                     {note[index] === 'blocked' && 'The browser did not allow reading the clipboard. Allow it in the address bar, or paste with Ctrl+V.'}
                     {note[index] === 'empty' && 'Nothing to paste: the clipboard is empty.'}

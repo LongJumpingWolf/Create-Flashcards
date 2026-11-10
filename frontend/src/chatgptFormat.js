@@ -169,10 +169,30 @@ export function chatgptHtmlToGpt(html) {
   const isIcon = (n) => n && n.nodeType === Node.ELEMENT_NODE && (n.tagName.toLowerCase() === 'svg' || comp(n) === 'icon') && !n.textContent.trim();
   const isArrowIcon = (n) => isIcon(n) && DOWN_ARROW.test([...n.querySelectorAll('path')].map(path => path.getAttribute('d') || '').join(' '));
   const hasText = (n) => n && n.nodeType === Node.ELEMENT_NODE && !isIcon(n) && n.textContent.trim() !== '' && n.textContent.trim().length <= 160 && !/^(UL|OL|TABLE|PRE|BLOCKQUOTE)$/.test(n.tagName) && !n.querySelector('ul, ol, table, pre, blockquote');
+  // A line that is bold from start to end ("Chronic inflammation"), as ChatGPT writes the steps of a flow.
+  const isBoldLine = (n) => {
+    if (!n || n.nodeType !== Node.ELEMENT_NODE || n.tagName !== 'P') return false;
+    const text = n.textContent.replace(/\s+/g, '');
+    if (!text || n.textContent.trim().length > 80) return false;
+    const bolds = [...n.querySelectorAll('b, strong, [data-d-default-strong]')].filter(el => !el.parentElement.closest('b, strong, [data-d-default-strong]') || !n.contains(el.parentElement.closest('b, strong, [data-d-default-strong]')));
+    return bolds.map(el => el.textContent.replace(/\s+/g, '')).join('') === text;
+  };
+  const isColoredTitle = (n) => n && n.nodeType === Node.ELEMENT_NODE && (/^H[1-4]$/.test(n.tagName) || comp(n) === 'title') && n.textContent.trim().length <= 80 && Boolean(inkColor(n) || [...n.querySelectorAll('[style*="--d-stream-ink"]')].some(inkColor) || colorClass(n));
   function blocks(nodes) {
     const list = nodes.filter(n => !(n.nodeType === Node.TEXT_NODE && !n.textContent.trim()));
     const out = [];
     for (let i = 0; i < list.length; i += 1) {
+      // Guard rails: three or more bold-only short lines in a row, with no text between them, are a flow whose arrows and box
+      // frame did not come along (the last step may be a coloured title).
+      if (isBoldLine(list[i]) && isBoldLine(list[i + 1]) && isBoldLine(list[i + 2])) {
+        let end = i + 2;
+        while (isBoldLine(list[end + 1])) end += 1;
+        if (isColoredTitle(list[end + 1])) end += 1;
+        const items = list.slice(i, end + 1).map(block);
+        out.push(`<div class="gpt-flow">${items.join('<p class="gpt-arrow">↓</p>').replace(/<(\/?)h3/g, '<$1h2')}</div>`);
+        i = end;
+        continue;
+      }
       if (hasText(list[i]) && isArrowIcon(list[i + 1]) && hasText(list[i + 2])) {
         const items = [block(list[i])];
         while (isArrowIcon(list[i + 1]) && hasText(list[i + 2])) { items.push('<p class="gpt-arrow">↓</p>', block(list[i + 2])); i += 2; }
