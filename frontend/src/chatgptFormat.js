@@ -87,7 +87,7 @@ export function chatgptHtmlToGpt(html) {
     if (!out.trim() && !/<br>/.test(out)) return out;
     const tone = colorClass(node);
     if (tone && !/^H[1-6]$/.test(node.tagName) && kind !== 'title') out = `<span class="${tone}">${out}</span>`;
-    const ink = inkColor(node);
+    const ink = node.closest('a, code, pre, [data-d-component="badge"], [data-d-component="pressable"]') ? '' : inkColor(node); // links, code and badges keep their own look
     if (ink) out = `<span style="color:${ink}">${out}</span>`;
     if (tag === 'sub' || tag === 'sup') out = `<${tag}>${out}</${tag}>`;
     if (bold) out = `<b>${out}</b>`;
@@ -150,15 +150,19 @@ export function chatgptHtmlToGpt(html) {
     const bordered = node.hasAttribute('data-d-has-border') || /border:/.test(node.getAttribute('style') || '');
     if (!bordered) return [...node.children].map(block).join('');
     const arrow = node.getAttribute('data-d-direction') === 'row' ? '→' : '↓';
-    const parts = [...node.children].map(child => (comp(child) === 'icon' || child.tagName.toLowerCase() === 'svg' ? `<p class="gpt-arrow">${arrow}</p>` : block(child))).join('');
+    const parts = [...node.children].map(child => (isIcon(child) ? (isArrowIcon(child) ? `<p class="gpt-arrow">${arrow}</p>` : '') : block(child))).join('');
     return parts ? `<div class="gpt-flow">${parts.replace(/<(\/?)h3/g, '<$1h2')}</div>` : '';
   };
 
   // A flow diagram whose box frame did not make it onto the clipboard (selecting only the lines inside the box): lines
   // separated by arrow icons. Chrome keeps the arrows as <svg data-d-component="icon">, so a text line, an icon and another text
   // line in a row is a flowchart.
-  const isArrowIcon = (n) => n && n.nodeType === Node.ELEMENT_NODE && (n.tagName.toLowerCase() === 'svg' || comp(n) === 'icon') && !n.textContent.trim();
-  const hasText = (n) => n && n.nodeType === Node.ELEMENT_NODE && !isArrowIcon(n) && n.textContent.trim() !== '';
+  // Guard rails: only ChatGPT's own down-arrow glyph counts as a flow arrow (other icons such as ticks, warnings or copy buttons never do),
+  // and a flow line is a short plain line, not a paragraph, list or table.
+  const DOWN_ARROW = /M12\.707 18\.707|v9\.586|L11 15\.586/;
+  const isIcon = (n) => n && n.nodeType === Node.ELEMENT_NODE && (n.tagName.toLowerCase() === 'svg' || comp(n) === 'icon') && !n.textContent.trim();
+  const isArrowIcon = (n) => isIcon(n) && DOWN_ARROW.test([...n.querySelectorAll('path')].map(path => path.getAttribute('d') || '').join(' '));
+  const hasText = (n) => n && n.nodeType === Node.ELEMENT_NODE && !isIcon(n) && n.textContent.trim() !== '' && n.textContent.trim().length <= 160 && !/^(UL|OL|TABLE|PRE|BLOCKQUOTE)$/.test(n.tagName) && !n.querySelector('ul, ol, table, pre, blockquote');
   function blocks(nodes) {
     const list = nodes.filter(n => !(n.nodeType === Node.TEXT_NODE && !n.textContent.trim()));
     const out = [];
