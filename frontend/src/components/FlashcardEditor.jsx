@@ -427,6 +427,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
   const [cardType, setCardType] = useState("Basic");
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
+  const [pillsCollapseKey, setPillsCollapseKey] = useState(0); // bumped when a card is added: the Pills section folds back to its round buttons
   const [pills, setPills] = useState(["", "", "", ""]);
   const [pillsResetKey, setPillsResetKey] = useState(0);
   const [tagInput, setTagInput] = useState("");
@@ -738,7 +739,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
       setFormMessage('');
       if (!fieldPrefs.pinned.back) { setBack(''); if (backRef.current) backRef.current.innerHTML = ''; }
       setFront(''); setCurrentTags([]);
-      setPills(blankPills(fieldPrefs.pinned, pills)); setPillsResetKey(key => key + 1);
+      setPills(blankPills(fieldPrefs.pinned, pills)); setPillsResetKey(key => key + 1); setPillsCollapseKey(key => key + 1);
       setCardType(previousCardTypeRef.current);
       setOcclusionImage(null); setOcclusionMasks([]);
       if (frontRef.current) frontRef.current.innerHTML = '';
@@ -785,7 +786,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     if (!fieldPrefs.pinned.front) { setFront(""); if (frontRef.current) frontRef.current.innerHTML = ''; }
     if (!fieldPrefs.pinned.back) { setBack(""); if (backRef.current) backRef.current.innerHTML = ''; }
     setCurrentTags([]);
-    setPills(blankPills(fieldPrefs.pinned, pills)); setPillsResetKey(key => key + 1);
+    setPills(blankPills(fieldPrefs.pinned, pills)); setPillsResetKey(key => key + 1); setPillsCollapseKey(key => key + 1);
     setClozeNumber(1);
     setActiveClozeId(null);
 
@@ -2532,7 +2533,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
               {htmlOpen.back && !fieldPrefs.collapsed.back && <HtmlView field="back" label="Back HTML" value={htmlDraft.back} onChange={(value) => changeHtmlView('back', value)} />}
             </section>
 
-            <PillFields values={pills} onChange={setPills} resetKey={pillsResetKey} pinned={fieldPrefs.pinned} onTogglePin={(i) => toggleFieldPref('pinned', `pill${i + 1}`)} onFocusBox={(node, sync) => { pillBoxRef.current = node; pillSyncRef.current = sync; setActiveEditor('pill'); }} onSaveRange={(range) => { savedRangeRef.current = range; }} />
+            <PillFields values={pills} onChange={setPills} resetKey={pillsResetKey} collapseKey={pillsCollapseKey} pinned={fieldPrefs.pinned} onTogglePin={(i) => toggleFieldPref('pinned', `pill${i + 1}`)} onFocusBox={(node, sync) => { pillBoxRef.current = node; pillSyncRef.current = sync; setActiveEditor('pill'); }} onSaveRange={(range) => { savedRangeRef.current = range; }} />
 
             <section className="space-y-2 mb-6 relative">
                 <label className="text-sm font-medium flex items-center justify-between">

@@ -72,7 +72,7 @@ export function PreviewPills({ pills, night }) {
  * Paste a screenshot, drop an image, add an image link, or paste a ChatGPT answer (formatting is kept).
  * `values` is the array of 4 HTML strings; `resetKey` changes whenever a different card is loaded.
  */
-export default function PillFields({ values, onChange, resetKey, pinned = {}, onTogglePin, onFocusBox, onSaveRange }) {
+export default function PillFields({ values, onChange, resetKey, collapseKey = 0, pinned = {}, onTogglePin, onFocusBox, onSaveRange }) {
   const refs = useRef([]);
   const valuesRef = useRef(values);
   valuesRef.current = values;
@@ -132,6 +132,7 @@ export default function PillFields({ values, onChange, resetKey, pinned = {}, on
     }, 60);
     return () => window.clearTimeout(timer);
   }, [focusIndex, open]);
+  useEffect(() => { if (collapseKey) { setOpen(false); setFocusIndex(null); } }, [collapseKey]);
   const editPill = (index) => { setOpen(true); setFocusIndex(index); };
   const addPill = () => {
     const next = addPillToSettings();
