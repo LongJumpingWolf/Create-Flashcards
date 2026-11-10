@@ -736,3 +736,25 @@ export function previewDocument(model, fields, { side, night, mobile, mediaUrls 
 }
 
 export { IOE_FIELDS };
+
+/**
+ * Line breaks typed into a field must survive on the card. A raw "\n" in a field (JSON import, ChatGPT text, older cards)
+ * is collapsed to a space by HTML, so turn each one into <br>. Newlines next to block tags / existing <br> are just
+ * source formatting and are dropped; tags are never touched.
+ */
+export function newlinesToBreaks(html) {
+  const text = String(html ?? '');
+  if (!/\n/.test(text)) return text;
+  const blockish = /^<(\/?(div|p|ul|ol|li|table|tbody|thead|tr|td|th|h[1-6]|blockquote|pre|hr)\b[^>]*|br\s*\/?)>$/i;
+  const parts = text.split(/(<[^>]*>)/);
+  return parts.map((part, index) => {
+    if (index % 2 === 1) return part;
+    const before = parts[index - 1] || '';
+    const after = parts[index + 1] || '';
+    return part.replace(/[ \t]*\r?\n[ \t]*/g, (match, at) => {
+      const first = at === 0 && (!before || blockish.test(before));
+      const last = at + match.length === part.length && (!after || blockish.test(after));
+      return first || last ? '' : '<br>';
+    });
+  }).join('');
+}

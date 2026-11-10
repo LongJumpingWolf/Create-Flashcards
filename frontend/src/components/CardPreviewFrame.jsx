@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildModels, loadSettings, normalizePills, previewDocument, themeMedia } from '../beerus';
+import { buildModels, loadSettings, newlinesToBreaks, normalizePills, previewDocument, themeMedia } from '../beerus';
 import { clozeToSequentialHtml } from '../apkgBuilder';
 
 const DEVICES = { phone: { label: 'Phone', width: 390 }, tablet: { label: 'Tablet', width: 640 }, desktop: { label: 'Desktop', width: 860 } };
@@ -22,11 +22,11 @@ export default function CardPreviewFrame({ type, front, back, pills, sequential,
     let key = 'basic';
     if (type === 'Cloze') {
       key = sequential ? 'clozeSeq' : 'cloze';
-      fields.Text = sequential ? clozeToSequentialHtml(front || '').html : (front || '');
-      fields.Extra = back || '';
+      fields.Text = sequential ? clozeToSequentialHtml(newlinesToBreaks(front || '')).html : newlinesToBreaks(front || '');
+      fields.Extra = newlinesToBreaks(back || '');
     } else {
-      fields.Question = front || '';
-      fields.Answer = back || '';
+      fields.Question = newlinesToBreaks(front || '');
+      fields.Answer = newlinesToBreaks(back || '');
     }
     const mediaUrls = Object.fromEntries(themeMedia(settings).map(file => [file.name, file.dataUrl]));
     return previewDocument(models[key], fields, { side, night, mobile: device === 'phone', mediaUrls, clozeOrd, reportHeight: true });

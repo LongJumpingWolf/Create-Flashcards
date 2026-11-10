@@ -6,7 +6,7 @@
 // which keeps this module testable in Node and byte-for-byte comparable with the
 // backend output.
 import { zipSync } from 'fflate';
-import { buildModels, normalizeSettings, normalizePills, themeMedia } from './beerus.js';
+import { buildModels, normalizeSettings, normalizePills, themeMedia, newlinesToBreaks } from './beerus.js';
 import { isProxyableImageUrl } from './imageHosts.js';
 
 // Problems with the user's card content (as opposed to browser/runtime failures).
@@ -500,8 +500,8 @@ async function planNotes(payload, { prepareImage, warn, onProgress, models, fetc
       }
     } else if (card.type === 'Basic' || card.type === 'Cloze') {
       if (!String(card.question || '').trim()) throw new CardError('Question cannot be empty');
-      const question = await extractMedia(card.question || '', ctx);
-      const answer = await extractMedia(card.answer || '', ctx);
+      const question = await extractMedia(newlinesToBreaks(card.question || ''), ctx);
+      const answer = await extractMedia(newlinesToBreaks(card.answer || ''), ctx);
       const isCloze = card.type === 'Cloze';
       if (isCloze && card.sequential) {
         const sequential = clozeToSequentialHtml(question);

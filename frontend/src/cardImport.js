@@ -2,7 +2,7 @@
 // Accepts raw JSON, JSON inside ``` fences (a whole chat reply works), an array of cards, or
 // { deck_name, cards: [...] }. Nothing is added to the deck until the user confirms.
 import { sanitizePastedHtml } from './components/editorHelpers';
-import { normalizePills } from './beerus';
+import { newlinesToBreaks, normalizePills } from './beerus';
 
 const TYPE_ALIASES = { cloze: 'Cloze', basic: 'Basic', 'image occlusion': 'Image Occlusion', io: 'Image Occlusion', occlusion: 'Image Occlusion' };
 const OCCLUSION_MODES = ['hide-all', 'hide-one', 'sequential', 'random'];
@@ -83,8 +83,8 @@ export function validateImportedCard(raw, index) {
   if (!raw || typeof raw !== 'object') return { problems: [`${label}: not an object`], warnings };
   const type = TYPE_ALIASES[String(raw.type || '').trim().toLowerCase()];
   if (!type) return { problems: [`${label}: unknown type "${raw.type}" (use Cloze, Basic or Image Occlusion)`], warnings };
-  const question = type === 'Image Occlusion' ? '' : sanitizePastedHtml(String(raw.question ?? ''));
-  const answer = sanitizePastedHtml(String(raw.answer ?? ''));
+  const question = type === 'Image Occlusion' ? '' : newlinesToBreaks(sanitizePastedHtml(String(raw.question ?? '')));
+  const answer = newlinesToBreaks(sanitizePastedHtml(String(raw.answer ?? '')));
   // Pills: "pills": [html, html, html, html] or { "1": html, ... } or pill_1 ... pill_4 keys.
   const pillSource = raw.pills ?? Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8].filter(n => raw[`pill_${n}`] != null).map(n => [n, raw[`pill_${n}`]]));
   const pills = normalizePills(pillSource).map(html => (html ? sanitizePastedHtml(html) : ''));
