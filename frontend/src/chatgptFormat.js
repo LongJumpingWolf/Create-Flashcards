@@ -50,6 +50,15 @@ export function isChatGptHtml(html) {
 
 // ChatGPT colours text with theme variables (danger = red, success = green ...); keep that meaning as a class the card CSS draws.
 const colorClass = (node) => { const m = /--color-text-(danger|success|warning|info)/.exec(node.getAttribute?.('style') || ''); return m ? `gpt-c-${m[1]}` : ''; };
+// Chrome writes the colour ChatGPT gave a run of text (e.g. a red conclusion) into the custom property --d-stream-ink; the normal
+// text ink is near-black, so any clearly coloured ink is kept as a real text colour.
+const inkColor = (node) => {
+  const m = /--d-stream-ink:\s*rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)/.exec(node.getAttribute?.('style') || '');
+  if (!m) return '';
+  const [r, g, b] = [m[1], m[2], m[3]].map(Number);
+  if (Math.max(r, g, b) - Math.min(r, g, b) < 40) return ''; // grey / black / white: default text
+  return `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+};
 const isDomainLike = (text) => /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(text.trim());
 
 export function chatgptHtmlToGpt(html) {
@@ -78,6 +87,8 @@ export function chatgptHtmlToGpt(html) {
     if (!out.trim() && !/<br>/.test(out)) return out;
     const tone = colorClass(node);
     if (tone && !/^H[1-6]$/.test(node.tagName) && kind !== 'title') out = `<span class="${tone}">${out}</span>`;
+    const ink = inkColor(node);
+    if (ink) out = `<span style="color:${ink}">${out}</span>`;
     if (tag === 'sub' || tag === 'sup') out = `<${tag}>${out}</${tag}>`;
     if (bold) out = `<b>${out}</b>`;
     if (italic) out = `<i>${out}</i>`;
@@ -143,6 +154,24 @@ export function chatgptHtmlToGpt(html) {
     return parts ? `<div class="gpt-flow">${parts.replace(/<(\/?)h3/g, '<$1h2')}</div>` : '';
   };
 
+  // A flow diagram whose box frame did not make it onto the clipboard (selecting only the lines inside the box): lines
+  // separated by arrow icons. Chrome keeps the arrows as <svg data-d-component="icon">, so a text line, an icon and another text
+  // line in a row is a flowchart.
+  const isArrowIcon = (n) => n && n.nodeType === Node.ELEMENT_NODE && (n.tagName.toLowerCase() === 'svg' || comp(n) === 'icon') && !n.textContent.trim();
+  const hasText = (n) => n && n.nodeType === Node.ELEMENT_NODE && !isArrowIcon(n) && n.textContent.trim() !== '';
+  function blocks(nodes) {
+    const list = nodes.filter(n => !(n.nodeType === Node.TEXT_NODE && !n.textContent.trim()));
+    const out = [];
+    for (let i = 0; i < list.length; i += 1) {
+      if (hasText(list[i]) && isArrowIcon(list[i + 1]) && hasText(list[i + 2])) {
+        const items = [block(list[i])];
+        while (isArrowIcon(list[i + 1]) && hasText(list[i + 2])) { items.push('<p class="gpt-arrow">↓</p>', block(list[i + 2])); i += 2; }
+        out.push(`<div class="gpt-flow">${items.join('').replace(/<(\/?)h3/g, '<$1h2')}</div>`);
+      } else out.push(block(list[i]));
+    }
+    return out.join('');
+  }
+
   function block(node) {
     if (node.nodeType === Node.TEXT_NODE) { const t = node.textContent.replace(/\s+/g, ' ').trim(); return t ? `<p>${esc(t)}</p>` : ''; }
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
@@ -163,7 +192,7 @@ export function chatgptHtmlToGpt(html) {
     if (kind === 'box') return flowBox(node);
     if (node.classList?.contains('gpt-flow')) return node.outerHTML; // an already converted diagram box
     // a "heading" that wraps whole sections (it happens on the clipboard) is just a container
-    if ((/^H[1-6]$/.test(tag) || kind === 'title') && (hasBlockChild(node) || node.textContent.trim().length > 220)) return [...node.childNodes].map(block).join('');
+    if ((/^H[1-6]$/.test(tag) || kind === 'title') && (hasBlockChild(node) || node.textContent.trim().length > 220)) return blocks([...node.childNodes]);
     if (/^H[1-6]$/.test(tag) || kind === 'title') {
       // ChatGPT's rich answers mark their title size (lg = 18px, md = 16px); in classic markdown h1-h3 are the section titles.
       const sized = node.getAttribute('data-d-size');
@@ -177,7 +206,7 @@ export function chatgptHtmlToGpt(html) {
       return items ? `<${tag.toLowerCase()}>${items}</${tag.toLowerCase()}>` : '';
     }
     if (tag === 'PRE') return `<pre><code>${esc(node.textContent.replace(/\n$/, ''))}</code></pre>`;
-    if (tag === 'BLOCKQUOTE') { const body = [...node.childNodes].map(block).join('').replace(/<\/?p>/g, ' ').trim(); return `<blockquote>${body}</blockquote>`; }
+    if (tag === 'BLOCKQUOTE') { const body = blocks([...node.childNodes]).replace(/<\/?p>/g, ' ').trim(); return `<blockquote>${body}</blockquote>`; }
     if (tag === 'HR') return '<hr>';
     if (tag === 'IMG') { const src = node.getAttribute('src') || ''; return /^(https?:|data:image\/)/i.test(src) ? `<img src="${src.replace(/"/g, '&quot;')}">` : ''; }
     // a short, large, bold line that is not marked up as a heading (classic ChatGPT section titles) is a title
@@ -189,16 +218,16 @@ export function chatgptHtmlToGpt(html) {
       const text = [...node.childNodes].map(inline).join('').trim();
       return text ? `<p>${text}</p>` : '';
     }
-    if (hasBlockChild(node) || ['DIV', 'SECTION', 'ARTICLE', 'BODY', 'SPAN'].includes(tag) === false) return [...node.childNodes].map(block).join('');
+    if (hasBlockChild(node) || ['DIV', 'SECTION', 'ARTICLE', 'BODY', 'SPAN'].includes(tag) === false) return blocks([...node.childNodes]);
     // a div/span that only holds inline content = one paragraph; mixed content is walked child by child
     if (!hasBlockChild(node)) {
       const text = [...node.childNodes].map(inline).join('').trim();
       return text ? `<p>${text}</p>` : '';
     }
-    return [...node.childNodes].map(block).join('');
+    return blocks([...node.childNodes]);
   }
 
-  const body = [...doc.body.childNodes].map(block).join('');
+  const body = blocks([...doc.body.childNodes]);
   let cleaned = body.replace(/<p>\s*<\/p>/g, '').replace(/(<br>)+<\/(p|li)>/g, '</$2>');
   if (!cleaned.trim()) {
     const plain = (doc.body.innerText || doc.body.textContent || '').split(/\n{1,}/).map(line => line.trim()).filter(Boolean);
