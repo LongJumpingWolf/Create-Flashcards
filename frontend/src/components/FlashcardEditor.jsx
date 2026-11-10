@@ -16,6 +16,24 @@ import { repairOldChatGptPaste } from '../chatgptFormat';
 // Empty pill list (one slot per pill); pinned pills keep their content after a card is added.
 const blankPills = (pinned = {}, keep = []) => Array.from({ length: Math.max(4, loadSettings().pills.length) }, (_, i) => (pinned[`pill${i + 1}`] ? (keep[i] ?? '') : ''));
 const FORMAT_LABELS = { bold: 'Bold', italic: 'Italic', underline: 'Underline', strikeThrough: 'Strikethrough', superscript: 'Superscript', subscript: 'Subscript', foreColor: 'Text colour', hiliteColor: 'Highlight', removeFormat: 'Clear formatting', insertUnorderedList: 'Bulleted list', insertOrderedList: 'Numbered list', indent: 'Indent', outdent: 'Outdent', justifyLeft: 'Align left', justifyCenter: 'Center', justifyRight: 'Align right', justifyFull: 'Justify' };
+// A highlight must stay readable: give highlighted text a dark or light colour that contrasts with the highlight
+// (unless you picked a text colour yourself); taking the highlight off takes that colour off again.
+const fixHighlightContrast = (root) => {
+  root.querySelectorAll('[style*="background"], [data-hc]').forEach(node => {
+    const bg = node.style.backgroundColor;
+    const clear = !bg || bg === 'transparent' || /^rgba\(\s*0,\s*0,\s*0,\s*0\s*\)$/.test(bg);
+    if (clear) {
+      if (node.dataset.hc) { node.style.removeProperty('color'); delete node.dataset.hc; if (!node.getAttribute('style')) node.removeAttribute('style'); }
+      return;
+    }
+    if (node.style.color && !node.dataset.hc) return;
+    const probe = document.createElement('span'); probe.style.color = bg; document.body.appendChild(probe);
+    const [r, g, b] = (getComputedStyle(probe).color.match(/\d+(\.\d+)?/g) || [255, 255, 0]).map(Number); probe.remove();
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    node.style.color = luminance > 0.55 ? '#1B1B1B' : '#FFFFFF';
+    node.dataset.hc = '1';
+  });
+};
 const repairPills = (pills) => {
   const formats = loadSettings().pills.map(pill => pill.format);
   return normalizePills(pills).map((html, index) => (formats[index] === 'plain' ? html : repairOldChatGptPaste(html)));
@@ -1619,9 +1637,11 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
           targetRef.current.focus();
           const selection = window.getSelection();
           selectedCells.forEach(cell => { const range = document.createRange(); range.selectNodeContents(cell); selection.removeAllRanges(); selection.addRange(range); document.execCommand(type, false, value); });
+          if (type === 'hiliteColor') fixHighlightContrast(targetRef.current);
         } else {
           restoreSavedSelection(targetRef);
           document.execCommand(type, false, value);
+          if (type === 'hiliteColor') fixHighlightContrast(targetRef.current);
         }
 
         setTimeout(() => {

@@ -316,6 +316,8 @@ b, u, i { color: inherit; }
 hr { opacity: .7; }
 img { max-width: ${a.imageMaxWidth}%; max-height: 100%; }
 #extra img { max-width: ${a.imageMaxWidth}%; min-width: 30%; }
+/* text you highlighted without a colour of its own stays readable on the highlight */
+.card span[style*="background-color"] { color: #1b1b1b; }
 ul, ol { display: inline-block; max-width: ${a.listMaxWidth}%; padding-left: 40px; margin: auto; text-align: left; }
 .mobile ul, .mobile ol, .mobile img { max-width: 100%; }
 .mnemonics { display: inline-block; text-align: left; }
