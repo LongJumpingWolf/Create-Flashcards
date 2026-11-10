@@ -3,6 +3,7 @@ import { MAX_PILLS, PILL_COUNT, addPillToSettings, removeLastPillFromSettings, g
 import { chatgptFromClipboard, chatgptForce, chatgptHtmlToGpt } from '../chatgptFormat';
 import { sanitizePastedHtml } from './editorHelpers';
 import { shrinkImageFile } from '../imageUtils';
+import { Pin } from './Icons';
 
 const readAsDataUrl = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
@@ -17,7 +18,9 @@ const EDITOR_PILL_STYLE = { '--ics': 1, '--gs': 0.7, fontSize: '12.5px' };
 // The editor's own stylesheet sets text colours on everything inside previews; keep the ChatGPT panel's text colour intact.
 const gptKeepText = (scope, settings) => {
   const color = settings.chatgpt.day.text;
-  return `${scope} .gpt, ${scope} .gpt *:not(.gpt-badge) { color: ${color} !important; } ${scope} .gpt ul { list-style: disc outside !important; } ${scope} .gpt ol { list-style: decimal outside !important; } ${scope} .gpt li { display: list-item !important; }`;
+  // Text you colour with the toolbar (inline colour) keeps its colour; everything else stays the panel's text colour.
+  const plain = ':not(.gpt-badge):not([color]):not([style*="color:"]):not([color] *):not([style*="color:"] *)';
+  return `${scope} .gpt, ${scope} .gpt *${plain} { color: ${color} !important; } ${scope} .gpt ul { list-style: disc outside !important; } ${scope} .gpt ol { list-style: decimal outside !important; } ${scope} .gpt li { display: list-item !important; }`;
 };
 const FORMAT_LABEL = { auto: 'Auto', chatgpt: 'ChatGPT look', plain: 'Plain' };
 
@@ -68,7 +71,7 @@ export function PreviewPills({ pills, night }) {
  * Paste a screenshot, drop an image, add an image link, or paste a ChatGPT answer (formatting is kept).
  * `values` is the array of 4 HTML strings; `resetKey` changes whenever a different card is loaded.
  */
-export default function PillFields({ values, onChange, resetKey }) {
+export default function PillFields({ values, onChange, resetKey, pinned = {}, onTogglePin, onFocusBox, onSaveRange }) {
   const refs = useRef([]);
   const valuesRef = useRef(values);
   valuesRef.current = values;
@@ -89,10 +92,11 @@ export default function PillFields({ values, onChange, resetKey }) {
   }, [settings]);
   const count = settings.pills.length;
   const pad = (list, size = count) => Array.from({ length: size }, (_, i) => list?.[i] ?? '');
+  const lastRange = useRef({}); // last cursor position inside each pill box (kept when the toolbar or a button takes focus)
 
   // Push external changes (loading / clearing a card) into the editable boxes without fighting the caret.
   useEffect(() => {
-    values.forEach((html, index) => {
+    pad(values).forEach((html, index) => {
       const node = refs.current[index];
       if (!node || pendingIndex.current.has(index)) return; // typing in progress: the box is newer than the saved value
       if (node.innerHTML !== html) node.innerHTML = html;
@@ -163,8 +167,7 @@ export default function PillFields({ values, onChange, resetKey }) {
     const out = last && chatgptForce(last);
     if (!out) return;
     const node = refs.current[index];
-    node.innerHTML = (last.before || '') + out;
-    set(index, node.innerHTML);
+    replaceHtml(index, (last.before || '') + out);
     setNote(prev => ({ ...prev, [index]: 'converted' }));
   };
 
@@ -173,8 +176,7 @@ export default function PillFields({ values, onChange, resetKey }) {
     const node = refs.current[index];
     const out = node && chatgptHtmlToGpt(node.innerHTML);
     if (!out) return;
-    node.innerHTML = out;
-    set(index, node.innerHTML);
+    replaceHtml(index, out);
     setNote(prev => ({ ...prev, [index]: 'converted' }));
   };
 
@@ -191,9 +193,7 @@ export default function PillFields({ values, onChange, resetKey }) {
       const out = chatgptForce({ html, text });
       if (!out) { setNote(prev => ({ ...prev, [index]: 'empty' })); return; }
       lastPaste.current[index] = { html, text, before: read(index) };
-      const node = refs.current[index];
-      node.insertAdjacentHTML('beforeend', out);
-      set(index, node.innerHTML);
+      insertHtml(index, out, true);
       setNote(prev => ({ ...prev, [index]: 'converted' }));
     } catch {
       setNote(prev => ({ ...prev, [index]: 'blocked' }));
@@ -204,12 +204,42 @@ export default function PillFields({ values, onChange, resetKey }) {
   const typed = (index) => { pendingIndex.current.add(index); window.clearTimeout(timer.current); timer.current = window.setTimeout(flush, 350); };
   const read = (index) => refs.current[index]?.innerHTML || '';
 
-  const insertImage = async (index, source) => {
+  const saveRange = (index) => {
+    const node = refs.current[index];
+    const selection = window.getSelection();
+    if (node && selection.rangeCount && node.contains(selection.anchorNode)) {
+      const range = selection.getRangeAt(0).cloneRange();
+      lastRange.current[index] = range;
+      onSaveRange?.(range);
+    }
+  };
+  // Inserting through execCommand (not innerHTML) keeps Ctrl+Z / Ctrl+Y working for the insertion; it goes where the cursor is
+  // (inside a ChatGPT panel too), or at the end when the cursor was not in the box.
+  const insertHtml = (index, html, atEnd = false) => {
     const node = refs.current[index];
     if (!node) return;
-    node.insertAdjacentHTML('beforeend', `<img src="${source}">`);
+    const selection = window.getSelection();
+    let range = null;
+    if (!atEnd) {
+      if (selection.rangeCount && node.contains(selection.anchorNode)) range = selection.getRangeAt(0).cloneRange();
+      else if (lastRange.current[index] && node.contains(lastRange.current[index].commonAncestorContainer)) range = lastRange.current[index];
+    }
+    if (!range) { range = document.createRange(); range.selectNodeContents(node); range.collapse(false); }
+    node.focus({ preventScroll: true });
+    selection.removeAllRanges(); selection.addRange(range);
+    document.execCommand('insertHTML', false, html);
     set(index, node.innerHTML);
   };
+  const replaceHtml = (index, html) => {
+    const node = refs.current[index];
+    if (!node) return;
+    node.focus({ preventScroll: true });
+    const range = document.createRange(); range.selectNodeContents(node);
+    const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    document.execCommand('insertHTML', false, html);
+    set(index, node.innerHTML);
+  };
+  const insertImage = async (index, source) => { insertHtml(index, `<img src="${source}">`); };
 
   // Snips dragged from the PDF panel: open the pills as drop targets as soon as a drag starts.
   useEffect(() => {
@@ -291,6 +321,7 @@ export default function PillFields({ values, onChange, resetKey }) {
                   </div>
                   )}
                   <span className="pill-field-state">{filledFlags[index] ? 'on the card' : 'empty, hidden'}{pill.format !== 'auto' ? ` · ${FORMAT_LABEL[pill.format]}` : ''}</span>
+                  <button type="button" className={`pill-field-btn pill-pin${pinned[`pill${index + 1}`] ? ' is-on' : ''}`} onClick={() => onTogglePin?.(index)} aria-pressed={Boolean(pinned[`pill${index + 1}`])} title={pinned[`pill${index + 1}`] ? 'Pinned: this pill keeps its content after you add a card' : 'Pin pill: keep its content after adding a card'}><Pin size={13} /></button>
                   {values[index] && <button type="button" className="pill-field-btn" onClick={() => reformat(index)} title="Clean up what is already in this pill into the ChatGPT look">Reformat</button>}
                   <button type="button" className="pill-field-btn" onClick={() => pasteAsChatGpt(index)} title="Paste what is on the clipboard as a ChatGPT-look panel">Paste as ChatGPT</button>
                   <label className="pill-field-btn">Add image<input type="file" accept="image/*" hidden onChange={e => { addFile(index, e.target.files?.[0]); e.target.value = ''; }} /></label>
@@ -316,12 +347,17 @@ export default function PillFields({ values, onChange, resetKey }) {
                     data-placeholder="Paste a screenshot, an image link, a ChatGPT answer or type notes…"
                     suppressContentEditableWarning
                     onInput={() => typed(index)}
-                    onBlur={flush}
+                    onFocus={() => onFocusBox?.(refs.current[index], () => set(index, refs.current[index]?.innerHTML || ''))}
+                    onBlur={() => { saveRange(index); flush(); }}
+                    onKeyUp={() => saveRange(index)}
+                    onMouseUp={() => saveRange(index)}
                     onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') flush(); }}
                     onPaste={event => onPaste(event, index)}
                     data-editor-drop-target={`pill${index + 1}`}
                     onDragOver={event => { if ([...(event.dataTransfer?.types || [])].includes('application/x-anki-study-snippet')) event.preventDefault(); }}
                     onDrop={event => {
+                      const at = document.caretRangeFromPoint?.(event.clientX, event.clientY);
+                      if (at && refs.current[index]?.contains(at.startContainer)) { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(at); lastRange.current[index] = at.cloneRange(); }
                       if (dropSnippet(event, index)) return;
                       const file = [...(event.dataTransfer?.files || [])].find(item => item.type.startsWith('image/'));
                       if (file) { event.preventDefault(); addFile(index, file); }

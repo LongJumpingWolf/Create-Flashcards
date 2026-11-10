@@ -13,6 +13,8 @@ import { buildThemePayload, loadSettings, normalizePills } from '../beerus';
 import { repairOldChatGptPaste } from '../chatgptFormat';
 
 // Pills of saved cards: content pasted from ChatGPT by an older version is rebuilt in the ChatGPT look (pills set to Plain are left alone).
+// Empty pill list (one slot per pill); pinned pills keep their content after a card is added.
+const blankPills = (pinned = {}, keep = []) => Array.from({ length: Math.max(4, loadSettings().pills.length) }, (_, i) => (pinned[`pill${i + 1}`] ? (keep[i] ?? '') : ''));
 const repairPills = (pills) => {
   const formats = loadSettings().pills.map(pill => pill.format);
   return normalizePills(pills).map((html, index) => (formats[index] === 'plain' ? html : repairOldChatGptPaste(html)));
@@ -515,6 +517,8 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     (message) => setFormMessage(message),
   );
   const savedRangeRef = useRef(null);
+  const pillBoxRef = useRef(null); // the pill box that has (or last had) the cursor: the toolbar works on it like on Front/Back
+  const pillSyncRef = useRef(null);
 
   const [allAvailableTags, setAllAvailableTags] = useState(new Set([
     "Medicine::Cardiology",
@@ -667,7 +671,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
       setFormMessage('');
       setFront("");
       setBack("");
-      setPills(["", "", "", ""]); setPillsResetKey(key => key + 1);
+      setPills(blankPills()); setPillsResetKey(key => key + 1);
       setCurrentTags([]);
       if (frontRef.current) frontRef.current.innerHTML = '';
       if (backRef.current) backRef.current.innerHTML = '';
@@ -713,7 +717,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
       setFormMessage('');
       if (!fieldPrefs.pinned.back) { setBack(''); if (backRef.current) backRef.current.innerHTML = ''; }
       setFront(''); setCurrentTags([]);
-      setPills(['', '', '', '']); setPillsResetKey(key => key + 1);
+      setPills(blankPills(fieldPrefs.pinned, pills)); setPillsResetKey(key => key + 1);
       setCardType(previousCardTypeRef.current);
       setOcclusionImage(null); setOcclusionMasks([]);
       if (frontRef.current) frontRef.current.innerHTML = '';
@@ -760,7 +764,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     if (!fieldPrefs.pinned.front) { setFront(""); if (frontRef.current) frontRef.current.innerHTML = ''; }
     if (!fieldPrefs.pinned.back) { setBack(""); if (backRef.current) backRef.current.innerHTML = ''; }
     setCurrentTags([]);
-    setPills(['', '', '', '']); setPillsResetKey(key => key + 1);
+    setPills(blankPills(fieldPrefs.pinned, pills)); setPillsResetKey(key => key + 1);
     setClozeNumber(1);
     setActiveClozeId(null);
 
@@ -887,7 +891,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     setCardType('Basic'); previousCardTypeRef.current = 'Basic';
     setOcclusionImage(null); setOcclusionMasks([]);
     setFront(''); setBack(''); setCurrentTags([]); setClozeNumber(1); setActiveClozeId(null); setEditingIndex(null);
-    setPills(['', '', '', '']); setPillsResetKey(key => key + 1);
+    setPills(blankPills()); setPillsResetKey(key => key + 1);
     if (frontRef.current) frontRef.current.innerHTML = '';
     if (backRef.current) backRef.current.innerHTML = '';
     try { localStorage.removeItem(FRONT_LS_KEY); localStorage.removeItem(FRONT_LS_KEY + '_back'); } catch { /* storage unavailable */ }
@@ -1125,10 +1129,12 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
         return;
       }
       const htmlField = active?.dataset?.htmlField;
-      const field = htmlField || (active === frontRef.current ? 'front' : active === backRef.current ? 'back' : null);
+      const inPill = !htmlField && Boolean(active?.classList?.contains('pill-field-box'));
+      const field = htmlField || (active === frontRef.current ? 'front' : active === backRef.current ? 'back' : inPill ? 'pill' : null);
       if (!field) return;
-      const ref = field === 'front' ? frontRef : backRef;
-      if (mod && event.shiftKey && key === 'x') { event.preventDefault(); api.toggleHtmlView(field); return; }
+      if (inPill) pillBoxRef.current = active;
+      const ref = field === 'front' ? frontRef : field === 'pill' ? pillBoxRef : backRef;
+      if (mod && event.shiftKey && key === 'x') { if (field !== 'pill') { event.preventDefault(); api.toggleHtmlView(field); } return; }
       if (htmlField) return;
       if (event.key === 'Tab' && !mod && !event.altKey && toolsRef.current.table.findCell(ref.current)) {
         event.preventDefault();
@@ -1136,7 +1142,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
         api.syncAfterEdit(ref);
         return;
       }
-      const smart = toolsRef.current.smart;
+      const smart = field === 'pill' ? null : toolsRef.current.smart;
       if (smart && !mod) {
         const editor = ref.current;
         const last = smart.lastSmartRef.current;
@@ -1517,6 +1523,8 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
 
           if (targetRef === frontRef) {
             syncFrontContent(targetRef.current.innerHTML);
+          } else if (targetRef === pillBoxRef) {
+            pillSyncRef.current?.();
           } else if (targetRef === backRef) {
             syncBackContent(targetRef.current.innerHTML);
           }
@@ -1582,6 +1590,8 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
         setTimeout(() => {
             if (targetRef === frontRef) {
                 syncFrontContent(targetRef.current.innerHTML);
+            } else if (targetRef === pillBoxRef) {
+                pillSyncRef.current?.();
             } else if (targetRef === backRef) {
                 syncBackContent(backRef.current.innerHTML);
             }
@@ -2130,7 +2140,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
   ), [visibleCards, cards.length]);
 
 
-  const toolbarTargetRef = activeEditor === 'back' ? backRef : frontRef;
+  const toolbarTargetRef = activeEditor === 'pill' ? pillBoxRef : activeEditor === 'back' ? backRef : frontRef;
 
   const oneByOneOcclusion = occlusionMode === 'sequential' || occlusionMode === 'random';
   const occlusionCardCount = oneByOneOcclusion ? 1 : new Set(occlusionMasks.map((mask, index) => mask.group || mask.id || `mask-${index + 1}`)).size;
@@ -2149,6 +2159,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
   const syncAfterEdit = (targetRef) => setTimeout(() => {
     if (!targetRef.current) return;
     if (targetRef === frontRef) syncFrontContent(targetRef.current.innerHTML);
+    else if (targetRef === pillBoxRef) pillSyncRef.current?.();
     else syncBackContent(targetRef.current.innerHTML);
   }, 10);
 
@@ -2461,7 +2472,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
               {htmlOpen.back && !fieldPrefs.collapsed.back && <HtmlView field="back" label="Back HTML" value={htmlDraft.back} onChange={(value) => changeHtmlView('back', value)} />}
             </section>
 
-            <PillFields values={pills} onChange={setPills} resetKey={pillsResetKey} />
+            <PillFields values={pills} onChange={setPills} resetKey={pillsResetKey} pinned={fieldPrefs.pinned} onTogglePin={(i) => toggleFieldPref('pinned', `pill${i + 1}`)} onFocusBox={(node, sync) => { pillBoxRef.current = node; pillSyncRef.current = sync; setActiveEditor('pill'); }} onSaveRange={(range) => { savedRangeRef.current = range; }} />
 
             <section className="space-y-2 mb-6 relative">
                 <label className="text-sm font-medium flex items-center justify-between">
