@@ -1634,3 +1634,18 @@ body { background:#202124; }
 .set-pill-add { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 14px; }
 
 .pill-pin { display: inline-flex; align-items: center; padding: 4px 8px; } .pill-pin.is-on { color: #60a5fa; border-color: #60a5fa; background: rgba(96,165,250,.14); }
+
+/* Word-style colour button */
+.wc { position: relative; display: inline-flex; flex: none; align-items: stretch; }
+.wc .wc-main { position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-width: 32px !important; padding: 0 !important; border-top-right-radius: 0 !important; border-bottom-right-radius: 0 !important; }
+.wc .wc-a { font: 700 15px/1 Arial, sans-serif; } .wc .wc-bar { display: block; width: 16px; height: 4px; border-radius: 1px; background: var(--wc); }
+.wc .wc-drop { min-width: 16px !important; width: 16px; padding: 0 !important; border-top-left-radius: 0 !important; border-bottom-left-radius: 0 !important; }
+.wc-native { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.wc-menu { width: 232px; padding: 10px; }
+.wc-title { margin: 8px 0 4px; font-size: 11px; font-weight: 700; letter-spacing: .02em; opacity: .8; } .wc-menu .wc-title:first-of-type { margin-top: 6px; }
+.wc-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; } .wc-grid-5 { grid-template-columns: repeat(5, 1fr); }
+.wc-cell { aspect-ratio: 1; min-height: 18px; border: 1px solid rgba(128,128,128,.45); border-radius: 2px; cursor: pointer; padding: 0; }
+.wc-cell-big { min-height: 28px; } .wc-cell:hover { outline: 2px solid #f5a623; outline-offset: 1px; z-index: 1; position: relative; }
+.wc-auto, .wc-more { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 4px; border: 0; border-radius: 4px; background: transparent; color: inherit; font-size: 12.5px; cursor: pointer; text-align: left; } .wc-auto:hover, .wc-more:hover { background: rgba(128,128,128,.2); }
+.wc-auto-chip { width: 16px; height: 16px; border: 1px solid rgba(128,128,128,.6); border-radius: 2px; } .wc-more { margin-top: 8px; border-top: 1px solid rgba(128,128,128,.3); padding-top: 8px; }
+.wc-more-chip { width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); }

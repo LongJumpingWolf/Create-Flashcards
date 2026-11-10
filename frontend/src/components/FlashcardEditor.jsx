@@ -20,7 +20,7 @@ const repairPills = (pills) => {
   return normalizePills(pills).map((html, index) => (formats[index] === 'plain' ? html : repairOldChatGptPaste(html)));
 };
 import { hasSavedPdf } from '../pdfResumeStorage';
-import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView, TableGridPicker } from './editorTools';
+import { ToolbarMenu, MenuItem, HighlightSwatches, FieldHeader, HtmlView, TableGridPicker, WordColorTool } from './editorTools';
 import { smartTyping, smartEnter, listTab, markdownToHtml, looksLikeMarkdown, isPlainHtml, tidyHtml, SMART_DEFAULTS } from './smartTyping';
 import { MATH_WRAPPERS, wrapSelection, audioHtml, fileToDataUrl, useAudioRecorder, MAX_AUDIO_BYTES, sanitizePastedHtml, plainTextToHtml, duplicateKey, buildTableHtml, findCell, tableAction, tableTab, placeCaretInCell, clozeNumbers } from './editorHelpers';
 
@@ -1582,6 +1582,20 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
     return true;
   };
 
+  // Word's "Automatic": takes the colour off the selection again (not the other formatting).
+  const clearTextColor = (targetRef) => {
+    applyFormat('foreColor', targetRef, '#010203');
+    window.setTimeout(() => {
+      const root = targetRef.current;
+      if (!root) return;
+      root.querySelectorAll('font[color="#010203"]').forEach(node => { node.replaceWith(...node.childNodes); });
+      root.querySelectorAll('[style*="rgb(1, 2, 3)"]').forEach(node => { node.style.removeProperty('color'); if (!node.getAttribute('style')) node.removeAttribute('style'); });
+      if (targetRef === pillBoxRef) pillSyncRef.current?.();
+      else if (targetRef === frontRef) syncFrontContent(root.innerHTML);
+      else syncBackContent(root.innerHTML);
+    }, 30);
+  };
+
   const applyFormat = (type, targetRef, value = null) => {
     if (targetRef.current) {
         restoreSavedSelection(targetRef);
@@ -2339,9 +2353,8 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
 
             {cardType !== 'Image Occlusion' && <div className="editor-toolbar" role="toolbar" aria-label="Card formatting" onPointerDown={(e) => e.preventDefault()}>
               <div className="flex w-max min-w-full flex-nowrap items-center gap-1">
-              {cardType === 'Basic' ? basicColorPresets.map((color, index) => (
-                <button key={`toolbar-color-${index}`} onClick={() => applyFormat('foreColor', toolbarTargetRef, color)} onContextMenu={(e) => { e.preventDefault(); setColorPickerTarget(`basic-${index}`); setCustomHex(color); setShowColorPicker(true); }} title={`Apply color ${color}; right-click to edit`} className="h-5 w-5 rounded-full border border-neutral-500 hover:ring-2 hover:ring-white" style={{ backgroundColor: color }} />
-              )) : <button onClick={() => { setColorPickerTarget('cloze'); setShowColorPicker(true); }} title="Change cloze color" className="h-6 w-6 rounded-full border border-neutral-500" style={{ backgroundColor: clozeColor }} />}
+              <WordColorTool kind="text" onApply={(color) => applyFormat('foreColor', toolbarTargetRef, color)} onClear={() => clearTextColor(toolbarTargetRef)} />
+              {cardType === 'Cloze' && <button onClick={() => { setColorPickerTarget('cloze'); setShowColorPicker(true); }} title="Cloze color (the colour of the hidden answer)" aria-label="Cloze color" className="mx-1 h-5 w-5 flex-none rounded-full border border-neutral-500" style={{ backgroundColor: clozeColor }} />}
               <button onClick={() => applyFormat('removeFormat', toolbarTargetRef)} title="Clear formatting (Ctrl+R)" className="toolbar-button"><Eraser size={16} /></button>
               <span aria-hidden="true" className="mx-1 h-5 border-l border-neutral-700" />
               <button onClick={() => applyFormat('bold', toolbarTargetRef)} title="Bold (Ctrl+B)" className="toolbar-button font-bold">B</button>
@@ -2350,9 +2363,7 @@ export default function FlashcardEditor({ onOpenSettings, onOpenFolders }) {
               <button onClick={() => applyFormat('strikeThrough', toolbarTargetRef)} title="Strikethrough" className="toolbar-button"><Strikethrough size={16} /></button>
               <button onClick={() => applyFormat('superscript', toolbarTargetRef)} title="Superscript (Ctrl+Shift+=)" className="toolbar-button"><Superscript size={16} /></button>
               <button onClick={() => applyFormat('subscript', toolbarTargetRef)} title="Subscript (Ctrl+=)" className="toolbar-button"><Subscript size={16} /></button>
-              <ToolbarMenu title="Highlight color" icon={<Highlight size={16} />}>
-                <HighlightSwatches onPick={(color) => applyFormat('hiliteColor', toolbarTargetRef, color)} onClear={() => applyFormat('hiliteColor', toolbarTargetRef, 'transparent')} />
-              </ToolbarMenu>
+              <WordColorTool kind="highlight" icon={<Highlight size={16} />} onApply={(color) => applyFormat('hiliteColor', toolbarTargetRef, color)} onClear={() => applyFormat('hiliteColor', toolbarTargetRef, 'transparent')} />
               <span aria-hidden="true" className="mx-1 h-5 border-l border-neutral-700" />
               <ToolbarMenu title="Lists and indent" icon={<ListBullets size={16} />}>
                 <MenuItem icon={<ListBullets size={15} />} onClick={() => applyFormat('insertUnorderedList', toolbarTargetRef)}>Bulleted list</MenuItem>
